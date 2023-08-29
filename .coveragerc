@@ -1,0 +1,4 @@
+[run]
+branch = True
+source =
+    django_graphene_filters
