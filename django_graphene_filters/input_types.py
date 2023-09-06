@@ -3,7 +3,6 @@
 from typing import Type, cast
 
 import graphene
-
 from .conf import settings
 
 
@@ -12,16 +11,18 @@ class SearchConfigInputType(graphene.InputObjectType):
 
     value = graphene.String(
         required=True,
-        description="`SearchVector` or `SearchQuery` object config value",
+        description="The configuration value for  `SearchVector` or `SearchQuery`",
     )
     is_field = graphene.Boolean(
         default_value=False,
-        description="Whether to wrap the value with the F object",
+        description="Flag to indicate if the value should be wrapped with the F object",
     )
 
 
 class SearchVectorWeight(graphene.Enum):
-    """Weight of the `SearchVector` object."""
+    """
+    Enum to represent the weight of a SearchVector object.
+    """
 
     A = "A"
     B = "B"
@@ -30,19 +31,27 @@ class SearchVectorWeight(graphene.Enum):
 
 
 class SearchVectorInputType(graphene.InputObjectType):
-    """Input type for creating the `SearchVector` object."""
+    """
+    Input type to create a SearchVector object.
+    """
 
     fields = graphene.InputField(
         graphene.List(graphene.NonNull(graphene.String)),
         required=True,
-        description="Field names of vector",
+        description="The field names to be used in the vector",
     )
-    config = (graphene.InputField(SearchConfigInputType, description="Vector config"),)
-    weight = graphene.InputField(SearchVectorWeight, description="Vector weight")
+    config = graphene.InputField(
+        SearchConfigInputType, description="Configuration settings for the vector"
+    )
+    weight = graphene.InputField(
+        SearchVectorWeight, description="The weight to be applied to the vector"
+    )
 
 
 class SearchQueryType(graphene.Enum):
-    """Search type of the `SearchQuery` object."""
+    """
+    Enum to represent the type of a SearchQuery object.
+    """
 
     PLAIN = "plain"
     PHRASE = "phrase"
@@ -51,99 +60,132 @@ class SearchQueryType(graphene.Enum):
 
 
 def create_search_query_input_type() -> Type[graphene.InputObjectType]:
-    """Return input type for creating the `SearchQuery` object."""
+    """
+    Create and return an InputObjectType for a SearchQuery object.
+
+    Returns:
+        The InputObjectType class for the SearchQuery object.
+    """
+    # Define the attributes of the new class dynamically.
+    attrs = {
+        "__doc__": "Input type for creating a SearchQuery object.",
+        "value": graphene.String(description="The search query value"),
+        "config": graphene.InputField(
+            SearchConfigInputType, description="Configuration settings for the query"
+        ),
+        settings.AND_KEY: graphene.InputField(
+            graphene.List(
+                graphene.NonNull(lambda: SearchQueryInputType)
+            ),  # Type will be set after initialization
+            description="AND logical operator field",
+        ),
+        settings.OR_KEY: graphene.InputField(
+            graphene.List(
+                graphene.NonNull(lambda: SearchQueryInputType)
+            ),  # Type will be set after initialization
+            description="OR logical operator field",
+        ),
+        settings.NOT_KEY: graphene.InputField(
+            graphene.List(
+                graphene.NonNull(lambda: SearchQueryInputType)
+            ),  # Type will be set after initialization
+            description="NOT logical operator field",
+        ),
+    }
     search_query_input_type = cast(
         Type[graphene.InputObjectType],
         type(
             "SearchQueryInputType",
             (graphene.InputObjectType,),
-            {
-                "__doc__": "Input type for creating the `SearchQuery` object.",
-                "value": graphene.String(description="Query value"),
-                "config": graphene.InputField(
-                    SearchConfigInputType, description="Query config"
-                ),
-                settings.AND_KEY: graphene.InputField(
-                    graphene.List(graphene.NonNull(lambda: search_query_input_type)),
-                    description="`And` field",
-                ),
-                settings.OR_KEY: graphene.InputField(
-                    graphene.List(graphene.NonNull(lambda: search_query_input_type)),
-                    description="`Or` field",
-                ),
-                settings.NOT_KEY: graphene.InputField(
-                    graphene.List(graphene.NonNull(lambda: search_query_input_type)),
-                    description="`Not` field",
-                ),
-            },
+            attrs,
         ),
     )
     return search_query_input_type
 
 
+# Initialize the SearchQueryInputType
 SearchQueryInputType = create_search_query_input_type()
 
 
 class SearchQueryFilterInputType(graphene.InputObjectType):
-    """Input type for the full text search using the `SearchVector` and `SearchQuery` object."""
+    """
+    Input type for the full text search using the `SearchVector` and `SearchQuery` objects.
+    """
 
     vector = graphene.InputField(
-        SearchVectorInputType, required=True, description="Search vector"
+        SearchVectorInputType,
+        required=True,
+        description="The SearchVector to be used",
     )
     query = graphene.InputField(
-        SearchQueryInputType, required=True, description="Search query"
+        SearchQueryInputType,
+        required=True,
+        description="The SearchQuery to be used",
     )
 
 
 class FloatLookupsInputType(graphene.InputObjectType):
-    """Input type for float lookups."""
+    """
+    Input type for handling floating-point number-based lookups.
+    """
 
-    exact = graphene.Float(description="Is exact")
-    gt = graphene.Float(description="Is greater than")
-    gte = graphene.Float(description="Is greater than or equal to")
-    lt = graphene.Float(description="Is less than")
-    lte = graphene.Float(description="Is less than or equal to")
+    exact = graphene.Float(description="Exact match value")
+    gt = graphene.Float(description="Greater than value")
+    gte = graphene.Float(description="Greater than or equal to value")
+    lt = graphene.Float(description="Less than value")
+    lte = graphene.Float(description="Less than or equal to value")
 
 
 class SearchRankWeightsInputType(graphene.InputObjectType):
-    """`SearchRank` object weights.
+    """
+    `SearchRank` object weights.
+    Input type for specifying the weights for SearchRank objects.
 
-    Default values are set according to the documentation.
+    Default values are set according to Django documentation.
     https://docs.djangoproject.com/en/3.2/ref/contrib/postgres/search/#weighting-queries
     """
 
-    D = graphene.Float(default_value=0.1, description="D letter")
-    C = graphene.Float(default_value=0.2, description="C letter")
-    B = graphene.Float(default_value=0.4, description="B letter")
-    A = graphene.Float(default_value=1.0, description="A letter")
+    A = graphene.Float(default_value=1.0, description="Weight for A letter")
+    B = graphene.Float(default_value=0.4, description="Weight for B letter")
+    C = graphene.Float(default_value=0.2, description="Weight for C letter")
+    D = graphene.Float(default_value=0.1, description="Weight for D letter")
 
 
 class SearchRankFilterInputType(graphene.InputObjectType):
-    """Input type for the full text search using the `SearchRank` object."""
+    """
+    Input type for the full-text search using the `SearchRank` objects.
+    """
 
     vector = graphene.InputField(
-        SearchVectorInputType, required=True, description="Search vector"
+        SearchVectorInputType,
+        required=True,
+        description="Vector used for ranking",
     )
     query = graphene.InputField(
-        SearchQueryInputType, required=True, description="Search query"
+        SearchQueryInputType,
+        required=True,
+        description="Query used for ranking",
     )
     lookups = graphene.InputField(
         FloatLookupsInputType,
         required=True,
-        description="Available lookups",
+        description="Lookup options for floating-point values",
     )
     weights = graphene.InputField(
-        SearchRankWeightsInputType, description="Search rank weights"
+        SearchRankWeightsInputType,
+        description="Search rank weights",
     )
     cover_density = graphene.Boolean(
         default_value=False,
-        description="Whether to include coverage density ranking",
+        description="Whether to include coverage density in ranking",
     )
-    normalization = graphene.Int(description="Search rank normalization")
+    normalization = graphene.Int(description="Search normalization used in ranking")
 
 
 class TrigramSearchKind(graphene.Enum):
-    """Type of the search using trigrams."""
+    """
+    Enum type to specify the kind of trigram-based search: similarity or distance.
+    """
 
     SIMILARITY = "similarity"
     DISTANCE = "distance"
@@ -155,11 +197,14 @@ class TrigramFilterInputType(graphene.InputObjectType):
     kind = graphene.InputField(
         TrigramSearchKind,
         default_value=TrigramSearchKind.SIMILARITY,
-        description="Type of the search using trigrams",
+        description="Type of trigram search",
     )
     lookups = graphene.InputField(
         FloatLookupsInputType,
         required=True,
         description="Available lookups",
     )
-    value = graphene.String(required=True, description="Search value")
+    value = graphene.String(
+        required=True,
+        description="Value used in trigram search",
+    )

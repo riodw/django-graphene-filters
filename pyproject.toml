@@ -1,13 +1,22 @@
+# Metadata about the Python package https://python-poetry.org/docs/pyproject/
 [tool.poetry]
 name = "django-graphene-filters"
 version = "0.0.1"
 description = "Advanced auto related filters for Graphene Django"
 authors = ["Rio Weber <riodweber@gmail.com>"]
+maintainers = ["Rio Weber <riodweber@gmail.com>"]
 readme = "README.md"
 homepage = "https://github.com/riodw/django-graphene-filters"
 repository = "https://github.com/riodw/django-graphene-filters"
 keywords = ["django", "graphene", "filters", "related"]
+# Classifiers helps to find project by categorizing it
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Framework :: Django",
+]
 
+# Dependencies needed to run the package
 [tool.poetry.dependencies]
 python = ">=3.8,<4.0"
 Django = ">=3,<4.3"
@@ -19,6 +28,7 @@ stringcase = "^1.2.0"
 anytree = "^2.8.0"
 wrapt = "^1.14.0"
 
+# Development dependencies
 [tool.poetry.dev-dependencies]
 flake8 = "^4.0.1"
 flake8-import-order = "^0.18.1"
@@ -35,19 +45,25 @@ django-seed = "^0.3.1"
 python-dotenv = "^0.20.0"
 pre-commit = "^2.19.0"
 
+# Additional dev dependencies; Install these by `poetry install --extras=dev`
 [tool.poetry.group.dev.dependencies]
 black = "^23.7.0"
 
+# How the package will be built
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+# Semantic release settings
 [tool.semantic_release]
 version_variable = [
     "django_graphene_filters/__init__.py:__version__",
-    "pyproject.toml:version"
+    "pyproject.toml:version",
 ]
 branch = "master"
+# Whether to upload to PyPI
 upload_to_pypi = true
+# Whether to upload to GitHub Releases
 upload_to_release = true
+# Build command before release
 build_command = "pip install poetry && poetry build"
