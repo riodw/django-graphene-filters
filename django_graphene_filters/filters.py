@@ -1,4 +1,6 @@
-"""Additional filters for special lookups."""
+"""
+Additional filters for special lookups.
+"""
 
 from typing import Any, List, Type, Optional, Callable, NamedTuple, Optional, Union
 
@@ -21,12 +23,18 @@ from django_filters.rest_framework.filters import ModelChoiceFilter
 
 
 class AnnotatedFilter(Filter):
-    """Filter with a QuerySet object annotation."""
+    """
+    A filter class that adds QuerySet annotations for advanced filtering.
+
+    The filter allows the use of QuerySet annotations to apply filters dynamically
+    based on a given value. It works for different types of lookups.
+    """
 
     class Value(NamedTuple):
         annotation_value: Any
         search_value: Any
 
+    # Postfix for generating unique annotation names
     postfix = "annotated"
 
     def __init__(
@@ -40,7 +48,6 @@ class AnnotatedFilter(Filter):
         exclude: bool = False,
         **kwargs,
     ) -> None:
-        print("FOO-1")
         super().__init__(
             field_name,
             lookup_expr,
@@ -54,13 +61,17 @@ class AnnotatedFilter(Filter):
 
     @property
     def annotation_name(self) -> str:
-        print("BAR")
-        """Return the name used for the annotation."""
+        """
+        Return the name used for the annotation.
+        Generate a unique name for each annotation.
+        """
         return f"{self.field_name}_{self.postfix}_{self.creation_counter}_{self.filter_counter}"
 
     def filter(self, qs: models.QuerySet, value: Value) -> models.QuerySet:
-        print("FOO-2")
-        """Filter a QuerySet using annotation."""
+        """
+        Apply the filter to the QuerySet using annotation.
+        Generates a QuerySet annotation and filters based on the generated annotation.
+        """
         if value in EMPTY_VALUES:
             return qs
         if self.distinct:
@@ -73,7 +84,10 @@ class AnnotatedFilter(Filter):
 
 
 class SearchQueryFilter(AnnotatedFilter):
-    """Full text search filter using the `SearchVector` and `SearchQuery` object."""
+    """
+    A specialized `AnnotatedFilter` for performing full-text search.
+    Full text search filter using the `SearchVector` and `SearchQuery` object.
+    """
 
     class Value(NamedTuple):
         annotation_value: SearchVector
@@ -83,12 +97,17 @@ class SearchQueryFilter(AnnotatedFilter):
     available_lookups = ("exact",)
 
     def filter(self, qs: models.QuerySet, value: Value) -> models.QuerySet:
-        """Filter a QuerySet using the `SearchVector` and `SearchQuery` object."""
+        """
+        Apply full-text search filtering on the QuerySet using the `SearchVector` and `SearchQuery` object.
+        """
         return super().filter(qs, value)
 
 
 class SearchRankFilter(AnnotatedFilter):
-    """Full text search filter using the `SearchRank` object."""
+    """
+    A specialized `AnnotatedFilter` for ranking search results.
+    Full text search filter using the `SearchRank` object.
+    """
 
     class Value(NamedTuple):
         annotation_value: SearchRank
@@ -98,12 +117,16 @@ class SearchRankFilter(AnnotatedFilter):
     available_lookups = ("exact", "gt", "gte", "lt", "lte")
 
     def filter(self, qs: models.QuerySet, value: Value) -> models.QuerySet:
-        """Filter a QuerySet using the `SearchRank` object."""
+        """Apply search ranking filtering on the QuerySet using the `SearchRank` object."""
         return super().filter(qs, value)
 
 
 class TrigramFilter(AnnotatedFilter):
-    """Full text search filter using similarity or distance of trigram."""
+    """
+    A specialized `AnnotatedFilter` for trigram-based text search
+    which could be either similarity or distance based.
+    Full text search filter using similarity or distance of trigram.
+    """
 
     class Value(NamedTuple):
         annotation_value: Union[TrigramSimilarity, TrigramDistance]
@@ -113,36 +136,39 @@ class TrigramFilter(AnnotatedFilter):
     available_lookups = ("exact", "gt", "gte", "lt", "lte")
 
     def filter(self, qs: models.QuerySet, value: Value) -> models.QuerySet:
-        """Filter a QuerySet using similarity or distance of trigram."""
+        """
+        Apply the filter based on trigram similarity or distance
+        on the QuerySet using similarity or distance of trigram.
+        """
         return super().filter(qs, value)
 
 
-# ---------------------
-
-
 class BaseRelatedFilter:
-    """Base class for related filters."""
+    """
+    A base filter class for related models. This class serves as the foundation for related filters.
+    Base class for related filters.
+    """
 
     def __init__(
         self,
-        # filterset: Union[str, Type[BaseFilterSet]],
-        filterset,
+        filterset: Union[str, Type["BaseFilterSet"]],
         *args,
         lookups: Optional[List[str]] = None,
         **kwargs,
-    ):
-        print("PRINT", "BaseRelatedFilter")
+    ) -> None:
         super().__init__(*args, **kwargs)
+        # using private member to avoid collision with property method
         self.filterset = filterset
         self.lookups = lookups or []
 
-    def bind_filterset(self, filterset):
-        """Bind a filterset class to the filter instance."""
+    def bind_filterset(self, filterset: Type["BaseFilterSet"]) -> None:
+        """Bind a filterset class to the current filter instance."""
         if not hasattr(self, "bound_filterset"):
             self.bound_filterset = filterset
 
     @property
-    def filterset(self):
+    def filterset(self) -> Type["BaseFilterSet"]:
+        """Lazy-load the filterset class if it is specified as a string."""
         if isinstance(self._filterset, str):
             try:
                 # Assume absolute import path
@@ -154,11 +180,11 @@ class BaseRelatedFilter:
             return self._filterset
 
     @filterset.setter
-    def filterset(self, value: Type[BaseFilterSet]) -> None:
+    def filterset(self, value: Type["BaseFilterSet"]) -> None:
         self._filterset = value
 
     def get_queryset(self, request):
-        print("CALL===============: BaseRelatedFilter.get_queryset")
+        """Get the QuerySet for this filter."""
         queryset = super().get_queryset(request)
         assert queryset is not None, (
             f"Expected `.get_queryset()` for related filter '{self.parent.__class__.__name__}.{self.field_name}' to "
@@ -168,9 +194,12 @@ class BaseRelatedFilter:
 
 
 class RelatedFilter(BaseRelatedFilter, ModelChoiceFilter):
-    print("CALL===============: class RelatedFilter")
-    """A ``ModelChoiceFilter`` that enables filtering across relationships.
+    """
+    A specialized filter class for related models.
+    This filter allows for filtering across relationships by utilizing another FilterSet
+    class defined for the related model.
 
+    A `ModelChoiceFilter` that enables filtering across relationships.
     Take the following example:
 
         class ManagerFilter(filters.FilterSet):

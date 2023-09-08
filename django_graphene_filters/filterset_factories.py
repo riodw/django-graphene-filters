@@ -1,4 +1,6 @@
-"""Functions for creating a FilterSet class."""
+"""
+Functions for creating a FilterSet class.
+"""
 
 from typing import Optional, Type, Any, Dict
 

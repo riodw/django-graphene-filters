@@ -1,4 +1,6 @@
-"""InputObjectType classes for special lookups."""
+"""
+InputObjectType classes for special lookups.
+"""
 
 from typing import Type, cast
 
@@ -145,10 +147,10 @@ class SearchRankWeightsInputType(graphene.InputObjectType):
     https://docs.djangoproject.com/en/3.2/ref/contrib/postgres/search/#weighting-queries
     """
 
-    A = graphene.Float(default_value=1.0, description="Weight for A letter")
-    B = graphene.Float(default_value=0.4, description="Weight for B letter")
-    C = graphene.Float(default_value=0.2, description="Weight for C letter")
     D = graphene.Float(default_value=0.1, description="Weight for D letter")
+    C = graphene.Float(default_value=0.2, description="Weight for C letter")
+    B = graphene.Float(default_value=0.4, description="Weight for B letter")
+    A = graphene.Float(default_value=1.0, description="Weight for A letter")
 
 
 class SearchRankFilterInputType(graphene.InputObjectType):

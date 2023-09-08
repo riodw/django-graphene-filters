@@ -1,2 +1,6 @@
 [flake8]
-max-line-length = 100
+max-line-length = 110
+
+ignore = ANN002,ANN003,ANN401,ANN101,ANN102,D106,D107
+
+import-order-style = pycharm

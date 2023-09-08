@@ -1,4 +1,6 @@
-"""Library settings"""
+"""
+Library settings
+"""
 
 from functools import lru_cache
 from typing import Any, Dict, Optional, Union
@@ -18,7 +20,7 @@ IS_POSTGRESQL = "IS_POSTGRESQL"
 HAS_TRIGRAM_EXTENSION = "HAS_TRIGRAM_EXTENSION"
 
 # Django settings key constant
-DJANGO_SETTINGS_KEY = "GRAPHENE_DJANGO_FILTER"
+DJANGO_SETTINGS_KEY = "DJANGO_GRAPHENE_FILTERS"
 
 # Initialize default and fixed settings
 DEFAULT_SETTINGS = {
