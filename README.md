@@ -38,6 +38,10 @@ poetry publish --username __token__ --password PASSWORD
 
 ```shell
 poetry show -o
+poetry add --dev
+poetry show --outdated
+poetry lock
+poetry env remove 3.11
 poetry run flake8
 ```
 
@@ -45,5 +49,5 @@ poetry run flake8
 
 Files to do:
 
-- filterset.py
+- filterset.py `AdvancedFilterSet`
 - input_data_factories.py

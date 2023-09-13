@@ -9,7 +9,9 @@ from .conf import settings
 
 
 class SearchConfigInputType(graphene.InputObjectType):
-    """Input type for the `SearchVector` or `SearchQuery` object config."""
+    """
+    Input type for the `SearchVector` or `SearchQuery` object config.
+    """
 
     value = graphene.String(
         required=True,

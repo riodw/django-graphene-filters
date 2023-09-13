@@ -33,15 +33,27 @@ from . import filters, utils
 from .conf import settings
 
 
-def related(filterset, filter_name):
-    # Return a related filter_name, using the filterset relationship if present.
+def related(filterset, filter_name: str) -> str:
+    """
+    Returns a related filter_name using the filterset relationship if present.
+
+    Args:
+        filterset: The filter set to use.
+        filter_name: The name of the filter.
+
+    Returns:
+        A string representing the related filter name.
+    """
     if not filterset.relationship:
         return filter_name
     return LOOKUP_SEP.join([filterset.relationship, filter_name])
 
 
 class QuerySetProxy(ObjectProxy):
-    """Proxy for a QuerySet object.
+    """
+    Proxy class for Django QuerySet object.
+    This class allows us to work with the Django QuerySet in a way
+    that also considers the 'Q' object for complex queries.
 
     The Django-filter library works with QuerySet objects,
     but such objects do not provide the ability to apply the negation operator to the entire object.
@@ -57,69 +69,139 @@ class QuerySetProxy(ObjectProxy):
         self.q = q or models.Q()
 
     def __getattr__(self, name: str) -> Any:
-        """Return QuerySet attributes for all cases except `filter` and `exclude`."""
+        """
+        Overrides QuerySet attribute access behavior for all cases except `filter` and `exclude`.
+
+        Args:
+            name: Name of the attribute to access.
+
+        Returns:
+            Modified or original attribute depending on the name.
+        """
         if name == "filter":
             return self.filter_
         elif name == "exclude":
             return self.exclude_
         attr = super().__getattr__(name)
         if callable(attr):
-
-            def func(*args, **kwargs) -> Any:
-                result = attr(*args, **kwargs)
-                if isinstance(result, models.QuerySet):
-                    return QuerySetProxy(result, self.q)
-                return result
-
-            return func
+            return self._make_callable_proxy(attr)
         return attr
 
+    def _make_callable_proxy(self, attr: Callable) -> Callable:
+        """
+        Wraps callable attributes to return a QuerySetProxy when a QuerySet is returned.
+
+        Args:
+            attr: Callable attribute from the wrapped QuerySet.
+
+        Returns:
+            A wrapped callable.
+        """
+
+        def func(*args, **kwargs) -> Any:
+            result = attr(*args, **kwargs)
+            if isinstance(result, models.QuerySet):
+                return QuerySetProxy(result, self.q)
+            return result
+
+        return func
+
     def __iter__(self) -> Iterator[Any]:
-        """Return QuerySet and Q objects."""
+        """
+        Allows iteration over the proxy.
+
+        Returns:
+            An iterator for the wrapped QuerySet and the Q object.
+        """
         return iter([self.__wrapped__, self.q])
 
     def filter_(self, *args, **kwargs) -> "QuerySetProxy":
-        """Replace the `filter` method of the QuerySet class."""
+        """
+        Overrides the 'filter' method of QuerySet.
+
+        Args:
+            args, kwargs: Arguments passed to the filter.
+
+        Returns:
+            Updated QuerySetProxy instance.
+        """
         if len(kwargs) == 0 and len(args) == 1 and isinstance(args[0], models.Q):
             q = args[0]
         else:
             q = models.Q(*args, **kwargs)
-        self.q = self.q & q
+        self.q &= q  # Update existing Q object
         return self
 
     def exclude_(self, *args, **kwargs) -> "QuerySetProxy":
-        """Replace the `exclude` method of the QuerySet class."""
+        """
+        Overrides the 'exclude' method of QuerySet.
+
+        Args:
+            args, kwargs: Arguments passed to the exclude.
+
+        Returns:
+            Updated QuerySetProxy instance.
+        """
         if len(kwargs) == 0 and len(args) == 1 and isinstance(args[0], models.Q):
             q = args[0]
         else:
             q = models.Q(*args, **kwargs)
-        self.q = self.q & ~q
+        self.q &= ~q  # Update existing Q object using negation
         return self
 
 
 def is_full_text_search_lookup_expr(lookup_expr: str) -> bool:
-    """Determine if a lookup_expr is a full text search expression."""
+    """
+    Determines if the given lookup_expression is a full text search expression
+
+    Args:
+        lookup_expr (str): The lookup expression to be checked.
+
+    Returns:
+        bool: True if it is a full-text search expression, False otherwise.
+    """
     return lookup_expr.split(LOOKUP_SEP)[-1] == "full_text_search"
 
 
 def is_regular_lookup_expr(lookup_expr: str) -> bool:
-    """Determine whether the lookup_expr must be processed in a regular way."""
+    """
+    Determine if the lookup_expr must be processed in a regular way.
+
+    Args:
+        lookup_expr (str): The lookup expression to be checked.
+
+    Returns:
+        bool: True if it should be processed normally, False otherwise.
+    """
+    # Add any other special lookup expressions to this list as the need arises.
     return not any(
-        [
-            is_full_text_search_lookup_expr(lookup_expr),
-        ]
+        [is_full_text_search_lookup_expr(lookup_expr)],
     )
 
 
 class FilterSetMetaclass(filterset.FilterSetMetaclass):
-    def __new__(cls, name, bases, attrs):
-        print(f"\n\n\n\n{name}\n///////////////////////////\n")
-        print("bases, attrs")
-        print(bases)
-        print(attrs)
+    def __new__(
+        cls: Type["FilterSetMetaclass"],
+        name: str,
+        bases: tuple,
+        attrs: Dict[str, Any],
+    ) -> "FilterSetMetaclass":
+        """
+        Overridden __new__ method to extend the FilterSet class creation logic.
 
+        Args:
+            name (str): The name of the new class.
+            bases (tuple): A tuple of base classes.
+            attrs (Dict[str, Any]): A dictionary of attributes for the new class.
+
+        Returns:
+            FilterSetMetaclass: A new FilterSetMetaclass object.
+        """
+
+        # Create the new class using the parent class's __new__ method
         new_class = super().__new__(cls, name, bases, attrs)
 
+        # Populate related_filters with filters of type BaseRelatedFilter
         new_class.related_filters = OrderedDict(
             [
                 (name, f)
@@ -128,11 +210,12 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
             ]
         )
 
+        # Bind filters to the new class
         # See: :meth:`rest_framework_filters.filters.RelatedFilter.bind`
         for f in new_class.related_filters.values():
             f.bind_filterset(new_class)
 
-        # Only expand when model is defined. Model may be undefined for mixins.
+        # Only expand the auto filters if a model is defined for the new class. Model may be undefined for mixins.
         if new_class._meta.model is not None:
             for name, f in new_class.related_filters.items():
                 expanded = cls.expand_auto_filter(new_class, name, f)
@@ -141,8 +224,14 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         return new_class
 
     @classmethod
-    def expand_auto_filter(cls, new_class, filter_name, f):
-        """Resolve an ``AutoFilter`` into its per-lookup filters.
+    def expand_auto_filter(
+        cls: Type["FilterSetMetaclass"],
+        new_class: "FilterSetMetaclass",
+        filter_name: str,
+        f,
+    ) -> Dict[str, "Filter"]:
+        """
+        Resolve an `AutoFilter` or `BaseRelatedFilter` into individual filters based on lookup methods.
 
         This method name is slightly inaccurate since it handles both
         :class:`rest_framework_filters.filters.AutoFilter` and
@@ -150,15 +239,17 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         their subclasses, which all support per-lookup filter generation.
 
         Args:
-            new_class: The ``FilterSet`` class to generate filters for.
-            filter_name: The attribute name of the filter on the ``FilterSet``.
-            f: The filter instance.
+            new_class: The `FilterSetMetaclass` class to generate filters for.
+            filter_name (str): The attribute name of the filter on the `FilterSet`.
+            f: The filter instance to expand.
 
         Returns:
-            A named map of generated filter objects.
+            Dict[str, Filter]: A dictionary of expanded filters.
         """
+
         expanded = OrderedDict()
 
+        # Make deep copies to avoid modifying original attributes
         # get reference to opts/declared filters so originals aren't modified
         orig_meta, orig_declared = new_class._meta, new_class.declared_filters
         new_class._meta = copy.deepcopy(new_class._meta)
@@ -166,16 +257,18 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
 
         # Use meta.fields to generate auto filters
         new_class._meta.fields = {f.field_name: f.lookups or []}
+
         for gen_name, gen_f in new_class.get_filters().items():
             # get_filters() generates param names from the model field name, so
-            # replace the field name with the param name from the filerset
+            # Replace the model field name with the attribute name from the FilterSet
             gen_name = gen_name.replace(f.field_name, filter_name, 1)
 
             # do not overwrite declared filters
+            # Add to expanded filters if it's not an explicitly declared filter
             if gen_name not in orig_declared:
                 expanded[gen_name] = gen_f
 
-        # restore reference to opts/declared filters
+        # restore reference to original attributes (opts/declared filters)
         new_class._meta, new_class.declared_filters = orig_meta, orig_declared
 
         return expanded
@@ -195,7 +288,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
             *args,
             **kwargs,
         ) -> None:
-            print("CALL===============: TreeFormMixin>__init__(3)")
             super().__init__(*args, **kwargs)
             self.and_forms = and_forms or []
             self.or_forms = or_forms or []
@@ -204,7 +296,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         @property
         def errors(self) -> ErrorDict:
             """Return an ErrorDict for the data provided for the form."""
-            print("CALL===============: TreeFormMixin>errors()")
             self_errors: ErrorDict = super().errors
             for key in ("and", "or"):
                 errors: ErrorDict = ErrorDict()
@@ -221,7 +312,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         """Return a django Form class suitable of validating the filterset data.
         The form must be tree-like because the data is tree-like.
         """
-        print("CALL===============: get_form_class()")
         form_class = super(AdvancedFilterSet, self).get_form_class()
         tree_form = cast(
             Type[Union[Form, AdvancedFilterSet.TreeFormMixin]],
@@ -236,7 +326,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     @property
     def form(self) -> Union[Form, TreeFormMixin]:
         """Return a django Form suitable of validating the filterset data."""
-        print("CALL===============: form()")
         if not hasattr(self, "_form"):
             form_class = self.get_form_class()
             if self.is_bound:
@@ -251,7 +340,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         data: Dict[str, Any],
     ) -> Union[Form, TreeFormMixin]:
         """Create a form from a form class and data."""
-        print("CALL===============: create_form(2)")
         return form_class(
             data={k: v for k, v in data.items() if k not in ("and", "or", "not")},
             and_forms=[
@@ -273,7 +361,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         the data keys may contain DEFAULT_LOOKUP_EXPR and user can create
         a AdvancedFilterSet class without following the naming convention.
         """
-        print("CALL===============: find_filter(1)")
         if LOOKUP_SEP in data_key:
             field_name, lookup_expr = data_key.rsplit(LOOKUP_SEP, 1)
         else:
@@ -294,7 +381,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
 
     def filter_queryset(self, queryset: models.QuerySet) -> models.QuerySet:
         """Filter a queryset with a top level form's `cleaned_data`."""
-        print("CALL===============: filter_queryset(1)")
         qs, q = self.get_queryset_proxy_for_form(queryset, self.form)
         # rest_framework_filters/filterset.py:318
         return qs.filter(q)
@@ -305,7 +391,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         form: Union[Form, TreeFormMixin],
     ) -> QuerySetProxy:
         """Return a `QuerySetProxy` object for a form's `cleaned_data`."""
-        print("CALL===============: get_queryset_proxy_for_form(2)")
         qs = queryset
         q = models.Q()
         for name, value in form.cleaned_data.items():
@@ -332,7 +417,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         """Get all filters for the filterset.
         This is the combination of declared and generated filters.
         """
-        print("CALL===============: get_filters()")
         filters = super().get_filters()
         if not cls._meta.model:
             return filters
@@ -350,7 +434,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         base_filters: OrderedDict,
     ) -> OrderedDict:
         """Create available full text search filters."""
-        print("CALL===============: create_full_text_search_filters(1)")
         new_filters = OrderedDict()
         full_text_search_fields = cls.get_full_text_search_fields()
         if not len(full_text_search_fields):
@@ -394,7 +477,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         field_name: Optional[str] = None,
     ) -> OrderedDict:
         """Create special filters using a filter class and a field name."""
-        print("CALL===============: create_special_filters(3)")
         new_filters = OrderedDict()
         for lookup_expr in filter_class.available_lookups:
             if field_name:
@@ -412,22 +494,16 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     @classmethod
     def get_fields(cls) -> OrderedDict:
         """Resolve the `Meta.fields` argument including only regular lookups."""
-        print("CALL===============: get_fields()")
         return cls._get_fields(is_regular_lookup_expr)
 
     @classmethod
     def get_full_text_search_fields(cls) -> OrderedDict:
-        print("CALL===============: get_full_text_search_fields()")
         """Resolve the `Meta.fields` argument including only full text search lookups."""
         return cls._get_fields(is_full_text_search_lookup_expr)
 
     @classmethod
     def _get_fields(cls, predicate: Callable[[str], bool]) -> OrderedDict:
         """Resolve the `Meta.fields` argument including lookups that match the predicate."""
-        print("CALL===============: _get_fields(1)")
-
-        # if cls.__name__ == "GrapheneHouseFilter":
-
         fields: List[Tuple[str, List[str]]] = []
 
         for related_name in cls.related_filters:

@@ -1,8 +1,32 @@
-from typing import List, Type
+"""
+Utilities Module for Custom Django Filters.
+
+This module provides utility functions designed to extend the capabilities of
+the native Django-filter library, with specialized functions for handling field
+lookups and transformations.
+
+Functions
+---------
+- `lookups_for_field`: Determines the set of valid lookup expressions for a given model field.
+- `lookups_for_transform`: Gets valid lookups for a given transform.
+
+Usage
+-----
+```python
+from .utils import lookups_for_field, lookups_for_transform
+
+# Fetch valid lookup expressions for a CharField
+lookups = lookups_for_field(models.CharField(), support_negation=True)
+
+# Fetch valid lookup expressions for a given transform
+transform_lookups = lookups_for_transform(models.Transform())
+"""
+
+from typing import List
 
 from django.db.models.constants import LOOKUP_SEP
-from django.db.models.fields import Field
 from django.db.models.expressions import Expression
+from django.db.models.fields import Field
 from django.db.models.lookups import Transform
 
 
@@ -48,13 +72,12 @@ def lookups_for_transform(transform: Transform) -> List[str]:
     Returns:
         A list containing all lookup expressions applicable to the transform.
     """
-
     lookups: List[str] = []
 
     for expr, lookup in transform.output_field.get_lookups().items():
         if issubclass(lookup, Transform):
             # Skip if type matches to avoid infinite recursion
-            if type(transform) == lookup:
+            if type(transform) is lookup:
                 continue
 
             sub_transform = lookup(transform)

@@ -1,6 +1,4 @@
-"""
-Library settings
-"""
+"""Library settings."""
 
 from functools import lru_cache
 from typing import Any, Dict, Optional, Union

@@ -99,7 +99,6 @@ class FilterArgumentsFactory:
         Returns:
             A graphene.InputObjectType for filtering.
         """
-
         # Create GraphQL input fields based on the filter tree
         input_fields = {
             root.name: self.create_filter_input_subfield(
@@ -251,7 +250,6 @@ class FilterArgumentsFactory:
         Returns:
         - List[Node]: A list of root nodes for each tree, each representing a filter.
         """
-
         # Initialize an empty list to hold the root nodes of the trees.
         trees: List[Node] = []
 
@@ -285,7 +283,6 @@ class FilterArgumentsFactory:
         Returns:
         - bool: True if the sequence was successfully added, otherwise False.
         """
-
         if root.name != values[0]:
             return False
 

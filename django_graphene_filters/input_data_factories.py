@@ -102,7 +102,6 @@ def create_search_query_data(
     Returns:
     - A dictionary containing the search query filter values
     """
-
     # Create the SearchVector and SearchQuery from the input_type
     annotation_value = create_search_vector(input_type.vector, filterset_class)
     search_value = create_search_query(input_type.query)
@@ -131,7 +130,6 @@ def create_search_rank_data(
     Returns:
     - A dictionary containing the search rank filter values.
     """
-
     # Initialize the result dictionary
     rank_data = {}
 
@@ -205,7 +203,6 @@ def create_search_vector(
     Returns:
         SearchVector: An instance of Django's SearchVector class.
     """
-
     # Validate the fields in the input against the filterset class
     validate_search_vector_fields(filterset_class, input_type.fields)
 
@@ -238,7 +235,6 @@ def create_search_query(
     Returns:
         Optional[SearchQuery]: An instance of Django's SearchQuery class, or None if no valid query could be constructed.
     """
-
     # Validate the incoming search query
     validate_search_query(input_type)
 
