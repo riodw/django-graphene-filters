@@ -1,8 +1,6 @@
-"""
-Functions for creating a FilterSet class.
-"""
+"""Functions for creating a FilterSet class."""
 
-from typing import Optional, Type, Any, Dict
+from typing import Any, Dict, Optional, Type
 
 from graphene_django.filter.filterset import custom_filterset_factory, setup_filterset
 from graphene_django.filter.utils import replace_csv_filters
@@ -14,11 +12,9 @@ def get_filterset_class(
     filterset_class: Optional[Type[AdvancedFilterSet]],
     **meta: Dict[str, Any],
 ) -> Type[AdvancedFilterSet]:
-    """
-    Returns a FilterSet class to be used for filtering in GraphQL queries.
+    """Return a FilterSet class for use in GraphQL queries.
 
     This function is a partial copy of the `get_filterset_class` function from graphene-django.
-    See: https://github.com/graphql-python/graphene-django/blob/caf954861025b9f3d9d3f9c204a7cbbc87352265/graphene_django/filter/utils.py#L56
 
     Args:
         filterset_class: An optional base class that extends `AdvancedFilterSet`.

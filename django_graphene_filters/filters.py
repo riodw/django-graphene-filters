@@ -214,9 +214,9 @@ class RelatedFilter(BaseRelatedFilter, ModelChoiceFilter):
                 model = Department
                 fields = {'name': ['exact', 'in', 'startswith']}
 
-    In the above, the ``DepartmentFilter`` can traverse the ``manager``
-    relationship with the ``__`` lookup seperator, accessing the filters of the
-    ``ManagerFilter`` class. For example, the above would enable calls like:
+    In the above, the `DepartmentFilter` can traverse the `manager`
+    relationship with the `__` lookup seperator, accessing the filters of the
+    `ManagerFilter` class. For example, the above would enable calls like:
 
         /api/managers?name=john%20doe
         /api/departments?manager__name=john%20doe
@@ -224,12 +224,12 @@ class RelatedFilter(BaseRelatedFilter, ModelChoiceFilter):
     Related filters function similarly to auto filters in that they can generate
     per-lookup filters. However, unlike auto filters, related filters are
     functional and not just placeholders. They will not be replaced by a
-    generated ``exact`` filter.
+    generated `exact` filter.
 
     Attributes:
-        filterset: The ``FilterSet`` that is traversed by this relationship.
+        filterset: The `FilterSet` that is traversed by this relationship.
             May be a class, an absolute import path, or the name of a class
             located in the same module as the origin filterset.
         lookups: A list of lookups to generate per-lookup filters for. This
-            functions similarly to the ``AutoFilter.lookups`` argument.
+            functions similarly to the `AutoFilter.lookups` argument.
     """

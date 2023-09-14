@@ -1,8 +1,6 @@
-"""
-Module for converting a AdvancedFilterSet class to filter arguments.
-"""
+"""Module for converting a AdvancedFilterSet class to filter arguments."""
 
-from typing import Any, Dict, List, Optional, Sequence, Type, Callable, cast
+from typing import Any, Callable, Dict, List, Optional, Sequence, Type, cast
 
 import graphene
 from anytree import Node
@@ -24,9 +22,7 @@ from .input_types import (
 
 
 class FilterArgumentsFactory:
-    """
-    Factory for creating filter arguments in GraphQL from a given `AdvancedFilterSet` class.
-    """
+    """Factory for creating filter arguments in GraphQL from a given `AdvancedFilterSet` class."""
 
     # Special GraphQL filter input types and their associated factories
     SPECIAL_FILTER_INPUT_TYPES_FACTORIES: Dict[
@@ -68,6 +64,7 @@ class FilterArgumentsFactory:
     def arguments(self) -> Dict[str, graphene.Argument]:
         """
         Create and return the GraphQL arguments for filtering.
+
         Inspect a FilterSet and produce the arguments to pass to a Graphene Field.
         These arguments will be available to filter against in the GraphQL.
 
@@ -182,9 +179,7 @@ class FilterArgumentsFactory:
         name: str,
         fields: Dict[str, Any],
     ) -> Type[graphene.InputObjectType]:
-        """
-        Create a new GraphQL type inheritor inheriting from `graphene.InputObjectType` class.
-        """
+        """Create a new GraphQL type inheritor inheriting from `graphene.InputObjectType` class."""
         # Use a cache to avoid creating the same InputObjectType again
         if name in cls.input_object_types:
             return cls.input_object_types[name]
@@ -199,31 +194,31 @@ class FilterArgumentsFactory:
         )
         return cls.input_object_types[name]
 
-    def get_field(self, name: str, filter: Filter) -> graphene.InputField:
+    def get_field(self, name: str, filter_obj: Filter) -> graphene.InputField:
         """
         Create and return a Graphene input field from a Django Filter field.
 
         Parameters:
         - name (str): The name of the field.
-        - filter (Filter): The Django Filter field.
+        - filter_obj (Filter): The Django Filter field.
 
         Returns:
         - graphene.InputField: The created Graphene input field.
         """
         model = self.filterset_class._meta.model
-        filter_type: str = filter.lookup_expr
+        filter_type: str = filter_obj.lookup_expr
 
-        # Initialize form field directly from the filter
-        form_field = filter.field
+        # Initialize form field directly from the filter_obj filter
+        form_field = filter_obj.field
 
-        # Handle special case when the filter type is not 'isnull' and the name is not declared
+        # Handle special case when the filter_obj filter type is not 'isnull' and the name is not declared
         if filter_type != "isnull" and name not in getattr(
             self.filterset_class, "declared_filters"
         ):
-            model_field = get_model_field(model, filter.field_name)
+            model_field = get_model_field(model, filter_obj.field_name)
             if hasattr(model_field, "formfield"):
                 form_field = model_field.formfield(
-                    required=filter.extra.get("required", False)
+                    required=filter_obj.extra.get("required", False)
                 )
 
         # Convert Django form field to Graphene field
@@ -234,15 +229,16 @@ class FilterArgumentsFactory:
 
         field_type = graphene_field.InputField()
         field_type.description = getattr(
-            filter, "label", f"`{pascalcase(filter.lookup_expr)}` lookup"
+            filter_obj, "label", f"`{pascalcase(filter_obj.lookup_expr)}` lookup"
         )
         return field_type
 
     @classmethod
     def filterset_to_trees(cls, filterset_class: Type[AdvancedFilterSet]) -> List[Node]:
         """
-        Convert a FilterSet class to a list of trees, where each tree represents
-        a set of chained lookups for a filter.
+        Convert a FilterSet class to a list of trees.
+
+        where each tree represents a set of chained lookups for a filter.
 
         Parameters:
         - filterset_class (Type[AdvancedFilterSet]): The FilterSet class to be converted.
@@ -274,6 +270,7 @@ class FilterArgumentsFactory:
     def try_add_sequence(cls, root: Node, values: Sequence[str]) -> bool:
         """
         Attempt to add a sequence of values to an existing tree rooted at `root`.
+
         Return a flag indicating whether the mutation was made.
 
         Parameters:
@@ -310,5 +307,4 @@ class FilterArgumentsFactory:
         for value in values:
             node = Node(name=value, parent=node)
 
-        # return node.root if node else Node(name="Root")
         return node.root

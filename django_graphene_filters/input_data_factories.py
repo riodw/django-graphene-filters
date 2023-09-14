@@ -1,8 +1,6 @@
-"""
-Functions for converting tree data into data suitable for the FilterSet.
-"""
+"""Functions for converting tree data into data suitable for the FilterSet."""
 
-from typing import Any, Dict, List, Type, Union, Optional
+from typing import Any, Dict, List, Optional, Type, Union
 
 # Django imports
 from django.contrib.postgres.search import (
@@ -18,7 +16,6 @@ from django.db.models.constants import LOOKUP_SEP
 from django_filters.conf import settings as django_settings
 
 # Graphene imports
-from graphene.types.inputobjecttype import InputObjectTypeContainer
 from django_graphene_filters.filters import (
     SearchQueryFilter,
     SearchRankFilter,
@@ -34,6 +31,7 @@ from django_graphene_filters.input_types import (
     TrigramFilterInputType,
     TrigramSearchKind,
 )
+from graphene.types.inputobjecttype import InputObjectTypeContainer
 
 # Local imports
 from .conf import settings
@@ -123,7 +121,8 @@ def create_search_rank_data(
     Create a dictionary suitable for the `SearchRankFilter` class.
 
     Parameters:
-    - input_type (Union[SearchRankFilterInputType, InputObjectTypeContainer]): Input data for creating the search rank.
+    - input_type (Union[SearchRankFilterInputType, InputObjectTypeContainer]): Input data for
+        creating the search rank.
     - key (str): The field key on which the search rank will be applied.
     - filterset_class (Type[AdvancedFilterSet]): The filterset class that will be using this filter.
 
@@ -143,12 +142,12 @@ def create_search_rank_data(
         }
 
         # If weights are provided, add them to the SearchRank data
-        weights = input_type.get("weights", None)
+        weights = input_type.get("weights")
         if weights:
             search_rank_data["weights"] = create_search_rank_weights(weights)
 
         # If normalization is provided, add it to the SearchRank data
-        normalization = input_type.get("normalization", None)
+        normalization = input_type.get("normalization")
         if normalization:
             search_rank_data["normalization"] = normalization
 
@@ -197,7 +196,8 @@ def create_search_vector(
     Create an object of the `SearchVector` class based on the provided input_type and filterset_class.
 
     Args:
-        input_type (Union[SearchVectorInputType, InputObjectTypeContainer]): The input data for the search vector.
+        input_type (Union[SearchVectorInputType, InputObjectTypeContainer]): The input data
+            for the search vector.
         filterset_class (Type[AdvancedFilterSet]): The FilterSet class for further validation.
 
     Returns:
@@ -210,12 +210,12 @@ def create_search_vector(
     search_vector_data = {}
 
     # Check if the config is provided in input_type and create the search config accordingly
-    config = input_type.get("config", None)
+    config = input_type.get("config")
     if config:
         search_vector_data["config"] = create_search_config(config)
 
     # Check if the weight is provided in input_type and add it to search_vector_data
-    weight = input_type.get("weight", None)
+    weight = input_type.get("weight")
     if weight:
         search_vector_data["weight"] = weight.value
 
@@ -230,10 +230,12 @@ def create_search_query(
     Create an object of the `SearchQuery` class based on the provided input_type.
 
     Args:
-        input_type (Union[SearchQueryInputType, InputObjectTypeContainer]): The input data for creating the search query.
+        input_type (Union[SearchQueryInputType, InputObjectTypeContainer]): The input
+            data for creating the search query.
 
     Returns:
-        Optional[SearchQuery]: An instance of Django's SearchQuery class, or None if no valid query could be constructed.
+        Optional[SearchQuery]: An instance of Django's SearchQuery class,
+        or None if no valid query could be constructed.
     """
     # Validate the incoming search query
     validate_search_query(input_type)
@@ -242,9 +244,9 @@ def create_search_query(
     search_query = None
 
     # Get the base query value and optional configuration
-    value = input_type.get("value", None)
+    value = input_type.get("value")
     if value:
-        config = input_type.get("config", None)
+        config = input_type.get("config")
         search_query = SearchQuery(
             input_type.value,
             config=create_search_config(config) if config else None,
@@ -262,7 +264,7 @@ def create_search_query(
             or_search_query = create_search_query(or_input_type)
         else:
             or_search_query = or_search_query | create_search_query(or_input_type)
-    not_input_type = input_type.get(settings.NOT_KEY, None)
+    not_input_type = input_type.get(settings.NOT_KEY)
     not_search_query = create_search_query(not_input_type) if not_input_type else None
     valid_queries = (
         q

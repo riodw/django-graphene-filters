@@ -1,5 +1,5 @@
-"""
-`AdvancedFilterSet` class module.
+"""`AdvancedFilterSet` class module.
+
 https://github.com/devind-team/graphene-django-filter
 Use the `AdvancedFilterSet` class from this module instead of the `FilterSet` from django-filter.
 """
@@ -33,25 +33,10 @@ from . import filters, utils
 from .conf import settings
 
 
-def related(filterset, filter_name: str) -> str:
-    """
-    Returns a related filter_name using the filterset relationship if present.
-
-    Args:
-        filterset: The filter set to use.
-        filter_name: The name of the filter.
-
-    Returns:
-        A string representing the related filter name.
-    """
-    if not filterset.relationship:
-        return filter_name
-    return LOOKUP_SEP.join([filterset.relationship, filter_name])
-
-
 class QuerySetProxy(ObjectProxy):
     """
     Proxy class for Django QuerySet object.
+
     This class allows us to work with the Django QuerySet in a way
     that also considers the 'Q' object for complex queries.
 
@@ -70,7 +55,7 @@ class QuerySetProxy(ObjectProxy):
 
     def __getattr__(self, name: str) -> Any:
         """
-        Overrides QuerySet attribute access behavior for all cases except `filter` and `exclude`.
+        Override QuerySet attribute access behavior for all cases except `filter` and `exclude`.
 
         Args:
             name: Name of the attribute to access.
@@ -89,7 +74,7 @@ class QuerySetProxy(ObjectProxy):
 
     def _make_callable_proxy(self, attr: Callable) -> Callable:
         """
-        Wraps callable attributes to return a QuerySetProxy when a QuerySet is returned.
+        Wrap callable attributes to return a QuerySetProxy when a QuerySet is returned.
 
         Args:
             attr: Callable attribute from the wrapped QuerySet.
@@ -108,7 +93,7 @@ class QuerySetProxy(ObjectProxy):
 
     def __iter__(self) -> Iterator[Any]:
         """
-        Allows iteration over the proxy.
+        Allow iteration over the proxy.
 
         Returns:
             An iterator for the wrapped QuerySet and the Q object.
@@ -117,7 +102,7 @@ class QuerySetProxy(ObjectProxy):
 
     def filter_(self, *args, **kwargs) -> "QuerySetProxy":
         """
-        Overrides the 'filter' method of QuerySet.
+        Override the 'filter' method of QuerySet.
 
         Args:
             args, kwargs: Arguments passed to the filter.
@@ -134,7 +119,7 @@ class QuerySetProxy(ObjectProxy):
 
     def exclude_(self, *args, **kwargs) -> "QuerySetProxy":
         """
-        Overrides the 'exclude' method of QuerySet.
+        Override the 'exclude' method of QuerySet.
 
         Args:
             args, kwargs: Arguments passed to the exclude.
@@ -152,7 +137,7 @@ class QuerySetProxy(ObjectProxy):
 
 def is_full_text_search_lookup_expr(lookup_expr: str) -> bool:
     """
-    Determines if the given lookup_expression is a full text search expression
+    Determine if the given lookup_expression is a full text search expression.
 
     Args:
         lookup_expr (str): The lookup expression to be checked.
@@ -180,6 +165,24 @@ def is_regular_lookup_expr(lookup_expr: str) -> bool:
 
 
 class FilterSetMetaclass(filterset.FilterSetMetaclass):
+    """
+    Custom metaclass for creating FilterSet classes.
+
+    Extends the behavior of the FilterSetMetaclass from the
+    `rest_framework_filters` package. It specifically enriches the creation
+    of FilterSet classes with additional attributes and logic to deal with
+    related filters and auto-filters based on lookup methods.
+
+    Attributes:
+        related_filters (OrderedDict): Stores filters that are of type
+            BaseRelatedFilter.
+
+    Methods:
+        expand_auto_filter: Resolves an `AutoFilter` or `BaseRelatedFilter`
+            into individual filters based on supported lookup methods.
+
+    """
+
     def __new__(
         cls: Type["FilterSetMetaclass"],
         name: str,
@@ -197,7 +200,6 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         Returns:
             FilterSetMetaclass: A new FilterSetMetaclass object.
         """
-
         # Create the new class using the parent class's __new__ method
         new_class = super().__new__(cls, name, bases, attrs)
 
@@ -215,7 +217,8 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         for f in new_class.related_filters.values():
             f.bind_filterset(new_class)
 
-        # Only expand the auto filters if a model is defined for the new class. Model may be undefined for mixins.
+        # Only expand the auto filters if a model is defined for the new class.
+        # Model may be undefined for mixins.
         if new_class._meta.model is not None:
             for name, f in new_class.related_filters.items():
                 expanded = cls.expand_auto_filter(new_class, name, f)
@@ -228,7 +231,7 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         cls: Type["FilterSetMetaclass"],
         new_class: "FilterSetMetaclass",
         filter_name: str,
-        f,
+        f: filters.BaseRelatedFilter,
     ) -> Dict[str, "Filter"]:
         """
         Resolve an `AutoFilter` or `BaseRelatedFilter` into individual filters based on lookup methods.
@@ -246,7 +249,6 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         Returns:
             Dict[str, Filter]: A dictionary of expanded filters.
         """
-
         expanded = OrderedDict()
 
         # Make deep copies to avoid modifying original attributes
@@ -309,7 +311,9 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
             return self_errors
 
     def get_form_class(self) -> Type[Union[Form, TreeFormMixin]]:
-        """Return a django Form class suitable of validating the filterset data.
+        """
+        Return a django Form class suitable of validating the filterset data.
+
         The form must be tree-like because the data is tree-like.
         """
         form_class = super(AdvancedFilterSet, self).get_form_class()
@@ -350,7 +354,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
                 self.create_form(form_class, or_data) for or_data in data.get("or", [])
             ],
             not_form=self.create_form(form_class, data["not"])
-            if data.get("not", None)
+            if data.get("not")
             else None,
         )
 
@@ -394,8 +398,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         qs = queryset
         q = models.Q()
         for name, value in form.cleaned_data.items():
-            # print("name, value")
-            # print(name, value)
             qs, q = self.find_filter(name).filter(QuerySetProxy(qs, q), value)
         and_q = models.Q()
         for and_form in form.and_forms:
@@ -415,6 +417,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     @classmethod
     def get_filters(cls) -> OrderedDict:
         """Get all filters for the filterset.
+
         This is the combination of declared and generated filters.
         """
         filters = super().get_filters()

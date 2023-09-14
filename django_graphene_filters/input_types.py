@@ -1,17 +1,14 @@
-"""
-InputObjectType classes for special lookups.
-"""
+"""InputObjectType classes for special lookups."""
 
 from typing import Type, cast
 
 import graphene
+
 from .conf import settings
 
 
 class SearchConfigInputType(graphene.InputObjectType):
-    """
-    Input type for the `SearchVector` or `SearchQuery` object config.
-    """
+    """Input type for the `SearchVector` or `SearchQuery` object config."""
 
     value = graphene.String(
         required=True,
@@ -24,9 +21,7 @@ class SearchConfigInputType(graphene.InputObjectType):
 
 
 class SearchVectorWeight(graphene.Enum):
-    """
-    Enum to represent the weight of a SearchVector object.
-    """
+    """Enum to represent the weight of a SearchVector object."""
 
     A = "A"
     B = "B"
@@ -35,9 +30,7 @@ class SearchVectorWeight(graphene.Enum):
 
 
 class SearchVectorInputType(graphene.InputObjectType):
-    """
-    Input type to create a SearchVector object.
-    """
+    """Input type to create a SearchVector object."""
 
     fields = graphene.InputField(
         graphene.List(graphene.NonNull(graphene.String)),
@@ -53,9 +46,7 @@ class SearchVectorInputType(graphene.InputObjectType):
 
 
 class SearchQueryType(graphene.Enum):
-    """
-    Enum to represent the type of a SearchQuery object.
-    """
+    """Enum to represent the type of a SearchQuery object."""
 
     PLAIN = "plain"
     PHRASE = "phrase"
@@ -112,9 +103,7 @@ SearchQueryInputType = create_search_query_input_type()
 
 
 class SearchQueryFilterInputType(graphene.InputObjectType):
-    """
-    Input type for the full text search using the `SearchVector` and `SearchQuery` objects.
-    """
+    """Input type for the full text search using the `SearchVector` and `SearchQuery` objects."""
 
     vector = graphene.InputField(
         SearchVectorInputType,
@@ -129,9 +118,7 @@ class SearchQueryFilterInputType(graphene.InputObjectType):
 
 
 class FloatLookupsInputType(graphene.InputObjectType):
-    """
-    Input type for handling floating-point number-based lookups.
-    """
+    """Input type for handling floating-point number-based lookups."""
 
     exact = graphene.Float(description="Exact match value")
     gt = graphene.Float(description="Greater than value")
@@ -141,8 +128,8 @@ class FloatLookupsInputType(graphene.InputObjectType):
 
 
 class SearchRankWeightsInputType(graphene.InputObjectType):
-    """
-    `SearchRank` object weights.
+    """`SearchRank` object weights.
+
     Input type for specifying the weights for SearchRank objects.
 
     Default values are set according to Django documentation.
@@ -156,9 +143,7 @@ class SearchRankWeightsInputType(graphene.InputObjectType):
 
 
 class SearchRankFilterInputType(graphene.InputObjectType):
-    """
-    Input type for the full-text search using the `SearchRank` objects.
-    """
+    """Input type for the full-text search using the `SearchRank` objects."""
 
     vector = graphene.InputField(
         SearchVectorInputType,
@@ -187,9 +172,7 @@ class SearchRankFilterInputType(graphene.InputObjectType):
 
 
 class TrigramSearchKind(graphene.Enum):
-    """
-    Enum type to specify the kind of trigram-based search: similarity or distance.
-    """
+    """Enum type to specify the kind of trigram-based search: similarity or distance."""
 
     SIMILARITY = "similarity"
     DISTANCE = "distance"
