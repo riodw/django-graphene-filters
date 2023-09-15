@@ -42,7 +42,8 @@ poetry add --dev
 poetry show --outdated
 poetry lock
 poetry env remove 3.11
-poetry run flake8
+poetry run flake8 .
+poetry run black .
 ```
 
 # Notes:

@@ -4,9 +4,9 @@ per-file-ignores =
     __init__.py:F401
     connection_field.py:A002
     test_filterset.py:N802
-    filters.py:A003
+    filters.py:A003,D106
     0001_initial.py:D100,D101,D104
-ignore = ANN002,ANN003,ANN401,ANN101,ANN102,D106,D107,I202,W503
+ignore = ANN002,ANN003,ANN101,ANN102,ANN401,D107,W503
 
 import-order-style = pycharm
 inline-quotes = "

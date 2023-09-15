@@ -14,6 +14,7 @@ from django.db import models
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
 
+# Local imports
 from .conf import settings
 from .filter_arguments_factory import FilterArgumentsFactory
 from .filterset import AdvancedFilterSet

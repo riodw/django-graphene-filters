@@ -14,14 +14,17 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.constants import LOOKUP_SEP
 from django_filters.conf import settings as django_settings
+from graphene.types.inputobjecttype import InputObjectTypeContainer
 
-# Graphene imports
-from django_graphene_filters.filters import (
+# Local imports
+from .conf import settings
+from .filters import (
     SearchQueryFilter,
     SearchRankFilter,
     TrigramFilter,
 )
-from django_graphene_filters.input_types import (
+from .filterset import AdvancedFilterSet
+from .input_types import (
     SearchConfigInputType,
     SearchQueryFilterInputType,
     SearchQueryInputType,
@@ -31,11 +34,6 @@ from django_graphene_filters.input_types import (
     TrigramFilterInputType,
     TrigramSearchKind,
 )
-from graphene.types.inputobjecttype import InputObjectTypeContainer
-
-# Local imports
-from .conf import settings
-from .filterset import AdvancedFilterSet
 
 DATA_FACTORIES = {}  # Define this dict based on your actual factories
 
