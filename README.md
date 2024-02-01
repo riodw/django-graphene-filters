@@ -28,8 +28,8 @@ poetry publish --username __token__ --password PASSWORD
 
 ## Local testing
 
-1. run `pipenv shell`
-2. go to the project you want to install the package
+1. go to the project you want to install the package
+2. run `pipenv shell`
 3. run `pip install -e .`
 
 ## Updating:
