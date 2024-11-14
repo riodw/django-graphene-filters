@@ -19,10 +19,10 @@ classifiers = [
 # Dependencies needed to run the package
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
-django = "^4.2.9"
+Django = ">=3,<5.2"
 graphene = ">=2.1.9,<4"
-graphene-django = "^3.0.0"
-django-filter = "^23.2"
+graphene-django = ">=3.0.0"
+django-filter = ">=23.2"
 psycopg2-binary = "^2.9.3"
 stringcase = "^1.2.0"
 anytree = "^2.8.0"

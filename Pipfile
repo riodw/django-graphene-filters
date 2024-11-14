@@ -4,6 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
+django-graphene-filters = {file = ".", editable = true}
 
 [dev-packages]
 

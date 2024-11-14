@@ -4,8 +4,11 @@ https://github.com/devind-team/graphene-django-filter
 Use the `AdvancedFilterSet` class from this module instead of the `FilterSet` from django-filter.
 """
 import copy
+import operator
 import warnings
 from collections import OrderedDict
+from graphene import String  # GraphQL String type
+
 from typing import (
     Any,
     Callable,
@@ -18,8 +21,10 @@ from typing import (
     Union,
     cast,
 )
+from functools import reduce
 
 from django.db import connection, models
+from django.db.models import Q
 from django.db.models.constants import LOOKUP_SEP
 from django.forms import Form
 from django.forms.utils import ErrorDict
@@ -276,6 +281,14 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         return expanded
 
 
+# Define the lookup prefixes, similar to DRF
+LOOKUP_PREFIXES = {
+    '^': 'istartswith',
+    '=': 'iexact',
+    '@': 'search',
+    '$': 'iregex',
+}
+
 class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     """Allow you to use advanced filters."""
 
@@ -310,6 +323,59 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
                 self_errors.update({"not": self.not_form.errors})
             return self_errors
 
+    @classmethod
+    def get_filter_fields(cls):
+        """
+        Ensure 'search' is added to the filter input type.
+        """
+        fields = super().get_filter_fields()  # Get existing filter fields
+        fields['search'] = String()  # Explicitly add 'search' as a String type
+        return fields
+
+    # Search_fields code
+    def get_search_fields(self):
+        """Retrieve the search_fields attribute from Meta."""
+        return getattr(self.Meta, 'search_fields', None)
+
+    def construct_search(self, field_name):
+        """Constructs the search query lookup based on prefixes."""
+        lookup = LOOKUP_PREFIXES.get(field_name[0], 'icontains')
+        if field_name[0] in LOOKUP_PREFIXES:
+            field_name = field_name[1:]  # Strip prefix if exists
+        return f"{field_name}__{lookup}"
+
+    def build_search_conditions(self, queryset, search_query):
+        """Constructs Q objects for search terms across search_fields."""
+        search_fields = self.get_search_fields()
+        if not search_fields or not search_query:
+            return queryset
+
+        # Split terms to handle multiple terms (quoted and non-quoted)
+        search_terms = search_query.split()
+        orm_lookups = [self.construct_search(field) for field in search_fields]
+
+        # Construct combined Q object for all terms and fields
+        search_conditions = Q()
+        for term in search_terms:
+            term_conditions = reduce(
+                operator.or_, (Q(**{lookup: term}) for lookup in orm_lookups)
+            )
+            search_conditions &= term_conditions
+
+        # Apply the filter to the queryset
+        return queryset.filter(search_conditions)
+
+    @property
+    def qs(self):
+        queryset = super().qs  # Retrieve the base queryset
+        # Check if 'search' is part of the data and apply it if present
+        search_query = self.data.get("search")
+        if search_query:
+            # Apply search filter if search_query exists
+            queryset = self.build_search_conditions(queryset, search_query)
+        return queryset
+
+    # Filters
     def get_form_class(self) -> Type[Union[Form, TreeFormMixin]]:
         """
         Return a django Form class suitable of validating the filterset data.
