@@ -1,3 +1,0 @@
-django~=3.2
-graphene
-graphene-django>=3.1
