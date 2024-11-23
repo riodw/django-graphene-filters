@@ -5,22 +5,31 @@ version = "0.0.8"
 description = "Advanced auto related filters for Graphene Django"
 authors = ["Rio Weber <riodweber@gmail.com>"]
 maintainers = ["Rio Weber <riodweber@gmail.com>"]
+license = "LICENSE"
 readme = "README.md"
 homepage = "https://github.com/riodw/django-graphene-filters"
 repository = "https://github.com/riodw/django-graphene-filters"
 keywords = ["django", "graphene", "filters", "related"]
 # Classifiers helps to find project by categorizing it
 classifiers = [
-    "Programming Language :: Python :: 3",
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3.10",
     "Operating System :: OS Independent",
     "Framework :: Django",
+    "Framework :: Graphene",
 ]
+
+[tool.poetry.urls]
+Homepage = "https://pypi.org/project/django-graphene-filters"
+repository = "https://pypi.org/project/django-graphene-filters"
+issues = "https://github.com/riodw/django-graphene-filters/issues"
+# DOWNLOAD = "https://github.com/riodw/django-graphene-filters"
 
 # Dependencies needed to run the package
 [tool.poetry.dependencies]
 python = ">=3.9,<4.0"
 Django = ">=3,<5.2"
-graphene = ">=2.1.9,<4"
+graphene = ">=3,<4"
 graphene-django = ">=3.0.0"
 django-filter = ">=23.2"
 psycopg2-binary = "^2.9.3"
@@ -30,8 +39,12 @@ wrapt = "^1.14.0"
 
 # Development dependencies
 [tool.poetry.dev-dependencies]
-black = "^24.1.1"
+# django-graphene-filters = { path = ".", develop = true }
+coverage = "^7"
+pytest = "^7.4.0"
+pytest-django = "^4.5.2"
 django-seed = "^0.3.1"
+black = "^24.1.1"
 flake8 = "^7.0.0"
 flake8-annotations = "^3.0.1"
 flake8-builtins = "^2.1.0"
