@@ -53,6 +53,11 @@ poetry run flake8 .
 poetry run black .
 ```
 
+## Updating Version:
+- pyproject.toml:4
+- django_graphene_filters/__init__.py:18
+- tests/test_django_graphene_filters.py:8
+
 # Notes:
 
 Files to do:

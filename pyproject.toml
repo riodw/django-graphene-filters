@@ -1,7 +1,7 @@
 # Metadata about the Python package https://python-poetry.org/docs/pyproject/
 [tool.poetry]
 name = "django-graphene-filters"
-version = "0.0.8"
+version = "0.0.9"
 description = "Advanced auto related filters for Graphene Django"
 authors = ["Rio Weber <riodweber@gmail.com>"]
 maintainers = ["Rio Weber <riodweber@gmail.com>"]
