@@ -1,12 +1,9 @@
 from django.contrib import admin
 
-from cookbook.recipes.models import Recipe, RecipeIngredient
+from cookbook.recipes.models import Attribute, Object, ObjectType, Value
 
 
-class RecipeIngredientInline(admin.TabularInline):
-    model = RecipeIngredient
-
-
-@admin.register(Recipe)
-class RecipeAdmin(admin.ModelAdmin):
-    inlines = [RecipeIngredientInline]
+admin.site.register(ObjectType)
+admin.site.register(Object)
+admin.site.register(Attribute)
+admin.site.register(Value)

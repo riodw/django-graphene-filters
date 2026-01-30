@@ -1,28 +1,122 @@
 from django.db import models
 
-from cookbook.ingredients.models import Ingredient
 
+class ObjectType(models.Model):
+    name = models.TextField()
+    description = models.TextField(
+        blank=True,
+        default="",
+    )
+    # history
+    created_date = models.DateTimeField(
+        auto_now_add=True,
+        editable=False,
+    )
+    updated_date = models.DateTimeField(
+        auto_now=True,
+        editable=False,
+    )
 
-class Recipe(models.Model):
-    title = models.CharField(max_length=100)
-    instructions = models.TextField()
+    class Meta:
+        verbose_name = "Object Type"
+        verbose_name_plural = "Object Types"
 
     def __str__(self):
-        return self.title
+        return self.name
 
 
-class RecipeIngredient(models.Model):
-    recipe = models.ForeignKey(Recipe, related_name="amounts", on_delete=models.CASCADE)
-    ingredient = models.ForeignKey(
-        Ingredient, related_name="used_by", on_delete=models.CASCADE
+class Object(models.Model):
+    name = models.TextField()
+    description = models.TextField(
+        blank=True,
+        default="",
     )
-    amount = models.FloatField()
-    unit = models.CharField(
-        max_length=20,
-        choices=(
-            ("unit", "Units"),
-            ("kg", "Kilograms"),
-            ("l", "Litres"),
-            ("st", "Shots"),
-        ),
+    # FK's
+    object_type = models.ForeignKey(
+        ObjectType,
+        on_delete=models.CASCADE,
     )
+    # parent = models.ForeignKey(
+    #     "self",
+    #     on_delete=models.CASCADE,
+    #     null=True,
+    #     blank=True,
+    # )
+    # history
+    created_date = models.DateTimeField(
+        auto_now_add=True,
+        editable=False,
+    )
+    updated_date = models.DateTimeField(
+        auto_now=True,
+        editable=False,
+    )
+
+    class Meta:
+        verbose_name = "Object"
+        verbose_name_plural = "Objects"
+
+    def __str__(self):
+        return self.name
+
+
+class Attribute(models.Model):
+    name = models.TextField()
+    description = models.TextField(
+        blank=True,
+        default="",
+    )
+    # FK's
+    object_type = models.ForeignKey(
+        ObjectType,
+        on_delete=models.CASCADE,
+    )
+    # history
+    created_date = models.DateTimeField(
+        auto_now_add=True,
+        editable=False,
+    )
+    updated_date = models.DateTimeField(
+        auto_now=True,
+        editable=False,
+    )
+
+    class Meta:
+        verbose_name = "Attribute"
+        verbose_name_plural = "Attributes"
+
+    def __str__(self):
+        return self.name
+
+
+class Value(models.Model):
+    value = models.TextField()
+    description = models.TextField(
+        blank=True,
+        default="",
+    )
+    # FK's
+    attribute = models.ForeignKey(
+        Attribute,
+        on_delete=models.CASCADE,
+    )
+    object = models.ForeignKey(
+        Object,
+        on_delete=models.CASCADE,
+    )
+    # history
+    created_date = models.DateTimeField(
+        auto_now_add=True,
+        editable=False,
+    )
+    updated_date = models.DateTimeField(
+        auto_now=True,
+        editable=False,
+    )
+
+    class Meta:
+        verbose_name = "Value"
+        verbose_name_plural = "Values"
+
+    def __str__(self):
+        return self.value

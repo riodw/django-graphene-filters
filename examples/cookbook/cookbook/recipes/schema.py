@@ -2,33 +2,57 @@ from graphene import Node
 from graphene_django.filter import DjangoFilterConnectionField
 from graphene_django.types import DjangoObjectType
 
-from cookbook.recipes.models import Recipe, RecipeIngredient
+from cookbook.recipes.models import Attribute, Object, ObjectType, Value
 
 
-class RecipeNode(DjangoObjectType):
+class ObjectTypeNode(DjangoObjectType):
     class Meta:
-        model = Recipe
+        model = ObjectType
         interfaces = (Node,)
         fields = "__all__"
-        filter_fields = ["title", "amounts"]
+        filter_fields = ["name"]
 
 
-class RecipeIngredientNode(DjangoObjectType):
+class ObjectNode(DjangoObjectType):
     class Meta:
-        model = RecipeIngredient
-        # Allow for some more advanced filtering here
+        model = Object
         interfaces = (Node,)
         fields = "__all__"
         filter_fields = {
-            "ingredient__name": ["exact", "icontains", "istartswith"],
-            "recipe": ["exact"],
-            "recipe__title": ["icontains"],
+            "name": ["exact", "icontains", "istartswith"],
+            "object_type": ["exact"],
+        }
+
+
+class AttributeNode(DjangoObjectType):
+    class Meta:
+        model = Attribute
+        interfaces = (Node,)
+        fields = "__all__"
+        filter_fields = ["name", "object_type"]
+
+
+class ValueNode(DjangoObjectType):
+    class Meta:
+        model = Value
+        interfaces = (Node,)
+        fields = "__all__"
+        filter_fields = {
+            "value": ["exact", "icontains"],
+            "object": ["exact"],
+            "attribute": ["exact"],
         }
 
 
 class Query:
-    recipe = Node.Field(RecipeNode)
-    all_recipes = DjangoFilterConnectionField(RecipeNode)
+    object_type = Node.Field(ObjectTypeNode)
+    all_object_types = DjangoFilterConnectionField(ObjectTypeNode)
 
-    recipeingredient = Node.Field(RecipeIngredientNode)
-    all_recipeingredients = DjangoFilterConnectionField(RecipeIngredientNode)
+    object = Node.Field(ObjectNode)
+    all_objects = DjangoFilterConnectionField(ObjectNode)
+
+    attribute = Node.Field(AttributeNode)
+    all_attributes = DjangoFilterConnectionField(AttributeNode)
+
+    value = Node.Field(ValueNode)
+    all_values = DjangoFilterConnectionField(ValueNode)
