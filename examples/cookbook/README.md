@@ -43,12 +43,22 @@ Now setup our database:
 # Setup the database
 ./manage.py migrate
 
-# Load some example data
-./manage.py loaddata ingredients
-
 # Create an admin user (useful for logging into the admin UI
 # at http://127.0.0.1:8000/admin)
 ./manage.py createsuperuser
+```
+
+Generate Dummy Data
+-------------------
+
+You can quickly populate the database with random "People" objects (including Email, Phone, and City attributes) using the custom management command:
+
+```bash
+# Create 50 people (default)
+./manage.py create_people
+
+# Create a specific number of people
+./manage.py create_people 100
 ```
 
 Now you should be ready to start the server:
