@@ -21,6 +21,7 @@ class ObjectNode(DjangoObjectType):
         filter_fields = {
             "name": ["exact", "icontains", "istartswith"],
             "object_type": ["exact"],
+            "object_type__name": ["exact"],
         }
 
 
