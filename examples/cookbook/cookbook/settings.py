@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "graphene_django",
     "cookbook.recipes.apps.RecipesConfig",
     "django_filters",
+    "django_graphene_filters",
 ]
 
 MIDDLEWARE = [

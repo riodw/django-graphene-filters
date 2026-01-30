@@ -8,7 +8,7 @@ from django.core.management import execute_from_command_line
 
 def main() -> None:
     """Run administrative tasks."""
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "tests.settings")
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "examples.cookbook.cookbook.settings")
     execute_from_command_line(sys.argv)
 
 
