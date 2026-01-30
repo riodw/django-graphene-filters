@@ -31,6 +31,7 @@ poetry publish --username __token__ --password PASSWORD
 1. go to the project you want to install the package
 2. run `pipenv shell`
 3. run `pip install -e .`
+EXAMPLE:
 ```
 cd /Users/riordenweber/projects/django-graphene-filters
 pipenv install -e .
