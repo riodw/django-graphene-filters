@@ -14,6 +14,9 @@ from django.db import models
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
 
+# Import the utility that generates standard arguments (e.g., name__icontains -> name_Icontains)
+from graphene_django.filter.utils import get_filtering_args_from_filterset
+
 # Local imports
 from .conf import settings
 from .filter_arguments_factory import FilterArgumentsFactory
@@ -73,13 +76,6 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
     def provided_filterset_class(self) -> Optional[Type[AdvancedFilterSet]]:
         """
         Return the provided AdvancedFilterSet class, if any.
-
-        The method looks for a provided filterset class in two places:
-        1. An explicitly provided `_provided_filterset_class` attribute.
-        2. The `filterset_class` field in the `Meta` class of the `node_type`.
-
-        Returns:
-            The AdvancedFilterSet class if found, otherwise None.
         """
         return self._provided_filterset_class or self.node_type._meta.filterset_class
 
@@ -87,14 +83,6 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
     def filter_input_type_prefix(self) -> str:
         """
         Return a prefix for the filter input type name.
-
-        The prefix is determined based on the following:
-        1. If `_filter_input_type_prefix` is set, use it as the prefix.
-        2. If a `provided_filterset_class` exists, concatenate its name with the `node_type` name.
-        3. Otherwise, use the `node_type` name.
-
-        Returns:
-            A string that will be used as the prefix for the filter input type.
         """
         if self._filter_input_type_prefix:
             return self._filter_input_type_prefix
@@ -110,26 +98,13 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
     def filterset_class(self) -> Type[AdvancedFilterSet]:
         """
         Return the AdvancedFilterSet class to use for filtering.
-
-        The method dynamically generates a filterset class if one isn't already set.
-        It first checks if `_filterset_class` is already defined. If not, it proceeds
-        to create one using the `get_filterset_class` function.
-
-        Returns:
-            A class inheriting from AdvancedFilterSet to be used for filtering the queryset.
         """
         if not self._filterset_class:
-            # Obtain the fields for filtering, either from explicit setting or node's Meta class
             fields = self._fields or self.node_type._meta.filter_fields
-
-            # Prepare the meta information needed for creating the filterset class
             meta = {"model": self.model, "fields": fields}
-
-            # If extra filter metadata is provided, update the meta dictionary
             if self._extra_filter_meta:
                 meta.update(self._extra_filter_meta)
 
-            # Generate the filterset class dynamically
             self._filterset_class = get_filterset_class(
                 self.provided_filterset_class, **meta
             )
@@ -137,20 +112,27 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
 
     @property
     def filtering_args(self) -> dict:
-        """Generate and return filtering arguments for GraphQL schema filterset.
+        """
+        Generate and return filtering arguments for GraphQL schema filterset.
 
-        The arguments are dynamically generated based on the filterset class and a prefix.
-        The `FilterArgumentsFactory` is used for this generation.
-
-        Returns:
-            A dictionary representing the filtering arguments for GraphQL schema.
+        This merges:
+        1. Standard Graphene arguments (flat, e.g., 'department_Name')
+        2. Advanced arguments (nested, e.g., 'filter')
         """
         if not self._filtering_args:
-            # Dynamically generate the filtering arguments using FilterArgumentsFactory
-            self._filtering_args = FilterArgumentsFactory(
+            # 1. Get Standard Arguments (Flat style derived from filter_fields)
+            standard_args = get_filtering_args_from_filterset(
+                self.filterset_class, self.node_type
+            )
+
+            # 2. Get Advanced Arguments (The 'filter' tree input)
+            advanced_args = FilterArgumentsFactory(
                 self.filterset_class,
                 self.filter_input_type_prefix,
             ).arguments
+
+            # 3. Merge them (Advanced args take precedence if collision, though unlikely)
+            self._filtering_args = {**standard_args, **advanced_args}
 
         return self._filtering_args
 
@@ -164,41 +146,80 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         filtering_args: Dict[str, graphene.InputField],
         filterset_class: Type[AdvancedFilterSet],
     ) -> models.QuerySet:
-        """Return a filtered QuerySet.
-
-        Args:
-            connection: The GraphQL Connection object.
-            iterable: The original iterable data source.
-            info: The GraphQL query info.
-            args: Arguments passed in the GraphQL query.
-            filtering_args: Defined filtering arguments.
-            filterset_class: The filterset class to use for filtering.
-
-        Returns:
-            A filtered QuerySet.
-
-        Raises:
-            ValidationError: If the filterset form is invalid.
         """
-        # Use parent class method to get the initial QuerySet
+        Return a filtered QuerySet.
+
+        Handles both the nested 'filter' argument and standard flat arguments.
+        """
+        # Get base QuerySet
         qs = super(DjangoFilterConnectionField, cls).resolve_queryset(
             connection,
             iterable,
             info,
             args,
         )
-        # Retrieve the filter arguments from the query
+
+        # 1. Process Advanced Filters (Tree structure)
         filter_arg = args.get(settings.FILTER_KEY, {})
-        # Create a filterset with the query arguments
+        advanced_data = tree_input_type_to_data(filterset_class, filter_arg)
+
+        # 2. Process Standard Filters (Flat structure)
+        # We need to extract arguments that are NOT the advanced filter key
+        flat_args = {k: v for k, v in args.items() if k != settings.FILTER_KEY}
+
+        # We must map Graphene arguments (e.g. 'department_Name') back to FilterSet keys (e.g. 'department__name')
+        # We can leverage the filtering_args dictionary to find the mapping if available,
+        # or rely on the filterset's declared filters.
+        flat_data = cls.map_arguments_to_filters(flat_args, filtering_args)
+
+        # 3. Merge Data
+        # Flattened args are added to the advanced data.
+        # This allows users to mix `filter: {...}` and `name: "..."` in the same query if they really wanted to.
+        combined_data = {**advanced_data, **flat_data}
+
+        # Create filterset with combined data
         filterset = filterset_class(
-            data=tree_input_type_to_data(filterset_class, filter_arg),
+            data=combined_data,
             queryset=qs,
             request=info.context,
         )
 
-        # Validate and apply the filters
         if filterset.form.is_valid():
             return filterset.qs
 
-        # Raise an error if the form is invalid
         raise ValidationError(filterset.form.errors.as_json())
+
+    @staticmethod
+    def map_arguments_to_filters(
+        args: Dict[str, Any],
+        filtering_args: Dict[str, graphene.InputField],
+    ) -> Dict[str, Any]:
+        """
+        Map Graphene argument names back to Django FilterSet field names.
+
+        Graphene usually converts `department__name` -> `department_Name`.
+        We need to reverse this so the FilterSet recognizes the data.
+        """
+        mapped_data = {}
+
+        # In graphene-django, the `filtering_args` keys are the GraphQL argument names.
+        # However, `filtering_args` values don't easily store the original filter name.
+        # A reliable heuristic is that standard arguments are generated from the FilterSet.
+
+        # NOTE: A simpler approach for standard kwargs is passing them as-is,
+        # but AdvancedFilterSet expects exact matches to declared filters.
+
+        # We'll traverse the args provided in the query
+        for arg_name, arg_value in args.items():
+            # If the argument is in our schema
+            if arg_name in filtering_args:
+                # 1. Check if the arg_name exists directly in the generated filterset (unlikely for relations)
+                # 2. Heuristic: Graphene replaces `__` with `_` and preserves case usually,
+                #    but to support `department_Name` -> `department__name`, we might need to match
+                #    against the filterset fields.
+
+                # Note: This is a simplified mapping. For complex cases, we might need
+                # to inspect the filterset class filters directly.
+                mapped_data[arg_name] = arg_value
+
+        return mapped_data

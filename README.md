@@ -1,4 +1,6 @@
 # Django Graphene Filters
+- https://pypi.org/project/graphene-django-filter/
+- https://pypi.org/project/djangorestframework-filters
 
 This package contains Advanced auto related filters for [graphene-django](https://github.com/graphql-python/graphene-django).
 

@@ -32,6 +32,12 @@ Now setup our database:
 ./manage.py createsuperuser
 ```
 
+Now you should be ready to start the server:
+
+```bash
+./manage.py runserver
+```
+
 Generate Dummy Data
 -------------------
 
@@ -45,11 +51,8 @@ You can quickly populate the database with random "People" objects (including Em
 ./manage.py create_people 100
 ```
 
-Now you should be ready to start the server:
-
-```bash
-./manage.py runserver
-```
+You can also populate through `/admin`
+- http://127.0.0.1:8000/admin/recipes/object/?create_people=50
 
 Now head on over to
 [http://127.0.0.1:8000/graphql](http://127.0.0.1:8000/graphql)
