@@ -49,17 +49,17 @@ class ValueNode(DjangoObjectType):
 
 class Query:
     object_type = Node.Field(ObjectTypeNode)
-    all_object_types = DjangoFilterConnectionField(ObjectTypeNode)
-    # all_object_types = AdvancedDjangoFilterConnectionField(ObjectTypeNode)
+    # all_object_types = DjangoFilterConnectionField(ObjectTypeNode)
+    all_object_types = AdvancedDjangoFilterConnectionField(ObjectTypeNode)
 
     object = Node.Field(ObjectNode)
-    all_objects = DjangoFilterConnectionField(ObjectNode)
-    # all_objects = AdvancedDjangoFilterConnectionField(ObjectNode)
+    # all_objects = DjangoFilterConnectionField(ObjectNode)
+    all_objects = AdvancedDjangoFilterConnectionField(ObjectNode)
 
     attribute = Node.Field(AttributeNode)
-    all_attributes = DjangoFilterConnectionField(AttributeNode)
-    # all_attributes = AdvancedDjangoFilterConnectionField(AttributeNode)
+    # all_attributes = DjangoFilterConnectionField(AttributeNode)
+    all_attributes = AdvancedDjangoFilterConnectionField(AttributeNode)
 
     value = Node.Field(ValueNode)
-    all_values = DjangoFilterConnectionField(ValueNode)
-    # all_values = AdvancedDjangoFilterConnectionField(ValueNode)
+    # all_values = DjangoFilterConnectionField(ValueNode)
+    all_values = AdvancedDjangoFilterConnectionField(ValueNode)
