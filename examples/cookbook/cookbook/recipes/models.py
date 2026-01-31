@@ -34,6 +34,7 @@ class Object(models.Model):
     # FK's
     object_type = models.ForeignKey(
         ObjectType,
+        related_name="objectss",
         on_delete=models.CASCADE,
     )
     # parent = models.ForeignKey(
@@ -69,6 +70,7 @@ class Attribute(models.Model):
     # FK's
     object_type = models.ForeignKey(
         ObjectType,
+        related_name="attributes",
         on_delete=models.CASCADE,
     )
     # history
@@ -98,10 +100,12 @@ class Value(models.Model):
     # FK's
     attribute = models.ForeignKey(
         Attribute,
+        related_name="values",
         on_delete=models.CASCADE,
     )
     object = models.ForeignKey(
         Object,
+        related_name="values",
         on_delete=models.CASCADE,
     )
     # history

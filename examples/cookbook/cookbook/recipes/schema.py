@@ -10,13 +10,54 @@ from django_graphene_filters import AdvancedDjangoFilterConnectionField
 from . import models
 
 
+"""
+Filters
+"""
+
+
 class ObjectTypeFilter(filters.AdvancedFilterSet):
     class Meta:
         model = models.ObjectType
         interfaces = (Node,)
         fields = {
+            "name": "__all__",
+            # "name": ["exact", "icontains"],
+            "description": ["exact", "icontains"],
+        }
+
+
+class AttributeFilter(filters.AdvancedFilterSet):
+    # Relationships
+    # values = filters.RelatedFilter(
+    #     "ValueFilter",
+    #     field_name="values",
+    #     queryset=models.Value.objects.all(),
+    # )
+
+    class Meta:
+        model = models.Attribute
+        interfaces = (Node,)
+        fields = {
             "name": ["exact", "icontains"],
             "description": ["exact", "icontains"],
+        }
+
+
+class ValueFilter(filters.AdvancedFilterSet):
+    attribute = filters.RelatedFilter(
+        AttributeFilter,
+        field_name="attribute",
+        queryset=models.Attribute.objects.all(),
+    )
+
+    class Meta:
+        model = models.Value
+        interfaces = (Node,)
+        fields = {
+            "value": ["exact", "icontains"],
+            "description": ["exact", "icontains"],
+            # "object_type": ["exact"],
+            # "object_type__name": ["exact"],
         }
 
 class ObjectFilter(filters.AdvancedFilterSet):
@@ -25,6 +66,12 @@ class ObjectFilter(filters.AdvancedFilterSet):
         field_name="object_type",
         queryset=models.ObjectType.objects.all(),
     )
+    # Relationships
+    # values = filters.RelatedFilter(
+    #     ValueFilter,
+    #     field_name="values",
+    #     queryset=models.Value.objects.all(),
+    # )
 
     class Meta:
         model = models.Object
@@ -33,8 +80,13 @@ class ObjectFilter(filters.AdvancedFilterSet):
             "name": ["exact", "icontains"],
             "description": ["exact", "icontains"],
             # "object_type": ["exact"],
-            # "object_type__name": ["exact"],
+            "object_type__name": ["exact"],
         }
+
+
+"""
+Nodes
+"""
 
 
 class ObjectTypeNode(DjangoObjectType):
@@ -44,6 +96,14 @@ class ObjectTypeNode(DjangoObjectType):
         fields = "__all__"
         filterset_class = ObjectTypeFilter
         # filter_fields = ["name"]
+
+class AttributeNode(DjangoObjectType):
+    class Meta:
+        model = models.Attribute
+        interfaces = (Node,)
+        fields = "__all__"
+        filterset_class = AttributeFilter
+        # filter_fields = ["name", "object_type"]
 
 
 class ObjectNode(DjangoObjectType):
@@ -59,24 +119,17 @@ class ObjectNode(DjangoObjectType):
         # }
 
 
-class AttributeNode(DjangoObjectType):
-    class Meta:
-        model = models.Attribute
-        interfaces = (Node,)
-        fields = "__all__"
-        filter_fields = ["name", "object_type"]
-
-
 class ValueNode(DjangoObjectType):
     class Meta:
         model = models.Value
         interfaces = (Node,)
         fields = "__all__"
-        filter_fields = {
-            "value": ["exact", "icontains"],
-            "object": ["exact"],
-            "attribute": ["exact"],
-        }
+        filterset_class = ValueFilter
+        # filter_fields = {
+        #     "value": ["exact", "icontains"],
+        #     "object": ["exact"],
+        #     "attribute": ["exact"],
+        # }
 
 
 class Query:

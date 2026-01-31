@@ -3,6 +3,7 @@
 https://github.com/devind-team/graphene-django-filter
 Use the `AdvancedFilterSet` class from this module instead of the `FilterSet` from django-filter.
 """
+
 import copy
 import operator
 import warnings
@@ -222,14 +223,57 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         for f in new_class.related_filters.values():
             f.bind_filterset(new_class)
 
-        # Only expand the auto filters if a model is defined for the new class.
-        # Model may be undefined for mixins.
-        if new_class._meta.model is not None:
-            for name, f in new_class.related_filters.items():
-                expanded = cls.expand_auto_filter(new_class, name, f)
-                new_class.base_filters.update(expanded)
+        # DEFER EXPANSION:
+        # We removed the immediate expansion loop here to allow for
+        # circular dependencies in the same file. Expansion now happens
+        # in AdvancedFilterSet.get_filters().
 
         return new_class
+
+    @classmethod
+    def expand_related_filter(
+        cls,
+        new_class: "FilterSetMetaclass",
+        filter_name: str,
+        f: filters.BaseRelatedFilter,
+    ) -> Dict[str, "Filter"]:
+        """
+        Expand a RelatedFilter by grabbing filters from the target FilterSet.
+        """
+        expanded = OrderedDict()
+
+        # 1. Get the target FilterSet class
+        target_filterset = f.filterset
+
+        if not target_filterset:
+            return expanded
+
+        # Get filters from the target
+        # We trigger get_filters() on the target to ensure it is also expanded
+        target_filters = target_filterset.get_filters()
+
+        # 2. Iterate over the base_filters of the target FilterSet
+        # We access .base_filters to get the fully resolved filters of that class
+        # if hasattr(target_filterset, 'base_filters'):
+        for name, field in target_filterset.base_filters.items():
+            # Skip full text search generated filters to avoid noise/recursion issues if needed
+            # or include them if desired. For now, we include everything.
+
+            # Create the new nested name (e.g., 'attributes__name')
+            new_name = f"{filter_name}{LOOKUP_SEP}{name}"
+
+            # Clone the filter to avoid modifying the original instance
+            # (Optional but recommended to prevent side effects)
+            field_copy = copy.deepcopy(field)
+
+            # Update the field_name to point to the relationship path
+            # e.g. "name" becomes "xxx__name" so the ORM knows the path
+            field_copy.field_name = f"{f.field_name}{LOOKUP_SEP}{field.field_name}"
+
+            # Add to expanded
+            expanded[new_name] = field_copy
+
+        return expanded
 
     @classmethod
     def expand_auto_filter(
@@ -265,15 +309,29 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         # Use meta.fields to generate auto filters
         new_class._meta.fields = {f.field_name: f.lookups or []}
 
-        for gen_name, gen_f in new_class.get_filters().items():
-            # get_filters() generates param names from the model field name, so
-            # Replace the model field name with the attribute name from the FilterSet
-            gen_name = gen_name.replace(f.field_name, filter_name, 1)
+        try:
+            # We call super().get_filters() to use standard django-filter generation
+            # We cannot call new_class.get_filters() here if we override it below
+            # so we might need a workaround or assume AutoFilter is simple.
 
-            # do not overwrite declared filters
-            # Add to expanded filters if it's not an explicitly declared filter
-            if gen_name not in orig_declared:
-                expanded[gen_name] = gen_f
+            # Since AdvancedFilterSet overrides get_filters, we need to be careful.
+            # However, expand_auto_filter is legacy/compatibility.
+            # We rely on the fact that super().get_filters() calculates based on meta.fields.
+            gen_filters = super(AdvancedFilterSet, new_class).get_filters()
+
+            for gen_name, gen_f in gen_filters.items():
+                # get_filters() generates param names from the model field name, so
+                # Replace the model field name with the attribute name from the FilterSet
+                gen_name = gen_name.replace(f.field_name, filter_name, 1)
+
+                # do not overwrite declared filters
+                # Add to expanded filters if it's not an explicitly declared filter
+                if gen_name not in orig_declared:
+                    expanded[gen_name] = gen_f
+        except Exception:
+            # Swallow TypeError if field doesn't exist on model (e.g. reverse relation)
+            # This allows safe failover if you accidentally use expand_auto_filter
+            pass
 
         # restore reference to original attributes (opts/declared filters)
         new_class._meta, new_class.declared_filters = orig_meta, orig_declared
@@ -283,14 +341,71 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
 
 # Define the lookup prefixes, similar to DRF
 LOOKUP_PREFIXES = {
-    '^': 'istartswith',
-    '=': 'iexact',
-    '@': 'search',
-    '$': 'iregex',
+    "^": "istartswith",
+    "=": "iexact",
+    "@": "search",
+    "$": "iregex",
 }
+
 
 class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     """Allow you to use advanced filters."""
+
+    # Cache for expanded filters
+    _expanded_filters = None
+    # Flag to prevent infinite recursion in get_filters
+    _is_expanding_filters = False
+
+    @classmethod
+    def get_filters(cls) -> OrderedDict:
+        """
+        Get all filters for the filterset.
+        This method is overridden to perform LAZY expansion of RelatedFilters.
+        """
+        # If we have already expanded and cached, return it.
+        # Note: We must be careful with inheritance, but get_filters is usually called on the final class.
+        if getattr(cls, "_expanded_filters", None) is not None:
+            return cls._expanded_filters
+
+        # RECURSION PROTECTION:
+        # If we are already currently expanding this class, return the base filters
+        # (native fields) immediately. This stops the infinite loop when
+        # Attribute -> Value -> Attribute tries to resolve.
+        if cls._is_expanding_filters:
+            return super().get_filters()
+
+        cls._is_expanding_filters = True
+
+        try:
+            # 1. Get standard filters (declared + Meta.fields generated)
+            # We call super() to get the base django-filter behavior
+            filters = super().get_filters()
+
+            # 2. Expand RelatedFilters (Lazily)
+            if cls._meta.model is not None:
+                # We use the Metaclass helper methods
+                for name, f in cls.related_filters.items():
+                    if isinstance(f, filters.RelatedFilter):
+                        expanded = cls.__class__.expand_related_filter(cls, name, f)
+                    else:
+                        expanded = cls.__class__.expand_auto_filter(cls, name, f)
+                    filters.update(expanded)
+
+            # 3. Add Full Text Search filters
+            filters = OrderedDict(
+                [
+                    *filters.items(),
+                    *cls.create_full_text_search_filters(filters).items(),
+                ]
+            )
+
+            # Cache the result on the class to avoid re-calculation
+            cls._expanded_filters = filters
+            return filters
+        finally:
+            # CRITICAL: Reset the flag so future calls (e.g. in other FilterSets)
+            # can actually perform expansion.
+            cls._is_expanding_filters = False
 
     class TreeFormMixin(Form):
         """Tree-like form mixin."""
@@ -329,17 +444,17 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         Ensure 'search' is added to the filter input type.
         """
         fields = super().get_filter_fields()  # Get existing filter fields
-        fields['search'] = String()  # Explicitly add 'search' as a String type
+        fields["search"] = String()  # Explicitly add 'search' as a String type
         return fields
 
     # Search_fields code
     def get_search_fields(self):
         """Retrieve the search_fields attribute from Meta."""
-        return getattr(self.Meta, 'search_fields', None)
+        return getattr(self.Meta, "search_fields", None)
 
     def construct_search(self, field_name):
         """Constructs the search query lookup based on prefixes."""
-        lookup = LOOKUP_PREFIXES.get(field_name[0], 'icontains')
+        lookup = LOOKUP_PREFIXES.get(field_name[0], "icontains")
         if field_name[0] in LOOKUP_PREFIXES:
             field_name = field_name[1:]  # Strip prefix if exists
         return f"{field_name}__{lookup}"
@@ -419,9 +534,9 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
             or_forms=[
                 self.create_form(form_class, or_data) for or_data in data.get("or", [])
             ],
-            not_form=self.create_form(form_class, data["not"])
-            if data.get("not")
-            else None,
+            not_form=(
+                self.create_form(form_class, data["not"]) if data.get("not") else None
+            ),
         )
 
     def find_filter(self, data_key: str) -> Filter:
@@ -571,13 +686,37 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         return cls._get_fields(is_full_text_search_lookup_expr)
 
     @classmethod
-    def _get_fields(cls, predicate: Callable[[str], bool]) -> OrderedDict:
-        """Resolve the `Meta.fields` argument including lookups that match the predicate."""
+    def _get_fields(cls, predicate: Callable[[str], bool], visited: Optional[set[Type]] = None) -> OrderedDict:
+        """
+        Resolve the `Meta.fields` argument including lookups that match the predicate.
+        Includes recursion protection for circular dependencies.
+        """
+        if visited is None:
+            visited = set()
+            
+        # Stop recursion if we have visited this class already
+        if cls in visited:
+            return OrderedDict()
+        
+        visited.add(cls)
+
         fields: List[Tuple[str, List[str]]] = []
 
         for related_name in cls.related_filters:
             rf = cls.related_filters[related_name]
-            f = rf._filterset.get_fields()
+
+            # Use .filterset property to resolve string references
+            f_class = rf.filterset
+
+            # Recursive call with visited set
+            if f_class and issubclass(f_class, AdvancedFilterSet):
+                f = f_class._get_fields(predicate, visited)
+            elif f_class:
+                # Fallback for standard FilterSets
+                f = f_class.get_fields()
+            else:
+                f = {}
+
             for key, value in f.items():
                 fields.append((related_name + "__" + key, value))
 

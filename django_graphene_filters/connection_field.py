@@ -185,7 +185,8 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         )
 
         if filterset.form.is_valid():
-            return filterset.qs
+            # Apply .distinct() to remove duplicates caused by relationship joins
+            return filterset.qs.distinct()
 
         raise ValidationError(filterset.form.errors.as_json())
 

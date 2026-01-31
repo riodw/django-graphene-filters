@@ -25,6 +25,7 @@ Now setup our database:
 
 ```bash
 # Setup the database
+./manage.py makemigrations
 ./manage.py migrate
 
 # Create an admin user (useful for logging into the admin UI

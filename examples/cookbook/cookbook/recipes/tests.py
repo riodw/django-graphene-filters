@@ -88,7 +88,7 @@ class RecipesTests(GraphQLTestCase):
                 edges {
                   node {
                     name
-                    valueSet {
+                    values {
                       edges {
                         node {
                           value
@@ -115,7 +115,7 @@ class RecipesTests(GraphQLTestCase):
         
         for edge in edges:
             node = edge['node']
-            values = node['valueSet']['edges']
+            values = node['values']['edges']
             self.assertEqual(len(values), 3, f"Person {node['name']} should have 3 values, but has {len(values)}")
             
             attr_names = []
