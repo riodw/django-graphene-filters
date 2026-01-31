@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: linux_slim
     strategy:
       max-parallel: 4
       matrix:
