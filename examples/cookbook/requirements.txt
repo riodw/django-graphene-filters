@@ -2,3 +2,4 @@ django==6.0.1
 django-filter==25.2
 graphene-django==3.2.2
 factory-boy==3.3.3
+-e ../..

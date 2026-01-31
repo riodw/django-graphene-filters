@@ -1,6 +1,7 @@
 from faker import Faker
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
 
+
 def create_people(count: int):
     """
     Creates X number of People objects with associated Email, Phone, and City values.
@@ -9,18 +10,22 @@ def create_people(count: int):
 
     # 1. Get or create ObjectType "People"
     people_type, _ = ObjectType.objects.get_or_create(
-        name="People", defaults={"description": "Automatically generated people objects"}
+        name="People",
+        defaults={"description": "Automatically generated people objects"},
     )
 
     # 2. Get or create Attributes
     email_attr, _ = Attribute.objects.get_or_create(
-        name="Email", object_type=people_type
+        name="Email",
+        object_type=people_type,
     )
     phone_attr, _ = Attribute.objects.get_or_create(
-        name="Phone", object_type=people_type
+        name="Phone",
+        object_type=people_type,
     )
     city_attr, _ = Attribute.objects.get_or_create(
-        name="City", object_type=people_type
+        name="City",
+        object_type=people_type,
     )
 
     # 3. Create X People
@@ -33,7 +38,10 @@ def create_people(count: int):
         )
         # Create 3 values per person
         Value.objects.create(
-            value=fake.email(), description="", attribute=email_attr, object=person
+            value=fake.email(),
+            description="",
+            attribute=email_attr,
+            object=person,
         )
         Value.objects.create(
             value=fake.phone_number(),
@@ -42,8 +50,11 @@ def create_people(count: int):
             object=person,
         )
         Value.objects.create(
-            value=fake.city(), description="", attribute=city_attr, object=person
+            value=fake.city(),
+            description="",
+            attribute=city_attr,
+            object=person,
         )
         created_count += 1
-    
+
     return created_count

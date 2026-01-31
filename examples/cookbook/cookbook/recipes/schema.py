@@ -1,6 +1,8 @@
 from graphene import Node
-from graphene_django.filter import DjangoFilterConnectionField
 from graphene_django.types import DjangoObjectType
+
+from graphene_django.filter import DjangoFilterConnectionField
+# from django_graphene_filters import AdvancedDjangoFilterConnectionField
 
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
 
@@ -48,12 +50,16 @@ class ValueNode(DjangoObjectType):
 class Query:
     object_type = Node.Field(ObjectTypeNode)
     all_object_types = DjangoFilterConnectionField(ObjectTypeNode)
+    # all_object_types = AdvancedDjangoFilterConnectionField(ObjectTypeNode)
 
     object = Node.Field(ObjectNode)
     all_objects = DjangoFilterConnectionField(ObjectNode)
+    # all_objects = AdvancedDjangoFilterConnectionField(ObjectNode)
 
     attribute = Node.Field(AttributeNode)
     all_attributes = DjangoFilterConnectionField(AttributeNode)
+    # all_attributes = AdvancedDjangoFilterConnectionField(AttributeNode)
 
     value = Node.Field(ValueNode)
     all_values = DjangoFilterConnectionField(ValueNode)
+    # all_values = AdvancedDjangoFilterConnectionField(ValueNode)

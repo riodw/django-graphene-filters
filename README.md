@@ -25,17 +25,27 @@ poetry publish --username __token__ --password PASSWORD
 ```
 
 # Testing
+```shell
+poetry run coverage run -m pytest
+poetry run coverage report --fail-under=100
+```
 
-## Local testing
+# Running 
+```shell
+poetry run python examples/cookbook/manage.py runserver
+```
+
+
+## Local usage
 
 1. go to the project you want to install the package
 2. run `pipenv shell`
 3. run `pip install -e .`
 EXAMPLE:
 ```
-cd /Users/riordenweber/projects/django-graphene-filters
+cd ~/projects/django-graphene-filters
 pipenv install -e .
-cd /Users/riordenweber/projects/doormatkey.django/doormatkey
+cd ~/projects/doormatkey.django/doormatkey
 pipenv lock
 ```
 
