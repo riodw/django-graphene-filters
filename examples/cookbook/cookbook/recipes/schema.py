@@ -2,7 +2,7 @@ from graphene import Node
 from graphene_django.types import DjangoObjectType
 
 from graphene_django.filter import DjangoFilterConnectionField
-# from django_graphene_filters import AdvancedDjangoFilterConnectionField
+from django_graphene_filters import AdvancedDjangoFilterConnectionField
 
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
 

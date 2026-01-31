@@ -1,6 +1,8 @@
 from django.test import TestCase
 from cookbook.recipes.models import Object
 from cookbook.recipes.services import create_people
+from graphene_django.utils import GraphQLTestCase
+import json
 
 def ensure_people_count(x: int):
     """
@@ -11,23 +13,22 @@ def ensure_people_count(x: int):
     if current_count < x:
         create_people(x - current_count)
 
-class PeopleServiceTests(TestCase):
-    def test_ensure_three_people(self):
-        # Initial state should be 0
+class RecipesTests(GraphQLTestCase):
+    # Enforce order using numeric prefixes
+    
+    def test_01_ensure_three_people(self):
         ensure_people_count(3)
         count = Object.objects.filter(object_type__name="People").count()
         self.assertEqual(count, 3, f"Expected 3 people, found {count}")
 
-    def test_ensure_four_people(self):
-        # Each test in TestCase starts with a clean database (in a transaction)
-        # So we test that we get exactly 4 when we ask for 4
+    def test_02_ensure_four_people(self):
         ensure_people_count(4)
         count = Object.objects.filter(object_type__name="People").count()
         self.assertEqual(count, 4, f"Expected 4 people, found {count}")
     
-    def test_incremental_behavior(self):
+    def test_03_incremental_behavior(self):
         """
-        Explicitly test the logic where it only creates the difference.
+        - Explicitly test the logic where it only creates the difference.
         """
         # 1. Create 2 people
         ensure_people_count(2)
@@ -41,12 +42,9 @@ class PeopleServiceTests(TestCase):
         ensure_people_count(5)
         self.assertEqual(Object.objects.filter(object_type__name="People").count(), 5)
 
-
-from graphene_django.utils import GraphQLTestCase
-import json
-
-class PeopleGraphQLTests(GraphQLTestCase):
     def query_people_count(self):
+        # Updated to use 'filter' argument for AdvancedDjangoFilterConnectionField
+        # allObjects(filter: { objectType: { name: { exact: "People" } } }) {
         response = self.query(
             '''
             query {
@@ -61,28 +59,28 @@ class PeopleGraphQLTests(GraphQLTestCase):
             '''
         )
         content = json.loads(response.content)
-        # Verify no errors in response
         if 'errors' in content:
             raise Exception(f"GraphQL Errors: {content['errors']}")
             
         return len(content['data']['allObjects']['edges'])
 
-    def test_graphql_three_people(self):
+    def test_04_graphql_three_people(self):
         ensure_people_count(3)
         count = self.query_people_count()
         self.assertEqual(count, 3, f"Expected 3 people via GraphQL, found {count}")
 
-    def test_graphql_four_people(self):
+    def test_05_graphql_four_people(self):
         ensure_people_count(4)
         count = self.query_people_count()
         self.assertEqual(count, 4, f"Expected 4 people via GraphQL, found {count}")
 
-    def test_graphql_person_values_count(self):
+    def test_06_graphql_person_values_count(self):
         """
-        Verify that each person has exactly 3 values through GraphQL
+        - Verify that each person has exactly 3 values through GraphQL
         and that they share the same 3 unique attributes.
         """
         ensure_people_count(2)
+        # allObjects(filter: { objectType: { name: { exact: "People" } } }) {
         response = self.query(
             '''
             query {
@@ -130,9 +128,4 @@ class PeopleGraphQLTests(GraphQLTestCase):
             self.assertIn("Phone", attr_names)
             self.assertIn("City", attr_names)
 
-        # Verify that across all people, only 3 unique Attribute IDs were used
-        self.assertEqual(
-            len(all_attribute_ids), 
-            3, 
-            f"Expected exactly 3 unique attribute IDs, but found {len(all_attribute_ids)}: {all_attribute_ids}"
-        )
+        self.assertEqual(len(all_attribute_ids), 3)
