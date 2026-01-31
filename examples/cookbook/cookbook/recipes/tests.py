@@ -129,3 +129,35 @@ class RecipesTests(GraphQLTestCase):
             self.assertIn("City", attr_names)
 
         self.assertEqual(len(all_attribute_ids), 3)
+
+
+    def query_people_count_advanced_filters(self):
+        # Updated to use 'filter' argument for AdvancedDjangoFilterConnectionField
+        response = self.query(
+            '''
+            query {
+              allObjects(filter: { objectType: { name: { exact: "People" } } }) {
+                edges {
+                  node {
+                    id
+                  }
+                }
+              }
+            }
+            '''
+        )
+        content = json.loads(response.content)
+        if 'errors' in content:
+            raise Exception(f"GraphQL Errors: {content['errors']}")
+            
+        return len(content['data']['allObjects']['edges'])
+
+    def test_04_graphql_three_people_advanced_filters(self):
+        ensure_people_count(3)
+        count = self.query_people_count_advanced_filters()
+        self.assertEqual(count, 3, f"Expected 3 people via GraphQL, found {count}")
+
+    def test_05_graphql_four_people_advanced_filters(self):
+        ensure_people_count(4)
+        count = self.query_people_count_advanced_filters()
+        self.assertEqual(count, 4, f"Expected 4 people via GraphQL, found {count}")
