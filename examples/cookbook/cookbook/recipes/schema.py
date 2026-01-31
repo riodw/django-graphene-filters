@@ -4,12 +4,12 @@ from graphene_django.types import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
 from django_graphene_filters import AdvancedDjangoFilterConnectionField
 
-from cookbook.recipes.models import Attribute, Object, ObjectType, Value
+from . import models
 
 
 class ObjectTypeNode(DjangoObjectType):
     class Meta:
-        model = ObjectType
+        model = models.ObjectType
         interfaces = (Node,)
         fields = "__all__"
         filter_fields = ["name"]
@@ -17,7 +17,7 @@ class ObjectTypeNode(DjangoObjectType):
 
 class ObjectNode(DjangoObjectType):
     class Meta:
-        model = Object
+        model = models.Object
         interfaces = (Node,)
         fields = "__all__"
         filter_fields = {
@@ -29,7 +29,7 @@ class ObjectNode(DjangoObjectType):
 
 class AttributeNode(DjangoObjectType):
     class Meta:
-        model = Attribute
+        model = models.Attribute
         interfaces = (Node,)
         fields = "__all__"
         filter_fields = ["name", "object_type"]
@@ -37,7 +37,7 @@ class AttributeNode(DjangoObjectType):
 
 class ValueNode(DjangoObjectType):
     class Meta:
-        model = Value
+        model = models.Value
         interfaces = (Node,)
         fields = "__all__"
         filter_fields = {
