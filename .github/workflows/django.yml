@@ -43,6 +43,7 @@ jobs:
     - name: Install project
       run: poetry install --no-interaction
 
-    - name: Run Tests
+    - name: Run Tests with Coverage
       run: |
-        poetry run pytest
+        poetry run coverage run -m pytest
+        poetry run coverage report --fail-under=100
