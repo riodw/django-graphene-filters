@@ -236,6 +236,8 @@ class FilterArgumentsFactory:
         )
         return field_type
 
+
+    # THIS IS THE MAGIC
     @classmethod
     def filterset_to_trees(cls, filterset_class: Type[AdvancedFilterSet]) -> List[Node]:
         """

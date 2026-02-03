@@ -206,6 +206,17 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         Returns:
             FilterSetMetaclass: A new FilterSetMetaclass object.
         """
+
+        # Allow users to use `filter_fields` instead of `fields` in Meta
+        # to match graphene-django conventions.
+        meta_class = attrs.get("Meta")
+        if meta_class:
+            if hasattr(meta_class, "filter_fields") and not hasattr(
+                meta_class, "fields"
+            ):
+                # Map filter_fields to fields so django-filter can process it normally
+                setattr(meta_class, "fields", meta_class.filter_fields)
+
         # Create the new class using the parent class's __new__ method
         new_class = super().__new__(cls, name, bases, attrs)
 
@@ -252,10 +263,9 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         # We trigger get_filters() on the target to ensure it is also expanded
         target_filters = target_filterset.get_filters()
 
-        # 2. Iterate over the base_filters of the target FilterSet
-        # We access .base_filters to get the fully resolved filters of that class
-        # if hasattr(target_filterset, 'base_filters'):
-        for name, field in target_filterset.base_filters.items():
+        # 2. Get filters from the target
+        # We trigger get_filters() on the target to ensure it is also expanded
+        for name, field in target_filters.items():
             # Skip full text search generated filters to avoid noise/recursion issues if needed
             # or include them if desired. For now, we include everything.
 
@@ -686,18 +696,20 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         return cls._get_fields(is_full_text_search_lookup_expr)
 
     @classmethod
-    def _get_fields(cls, predicate: Callable[[str], bool], visited: Optional[set[Type]] = None) -> OrderedDict:
+    def _get_fields(
+        cls, predicate: Callable[[str], bool], visited: Optional[set[Type]] = None
+    ) -> OrderedDict:
         """
         Resolve the `Meta.fields` argument including lookups that match the predicate.
         Includes recursion protection for circular dependencies.
         """
         if visited is None:
             visited = set()
-            
+
         # Stop recursion if we have visited this class already
         if cls in visited:
             return OrderedDict()
-        
+
         visited.add(cls)
 
         fields: List[Tuple[str, List[str]]] = []

@@ -36,6 +36,7 @@ Now setup our database:
 Now you should be ready to start the server:
 
 ```bash
+source env/bin/activate
 ./manage.py runserver
 ```
 

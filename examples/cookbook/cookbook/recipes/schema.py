@@ -19,7 +19,7 @@ class ObjectTypeFilter(filters.AdvancedFilterSet):
     class Meta:
         model = models.ObjectType
         interfaces = (Node,)
-        fields = {
+        filter_fields = {
             "name": "__all__",
             # "name": ["exact", "icontains"],
             "description": ["exact", "icontains"],
@@ -37,7 +37,7 @@ class AttributeFilter(filters.AdvancedFilterSet):
     class Meta:
         model = models.Attribute
         interfaces = (Node,)
-        fields = {
+        filter_fields = {
             "name": ["exact", "icontains"],
             "description": ["exact", "icontains"],
         }
@@ -53,7 +53,7 @@ class ValueFilter(filters.AdvancedFilterSet):
     class Meta:
         model = models.Value
         interfaces = (Node,)
-        fields = {
+        filter_fields = {
             "value": ["exact", "icontains"],
             "description": ["exact", "icontains"],
             # "object_type": ["exact"],
@@ -76,11 +76,11 @@ class ObjectFilter(filters.AdvancedFilterSet):
     class Meta:
         model = models.Object
         interfaces = (Node,)
-        fields = {
+        filter_fields = {
             "name": ["exact", "icontains"],
             "description": ["exact", "icontains"],
             # "object_type": ["exact"],
-            "object_type__name": ["exact"],
+            # "object_type__name": ["exact"],
         }
 
 

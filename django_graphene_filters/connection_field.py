@@ -6,11 +6,13 @@ module instead of the `DjangoFilterConnectionField` from graphene-django.
 """
 
 import warnings
+from collections import OrderedDict
 from typing import Any, Callable, Dict, Iterable, Optional, Type, Union
 
 import graphene
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.constants import LOOKUP_SEP
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
 
@@ -121,11 +123,16 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         """
         if not self._filtering_args:
             # 1. Get Standard Arguments (Flat style derived from filter_fields)
+            # We use a trimmed version of the class to HIDE the expanded RelatedFilters
+            # from the root-level arguments.
+            trimmed_class = self._get_trimmed_filterset_class()
+
             standard_args = get_filtering_args_from_filterset(
-                self.filterset_class, self.node_type
+                trimmed_class, self.node_type
             )
 
             # 2. Get Advanced Arguments (The 'filter' tree input)
+            # We use the FULL class here so the tree is built correctly
             advanced_args = FilterArgumentsFactory(
                 self.filterset_class,
                 self.filter_input_type_prefix,
@@ -135,6 +142,42 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             self._filtering_args = {**standard_args, **advanced_args}
 
         return self._filtering_args
+
+    def _get_trimmed_filterset_class(self) -> Type[AdvancedFilterSet]:
+        """
+        Create a temporary FilterSet subclass that excludes expanded related filters.
+
+        This prevents arguments like `values_Value_Icontains` from appearing in the
+        schema root, ensuring they are only accessible via the nested `filter` argument.
+        """
+        # Ensure the original class is fully loaded/expanded
+        full_filters = self.filterset_class.base_filters
+        related_filters = self.filterset_class.related_filters
+
+        trimmed_filters = OrderedDict()
+
+        for name, f in full_filters.items():
+            # Check if this filter is an "expanded" child of a RelatedFilter.
+            # E.g. "values__value" is a child of "values".
+            is_expanded_child = False
+            for rel_name in related_filters:
+                # We assume expanded filters start with "rel_name" + "__"
+                prefix = f"{rel_name}{LOOKUP_SEP}"
+                if name.startswith(prefix):
+                    is_expanded_child = True
+                    break
+
+            # Keep the filter if it's not an expanded child
+            if not is_expanded_child:
+                trimmed_filters[name] = f
+
+        # Create a dynamic class with the cleaned filters
+        # We inherit from the original class to pass any isinstance checks Graphene might do
+        return type(
+            f"Trimmed{self.filterset_class.__name__}",
+            (self.filterset_class,),
+            {"base_filters": trimmed_filters},
+        )
 
     @classmethod
     def resolve_queryset(
