@@ -21,6 +21,7 @@ from graphene_django.filter.utils import get_filtering_args_from_filterset
 
 # Local imports
 from .conf import settings
+from .filters import BaseRelatedFilter
 from .filter_arguments_factory import FilterArgumentsFactory
 from .filterset import AdvancedFilterSet
 from .filterset_factories import get_filterset_class
@@ -167,16 +168,24 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
                     is_expanded_child = True
                     break
 
-            # Keep the filter if it's not an expanded child
-            if not is_expanded_child:
+            # Keep the filter if it's not an expanded child and NOT a RelatedFilter itself
+            # We check both isinstance and class name for robustness
+            if not is_expanded_child and not (
+                isinstance(f, BaseRelatedFilter) or
+                f.__class__.__name__.endswith("RelatedFilter")
+            ):
                 trimmed_filters[name] = f
 
         # Create a dynamic class with the cleaned filters
         # We inherit from the original class to pass any isinstance checks Graphene might do
+        # We also clear related_filters so get_filters() doesn't re-expand them.
         return type(
             f"Trimmed{self.filterset_class.__name__}",
             (self.filterset_class,),
-            {"base_filters": trimmed_filters},
+            {
+                "base_filters": trimmed_filters,
+                "related_filters": OrderedDict(),
+            },
         )
 
     @classmethod

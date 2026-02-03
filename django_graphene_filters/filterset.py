@@ -366,6 +366,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     # Flag to prevent infinite recursion in get_filters
     _is_expanding_filters = False
 
+
     @classmethod
     def get_filters(cls) -> OrderedDict:
         """
@@ -389,29 +390,30 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         try:
             # 1. Get standard filters (declared + Meta.fields generated)
             # We call super() to get the base django-filter behavior
-            filters = super().get_filters()
+            all_filters = super().get_filters()
 
             # 2. Expand RelatedFilters (Lazily)
             if cls._meta.model is not None:
                 # We use the Metaclass helper methods
-                for name, f in cls.related_filters.items():
+                related_filters_val = getattr(cls, "related_filters", OrderedDict())
+                for name, f in related_filters_val.items():
                     if isinstance(f, filters.RelatedFilter):
                         expanded = cls.__class__.expand_related_filter(cls, name, f)
                     else:
                         expanded = cls.__class__.expand_auto_filter(cls, name, f)
-                    filters.update(expanded)
+                    all_filters.update(expanded)
 
             # 3. Add Full Text Search filters
-            filters = OrderedDict(
+            all_filters = OrderedDict(
                 [
-                    *filters.items(),
-                    *cls.create_full_text_search_filters(filters).items(),
+                    *all_filters.items(),
+                    *cls.create_full_text_search_filters(all_filters).items(),
                 ]
             )
 
             # Cache the result on the class to avoid re-calculation
-            cls._expanded_filters = filters
-            return filters
+            # cls._expanded_filters = all_filters
+            return all_filters
         finally:
             # CRITICAL: Reset the flag so future calls (e.g. in other FilterSets)
             # can actually perform expansion.
@@ -605,22 +607,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
             not_q = models.Q()
         return QuerySetProxy(qs, q & and_q & or_q & not_q)
 
-    @classmethod
-    def get_filters(cls) -> OrderedDict:
-        """Get all filters for the filterset.
-
-        This is the combination of declared and generated filters.
-        """
-        filters = super().get_filters()
-        if not cls._meta.model:
-            return filters
-
-        return OrderedDict(
-            [
-                *filters.items(),
-                *cls.create_full_text_search_filters(filters).items(),
-            ]
-        )
 
     @classmethod
     def create_full_text_search_filters(
@@ -712,10 +698,14 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
 
         visited.add(cls)
 
+        if not cls._meta.model:
+            return OrderedDict()
+
         fields: List[Tuple[str, List[str]]] = []
 
-        for related_name in cls.related_filters:
-            rf = cls.related_filters[related_name]
+        related_filters_val = getattr(cls, "related_filters", OrderedDict())
+        for related_name in related_filters_val:
+            rf = related_filters_val[related_name]
 
             # Use .filterset property to resolve string references
             f_class = rf.filterset

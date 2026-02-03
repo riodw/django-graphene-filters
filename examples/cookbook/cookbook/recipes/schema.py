@@ -27,6 +27,11 @@ class ObjectTypeFilter(filters.AdvancedFilterSet):
 
 
 class AttributeFilter(filters.AdvancedFilterSet):
+    object_type = filters.RelatedFilter(
+        ObjectTypeFilter,
+        field_name="object_type",
+        queryset=models.ObjectType.objects.all(),
+    )
     # Relationships
     # values = filters.RelatedFilter(
     #     "ValueFilter",
@@ -56,8 +61,8 @@ class ValueFilter(filters.AdvancedFilterSet):
         filter_fields = {
             "value": ["exact", "icontains"],
             "description": ["exact", "icontains"],
-            # "object_type": ["exact"],
-            # "object_type__name": ["exact"],
+            "attribute__name": ["exact"],
+            "attribute__object_type__name": ["exact"],
         }
 
 class ObjectFilter(filters.AdvancedFilterSet):
@@ -80,7 +85,7 @@ class ObjectFilter(filters.AdvancedFilterSet):
             "name": ["exact", "icontains"],
             "description": ["exact", "icontains"],
             # "object_type": ["exact"],
-            # "object_type__name": ["exact"],
+            "object_type__name": ["exact"],
         }
 
 
