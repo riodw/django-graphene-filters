@@ -15,7 +15,7 @@ from .filters import (
 )
 from .filterset import AdvancedFilterSet
 
-__version__ = "0.0.9"
+__version__ = "0.1.0"
 
 # All classes, methods, part of the public API
 # easier to manage and understand the package
