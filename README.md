@@ -30,6 +30,9 @@ poetry publish --username __token__ --password PASSWORD
 ```shell
 poetry run coverage run -m pytest
 poetry run coverage report --fail-under=100
+poetry run coverage report --show-missing
+
+poetry run coverage run -m pytest tests/test_input_data_factories.py && poetry run coverage report -m django_graphene_filters/input_data_factories.py
 ```
 
 # Running 

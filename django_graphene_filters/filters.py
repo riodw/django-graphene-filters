@@ -1,6 +1,7 @@
 """Additional filters for special lookups."""
 
 from typing import Any, Callable, List, NamedTuple, Optional, Type, Union
+from collections import OrderedDict
 
 from django.contrib.postgres.search import (
     SearchQuery,
@@ -161,7 +162,7 @@ class BaseRelatedFilter:
     ) -> None:
         super().__init__(*args, **kwargs)
         # using private member to avoid collision with property method
-        self.filterset = filterset
+        self._filterset = filterset  # Changed from self.filterset to self._filterset
         self.lookups = lookups or []
 
     def bind_filterset(self, filterset: Type["BaseFilterSet"]) -> None:
@@ -180,6 +181,8 @@ class BaseRelatedFilter:
                 # Fallback to building import path relative to bind class
                 path = ".".join([self.bound_filterset.__module__, self._filterset])
                 self._filterset = import_string(path)
+        elif callable(self._filterset) and not isinstance(self._filterset, type):
+            self._filterset = self._filterset()
         return self._filterset
 
     @filterset.setter
@@ -236,3 +239,11 @@ class RelatedFilter(BaseRelatedFilter, ModelChoiceFilter):
         lookups: A list of lookups to generate per-lookup filters for. This
             functions similarly to the `AutoFilter.lookups` argument.
     """
+
+class AutoFilter(BaseRelatedFilter, Filter):
+    """
+    A placeholder filter that is expanded into multiple filters based on lookups.
+    """
+    def __init__(self, lookups: Optional[List[str]] = None, **kwargs) -> None:
+        # AutoFilter doesn't need a filterset class initially
+        super().__init__(filterset=None, lookups=lookups, **kwargs)

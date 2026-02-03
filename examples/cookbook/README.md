@@ -9,6 +9,11 @@ Cookbook Example (Relay) Django Project
 
 # Or for even more detail (including database creation steps):
 ./manage.py test cookbook.recipes -v 3
+
+./env/bin/python manage.py shell -c "exec(open('check_no_flat_filters_test.py').read())"
+./env/bin/python manage.py shell -c "exec(open('diagnostic_trees_test.py').read())"
+./env/bin/python manage.py shell -c "exec(open('expansion_test.py').read())"
+./env/bin/python manage.py shell -c "exec(open('schema_arguments_test.py').read())"
 ```
 
 # Setup

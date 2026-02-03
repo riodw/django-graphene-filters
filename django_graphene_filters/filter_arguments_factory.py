@@ -311,6 +311,9 @@ class FilterArgumentsFactory:
         Returns:
         - Node: The root node of the generated tree.
         """
+        if not values:
+            return Node(name="")
+
         node: Optional[Node] = None
 
         for value in values:

@@ -74,7 +74,7 @@ class QuerySetProxy(ObjectProxy):
         elif name == "exclude":
             return self.exclude_
         attr = super().__getattr__(name)
-        if callable(attr):
+        if callable(attr) and not isinstance(attr, type):
             return self._make_callable_proxy(attr)
         return attr
 

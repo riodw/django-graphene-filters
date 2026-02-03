@@ -241,12 +241,11 @@ def create_search_query(
     # Initialize the search query
     search_query = None
 
-    # Get the base query value and optional configuration
     value = input_type.get("value")
     if value:
         config = input_type.get("config")
         search_query = SearchQuery(
-            input_type.value,
+            value,
             config=create_search_config(config) if config else None,
         )
 
