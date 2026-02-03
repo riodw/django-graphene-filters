@@ -67,11 +67,11 @@ class ObjectFilter(filters.AdvancedFilterSet):
         queryset=models.ObjectType.objects.all(),
     )
     # Relationships
-    # values = filters.RelatedFilter(
-    #     ValueFilter,
-    #     field_name="values",
-    #     queryset=models.Value.objects.all(),
-    # )
+    values = filters.RelatedFilter(
+        ValueFilter,
+        field_name="values",
+        queryset=models.Value.objects.all(),
+    )
 
     class Meta:
         model = models.Object

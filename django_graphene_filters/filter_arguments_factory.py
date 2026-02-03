@@ -149,6 +149,9 @@ class FilterArgumentsFactory:
 
         fields: Dict[str, graphene.InputField] = {}
 
+        # Cache the fully expanded filters once
+        all_filters = self.filterset_class.get_filters()
+
         for child in root.children:
             if child.height == 0:
                 filter_name = f"{LOOKUP_SEP}".join(
@@ -157,7 +160,7 @@ class FilterArgumentsFactory:
                     if node.name != django_settings.DEFAULT_LOOKUP_EXPR
                 )
                 fields[child.name] = self.get_field(
-                    filter_name, self.filterset_class.base_filters[filter_name]
+                    filter_name, all_filters[filter_name]
                 )
             else:
                 fields[child.name] = self.create_filter_input_subfield(
@@ -249,8 +252,12 @@ class FilterArgumentsFactory:
         # Initialize an empty list to hold the root nodes of the trees.
         trees: List[Node] = []
 
+        # Use .get_filters().values() instead of .base_filters.values()
+        # This ensures we get the expanded related filters.
+        all_filters = filterset_class.get_filters()
+
         # Iterate through each filter in the FilterSet's base_filters.
-        for filter_value in filterset_class.base_filters.values():
+        for filter_value in all_filters.values():
             # Split the filter's field_name and lookup_expr into a sequence of values.
             values = (
                 *filter_value.field_name.split(LOOKUP_SEP),

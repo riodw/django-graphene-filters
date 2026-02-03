@@ -180,7 +180,7 @@ class BaseRelatedFilter:
                 # Fallback to building import path relative to bind class
                 path = ".".join([self.bound_filterset.__module__, self._filterset])
                 self._filterset = import_string(path)
-            return self._filterset
+        return self._filterset
 
     @filterset.setter
     def filterset(self, value: Type["BaseFilterSet"]) -> None:
