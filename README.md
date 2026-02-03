@@ -1,4 +1,4 @@
-# Django Graphene Filters
+# Django Graphene Filters (Beta)
 - https://pypi.org/project/graphene-django-filter/
 - https://pypi.org/project/djangorestframework-filters
 
