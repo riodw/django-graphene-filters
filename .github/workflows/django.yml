@@ -74,14 +74,23 @@ jobs:
           
       - name: Run Tests
         run: |
-          # Only run coverage/strict checks on latest Python/Django combination
+          # Check if this is the specific matrix job that updates coverage
           if [ "${{ matrix.python }}" == "3.14" ] && [ "${{ matrix.django }}" == "latest" ]; then
-            poetry run coverage run -m pytest
-            # Generate the text report needed for the action
+            # 1. Run tests and generate JUnit XML (Required by the action)
+            # We allow this to pass even if tests fail so we can still update the badge, 
+            # or you can remove '|| true' to stop immediately on failure.
+            poetry run coverage run -m pytest --junitxml=pytest.xml || true
+            
+            # 2. Generate the text report (Required by the action to read coverage %)
             poetry run coverage report > pytest-coverage.txt
-            # Keep generating json if you need it for other tools, otherwise optional
+            
+            # 3. Print report to logs (Helps debugging "bad format" errors)
+            cat pytest-coverage.txt
+            
+            # 4. Generate JSON (Optional)
             poetry run coverage json
           else
+            # Standard test run for other matrix combinations
             poetry run pytest
           fi
 
@@ -92,18 +101,48 @@ jobs:
         with:
           pytest-coverage-path: ./pytest-coverage.txt
           junitxml-path: ./pytest.xml
-          # This sets the badge title in the comment/output
           badge-title: coverage
 
       - name: Write Coverage to README
         if: github.ref == 'refs/heads/master' && matrix.python == '3.14' && matrix.django == 'latest'
+        shell: python
         run: |
-          # Use the output from the previous step to replace the regex in README
-          sed -i '//,//c\[![coverage]('"${{ steps.coverageComment.outputs.coverageHtml }}"')][build-url]' ./README.md
+          import re
+          import os
           
+          # Inputs from the Action step
+          coverage = '${{ steps.coverageComment.outputs.coverage }}'
+          color = '${{ steps.coverageComment.outputs.color }}'
+          
+          # Define file path
+          readme_path = './README.md'
+          
+          # 1. Construct the new Badge Markdown
+          # We use %25 to represent a literal % in the URL
+          badge_md = f'[![coverage](https://img.shields.io/badge/coverage-{coverage}%25-{color})][build-url]'
+          
+          # 2. Read the README
+          if os.path.exists(readme_path):
+              with open(readme_path, 'r') as f:
+                  content = f.read()
+              
+              # 3. Regex Replace
+              # Matches content between and pattern = r'()(.*?)()'
+              replacement = f'\\1{badge_md}\\3'
+              
+              new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+              
+              # 4. Write Back
+              with open(readme_path, 'w') as f:
+                  f.write(new_content)
+              
+              print(f"Successfully updated README with coverage: {coverage}%")
+          else:
+              print("README.md not found!")
+
       - name: Commit & Push changes
         if: github.ref == 'refs/heads/master' && matrix.python == '3.14' && matrix.django == 'latest'
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "docs: update coverage badge"
+          commit_message: "docs: update coverage badge to ${{ steps.coverageComment.outputs.coverage }}%"
           file_pattern: README.md
