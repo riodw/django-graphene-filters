@@ -9,32 +9,51 @@ on:
 
 jobs:
   test:
-    name: Python ${{ matrix.python-version }}
+    name: Python ${{ matrix.python }} - Django ${{ matrix.django }}
     runs-on: ubuntu-slim
     strategy:
       # If one version fails, don't stop the others
       fail-fast: false
       matrix:
-        # If manual, run all 3. If push/PR, run only 3.12.
-        python-version: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["3.12", "3.13", "3.14"]') || fromJSON('["3.12"]') }}
+        # If manual, run all
+        include: ${{ github.event_name == 'workflow_dispatch' && fromJSON('[
+          {"django": "5.2.*", "python": "3.10"},
+          {"django": "5.2.*", "python": "3.11"},
+          {"django": "5.2.*", "python": "3.12"},
+          {"django": "6.0.*", "python": "3.12"},
+          {"django": "6.0.*", "python": "3.13"},
+          {"django": "6.0.*", "python": "3.14"},
+          {"django": "latest", "python": "3.14"}
+        ]') || fromJSON('[
+          {"django": "latest", "python": "3.14"}
+        ]') }}
     
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python }}
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python }}
           
       - name: Install dependencies
         run: |
           pip install poetry
           poetry install
           
+      - name: Install Django ${{ matrix.django }}
+        run: |
+          if [ "${{ matrix.django }}" == "latest" ]; then
+            poetry run pip install "Django" --upgrade
+          else
+            poetry run pip install "Django==${{ matrix.django }}"
+          fi
+          poetry run django-admin --version
+          
       - name: Run Tests
         run: |
-          # Only run coverage/strict checks on 3.12 to keep it fast
-          if [ "${{ matrix.python-version }}" == "3.12" ]; then
+          # Only run coverage/strict checks on latest Python/Django combination
+          if [ "${{ matrix.python }}" == "3.14" ] && [ "${{ matrix.django }}" == "latest" ]; then
             poetry run coverage run -m pytest
             poetry run coverage report --fail-under=100
           else

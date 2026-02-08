@@ -1,6 +1,7 @@
 """Module for converting a AdvancedFilterSet class to filter arguments."""
 
-from typing import Any, Callable, Dict, List, Optional, Sequence, Type, cast
+from collections.abc import Callable, Sequence
+from typing import Any, cast
 
 import graphene
 from anytree import Node
@@ -25,9 +26,7 @@ class FilterArgumentsFactory:
     """Factory for creating filter arguments in GraphQL from a given `AdvancedFilterSet` class."""
 
     # Special GraphQL filter input types and their associated factories
-    SPECIAL_FILTER_INPUT_TYPES_FACTORIES: Dict[
-        str, Callable[[], graphene.InputField]
-    ] = {
+    SPECIAL_FILTER_INPUT_TYPES_FACTORIES: dict[str, Callable[[], graphene.InputField]] = {
         SearchQueryFilter.postfix: lambda: graphene.InputField(
             SearchQueryFilterInputType,
             description="Field for the full-text search using `SearchVector` and `SearchQuery` objects.",
@@ -43,11 +42,11 @@ class FilterArgumentsFactory:
     }
 
     # Cache for storing input object types
-    input_object_types: Dict[str, Type[graphene.InputObjectType]] = {}
+    input_object_types: dict[str, type[graphene.InputObjectType]] = {}
 
     def __init__(
         self,
-        filterset_class: Type[AdvancedFilterSet],
+        filterset_class: type[AdvancedFilterSet],
         input_type_prefix: str,
     ) -> None:
         """Initialize the factory with a filterset class and an input type prefix.
@@ -61,9 +60,8 @@ class FilterArgumentsFactory:
         self.filter_input_type_name = f"{self.input_type_prefix}FilterInputType"
 
     @property
-    def arguments(self) -> Dict[str, graphene.Argument]:
-        """
-        Create and return the GraphQL arguments for filtering.
+    def arguments(self) -> dict[str, graphene.Argument]:
+        """Create and return the GraphQL arguments for filtering.
 
         Inspect a FilterSet and produce the arguments to pass to a Graphene Field.
         These arguments will be available to filter against in the GraphQL.
@@ -84,11 +82,8 @@ class FilterArgumentsFactory:
             ),
         }
 
-    def create_filter_input_type(
-        self, roots: List[Node]
-    ) -> Type[graphene.InputObjectType]:
-        """
-        Generate a GraphQL filter InputObjectType for filtering based on the filter set trees.
+    def create_filter_input_type(self, roots: list[Node]) -> type[graphene.InputObjectType]:
+        """Generate a GraphQL filter InputObjectType for filtering based on the filter set trees.
 
         Args:
             roots: List of root nodes for each filter tree.
@@ -109,15 +104,11 @@ class FilterArgumentsFactory:
         # Add special fields for AND, OR, and NOT fields for logical combination of filters
         logic_fields = {
             settings.AND_KEY: graphene.InputField(
-                graphene.List(
-                    lambda: self.input_object_types[self.filter_input_type_name]
-                ),
+                graphene.List(lambda: self.input_object_types[self.filter_input_type_name]),
                 description="`And` field",
             ),
             settings.OR_KEY: graphene.InputField(
-                graphene.List(
-                    lambda: self.input_object_types[self.filter_input_type_name]
-                ),
+                graphene.List(lambda: self.input_object_types[self.filter_input_type_name]),
                 description="`Or` field",
             ),
             settings.NOT_KEY: graphene.InputField(
@@ -128,7 +119,7 @@ class FilterArgumentsFactory:
 
         # Combine all fields and create the InputObjectType
         self.input_object_types[self.filter_input_type_name] = cast(
-            Type[graphene.InputObjectType],
+            type[graphene.InputObjectType],
             type(
                 self.filter_input_type_name,
                 (graphene.InputObjectType,),
@@ -147,7 +138,7 @@ class FilterArgumentsFactory:
         if root.name in self.SPECIAL_FILTER_INPUT_TYPES_FACTORIES:
             return self.SPECIAL_FILTER_INPUT_TYPES_FACTORIES[root.name]()
 
-        fields: Dict[str, graphene.InputField] = {}
+        fields: dict[str, graphene.InputField] = {}
 
         # Cache the fully expanded filters once
         all_filters = self.filterset_class.get_filters()
@@ -155,13 +146,9 @@ class FilterArgumentsFactory:
         for child in root.children:
             if child.height == 0:
                 filter_name = f"{LOOKUP_SEP}".join(
-                    node.name
-                    for node in child.path
-                    if node.name != django_settings.DEFAULT_LOOKUP_EXPR
+                    node.name for node in child.path if node.name != django_settings.DEFAULT_LOOKUP_EXPR
                 )
-                fields[child.name] = self.get_field(
-                    filter_name, all_filters[filter_name]
-                )
+                fields[child.name] = self.get_field(filter_name, all_filters[filter_name])
             else:
                 fields[child.name] = self.create_filter_input_subfield(
                     child,
@@ -170,9 +157,7 @@ class FilterArgumentsFactory:
                 )
 
         return graphene.InputField(
-            self.create_input_object_type(
-                f"{prefix}{pascalcase(root.name)}FilterInputType", fields
-            ),
+            self.create_input_object_type(f"{prefix}{pascalcase(root.name)}FilterInputType", fields),
             description=description,
         )
 
@@ -180,15 +165,15 @@ class FilterArgumentsFactory:
     def create_input_object_type(
         cls,
         name: str,
-        fields: Dict[str, Any],
-    ) -> Type[graphene.InputObjectType]:
+        fields: dict[str, Any],
+    ) -> type[graphene.InputObjectType]:
         """Create a new GraphQL type inheritor inheriting from `graphene.InputObjectType` class."""
         # Use a cache to avoid creating the same InputObjectType again
         if name in cls.input_object_types:
             return cls.input_object_types[name]
 
         cls.input_object_types[name] = cast(
-            Type[graphene.InputObjectType],
+            type[graphene.InputObjectType],
             type(
                 name,
                 (graphene.InputObjectType,),
@@ -198,8 +183,7 @@ class FilterArgumentsFactory:
         return cls.input_object_types[name]
 
     def get_field(self, name: str, filter_obj: Filter) -> graphene.InputField:
-        """
-        Create and return a Graphene input field from a Django Filter field.
+        """Create and return a Graphene input field from a Django Filter field.
 
         Parameters:
         - name (str): The name of the field.
@@ -215,14 +199,10 @@ class FilterArgumentsFactory:
         form_field = filter_obj.field
 
         # Handle special case when the filter_obj filter type is not 'isnull' and the name is not declared
-        if filter_type != "isnull" and name not in getattr(
-            self.filterset_class, "declared_filters"
-        ):
+        if filter_type != "isnull" and name not in getattr(self.filterset_class, "declared_filters"):
             model_field = get_model_field(model, filter_obj.field_name)
             if hasattr(model_field, "formfield"):
-                form_field = model_field.formfield(
-                    required=filter_obj.extra.get("required", False)
-                )
+                form_field = model_field.formfield(required=filter_obj.extra.get("required", False))
 
         # Convert Django form field to Graphene field
         graphene_field = convert_form_field(form_field)
@@ -236,12 +216,10 @@ class FilterArgumentsFactory:
         )
         return field_type
 
-
     # THIS IS THE MAGIC
     @classmethod
-    def filterset_to_trees(cls, filterset_class: Type[AdvancedFilterSet]) -> List[Node]:
-        """
-        Convert a FilterSet class to a list of trees.
+    def filterset_to_trees(cls, filterset_class: type[AdvancedFilterSet]) -> list[Node]:
+        """Convert a FilterSet class to a list of trees.
 
         where each tree represents a set of chained lookups for a filter.
 
@@ -252,7 +230,7 @@ class FilterArgumentsFactory:
         - List[Node]: A list of root nodes for each tree, each representing a filter.
         """
         # Initialize an empty list to hold the root nodes of the trees.
-        trees: List[Node] = []
+        trees: list[Node] = []
 
         # Use .get_filters().values() instead of .base_filters.values()
         # This ensures we get the expanded related filters.
@@ -268,17 +246,14 @@ class FilterArgumentsFactory:
 
             # Check if any existing tree can accommodate the new sequence of values.
             # If not, create a new tree for it.
-            if not trees or not any(
-                cls.try_add_sequence(tree, values) for tree in trees
-            ):
+            if not trees or not any(cls.try_add_sequence(tree, values) for tree in trees):
                 trees.append(cls.sequence_to_tree(values))
 
         return trees
 
     @classmethod
     def try_add_sequence(cls, root: Node, values: Sequence[str]) -> bool:
-        """
-        Attempt to add a sequence of values to an existing tree rooted at `root`.
+        """Attempt to add a sequence of values to an existing tree rooted at `root`.
 
         Return a flag indicating whether the mutation was made.
 
@@ -302,8 +277,7 @@ class FilterArgumentsFactory:
 
     @staticmethod
     def sequence_to_tree(values: Sequence[str]) -> Node:
-        """
-        Convert a sequence of values into a tree, where each value becomes a node.
+        """Convert a sequence of values into a tree, where each value becomes a node.
 
         Parameters:
         - values (Sequence[str]): The sequence of values.
@@ -314,7 +288,7 @@ class FilterArgumentsFactory:
         if not values:
             return Node(name="")
 
-        node: Optional[Node] = None
+        node: Node | None = None
 
         for value in values:
             node = Node(name=value, parent=node)

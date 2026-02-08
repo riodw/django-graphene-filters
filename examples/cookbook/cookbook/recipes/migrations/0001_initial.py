@@ -8,68 +8,120 @@ class Migration(migrations.Migration):
 
     initial = True
 
-    dependencies = [
-    ]
+    dependencies = []
 
     operations = [
         migrations.CreateModel(
-            name='ObjectType',
+            name="ObjectType",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.TextField()),
-                ('description', models.TextField(blank=True, default='')),
-                ('created_date', models.DateTimeField(auto_now_add=True)),
-                ('updated_date', models.DateTimeField(auto_now=True)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.TextField()),
+                ("description", models.TextField(blank=True, default="")),
+                ("created_date", models.DateTimeField(auto_now_add=True)),
+                ("updated_date", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'verbose_name': 'Object Type',
-                'verbose_name_plural': 'Object Types',
+                "verbose_name": "Object Type",
+                "verbose_name_plural": "Object Types",
             },
         ),
         migrations.CreateModel(
-            name='Object',
+            name="Object",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.TextField()),
-                ('description', models.TextField(blank=True, default='')),
-                ('created_date', models.DateTimeField(auto_now_add=True)),
-                ('updated_date', models.DateTimeField(auto_now=True)),
-                ('object_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='recipes.objecttype')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.TextField()),
+                ("description", models.TextField(blank=True, default="")),
+                ("created_date", models.DateTimeField(auto_now_add=True)),
+                ("updated_date", models.DateTimeField(auto_now=True)),
+                (
+                    "object_type",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="recipes.objecttype",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Object',
-                'verbose_name_plural': 'Objects',
+                "verbose_name": "Object",
+                "verbose_name_plural": "Objects",
             },
         ),
         migrations.CreateModel(
-            name='Attribute',
+            name="Attribute",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.TextField()),
-                ('description', models.TextField(blank=True, default='')),
-                ('created_date', models.DateTimeField(auto_now_add=True)),
-                ('updated_date', models.DateTimeField(auto_now=True)),
-                ('object_type', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='recipes.objecttype')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.TextField()),
+                ("description", models.TextField(blank=True, default="")),
+                ("created_date", models.DateTimeField(auto_now_add=True)),
+                ("updated_date", models.DateTimeField(auto_now=True)),
+                (
+                    "object_type",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="recipes.objecttype",
+                    ),
+                ),
             ],
             options={
-                'verbose_name': 'Attribute',
-                'verbose_name_plural': 'Attributes',
+                "verbose_name": "Attribute",
+                "verbose_name_plural": "Attributes",
             },
         ),
         migrations.CreateModel(
-            name='Value',
+            name="Value",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('value', models.TextField()),
-                ('description', models.TextField(blank=True, default='')),
-                ('created_date', models.DateTimeField(auto_now_add=True)),
-                ('updated_date', models.DateTimeField(auto_now=True)),
-                ('attribute', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='recipes.attribute')),
-                ('object', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='recipes.object')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("value", models.TextField()),
+                ("description", models.TextField(blank=True, default="")),
+                ("created_date", models.DateTimeField(auto_now_add=True)),
+                ("updated_date", models.DateTimeField(auto_now=True)),
+                (
+                    "attribute",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        to="recipes.attribute",
+                    ),
+                ),
+                (
+                    "object",
+                    models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to="recipes.object"),
+                ),
             ],
             options={
-                'verbose_name': 'Value',
-                'verbose_name_plural': 'Values',
+                "verbose_name": "Value",
+                "verbose_name_plural": "Values",
             },
         ),
     ]

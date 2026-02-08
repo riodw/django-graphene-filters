@@ -1,5 +1,5 @@
-import pprint
 from cookbook.recipes.schema import Query
+
 from django_graphene_filters import AdvancedDjangoFilterConnectionField
 
 print("--- SCHEMA ARGUMENTS DIAGNOSTIC START ---")
@@ -23,7 +23,9 @@ for arg_name in sorted(args.keys()):
 # However, the keys in filtering_args are usually snake_case before Graphene converts them.
 # We want to find any argument that represents a path (contains __) and belongs to a relation.
 
-flat_relation_args = [a for a in args.keys() if "__" in a and any(rel in a for rel in ["object_type", "values"])]
+flat_relation_args = [
+    a for a in args.keys() if "__" in a and any(rel in a for rel in ["object_type", "values"])
+]
 
 if len(flat_relation_args) > 0:
     print("\n[FAILURE] Found flat arguments for related fields in the schema:")

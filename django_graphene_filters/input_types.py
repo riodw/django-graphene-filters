@@ -1,6 +1,6 @@
 """InputObjectType classes for special lookups."""
 
-from typing import Type, cast
+from typing import cast
 
 import graphene
 
@@ -37,12 +37,8 @@ class SearchVectorInputType(graphene.InputObjectType):
         required=True,
         description="The field names to be used in the vector",
     )
-    config = graphene.InputField(
-        SearchConfigInputType, description="Configuration settings for the vector"
-    )
-    weight = graphene.InputField(
-        SearchVectorWeight, description="The weight to be applied to the vector"
-    )
+    config = graphene.InputField(SearchConfigInputType, description="Configuration settings for the vector")
+    weight = graphene.InputField(SearchVectorWeight, description="The weight to be applied to the vector")
 
 
 class SearchQueryType(graphene.Enum):
@@ -54,9 +50,8 @@ class SearchQueryType(graphene.Enum):
     WEBSEARCH = "websearch"
 
 
-def create_search_query_input_type() -> Type[graphene.InputObjectType]:
-    """
-    Create and return an InputObjectType for a SearchQuery object.
+def create_search_query_input_type() -> type[graphene.InputObjectType]:
+    """Create and return an InputObjectType for a SearchQuery object.
 
     Returns:
         The InputObjectType class for the SearchQuery object.
@@ -88,7 +83,7 @@ def create_search_query_input_type() -> Type[graphene.InputObjectType]:
         ),
     }
     search_query_input_type = cast(
-        Type[graphene.InputObjectType],
+        type[graphene.InputObjectType],
         type(
             "SearchQueryInputType",
             (graphene.InputObjectType,),

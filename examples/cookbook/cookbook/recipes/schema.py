@@ -1,14 +1,10 @@
 from graphene import Node
 from graphene_django.types import DjangoObjectType
 
-from graphene_django.filter import DjangoFilterConnectionField
-
-
 import django_graphene_filters as filters
 from django_graphene_filters import AdvancedDjangoFilterConnectionField
 
 from . import models
-
 
 """
 Filters
@@ -65,6 +61,7 @@ class ValueFilter(filters.AdvancedFilterSet):
             "attribute__object_type__name": ["exact"],
         }
 
+
 class ObjectFilter(filters.AdvancedFilterSet):
     object_type = filters.RelatedFilter(
         ObjectTypeFilter,
@@ -101,6 +98,7 @@ class ObjectTypeNode(DjangoObjectType):
         fields = "__all__"
         filterset_class = ObjectTypeFilter
         # filter_fields = ["name"]
+
 
 class AttributeNode(DjangoObjectType):
     class Meta:

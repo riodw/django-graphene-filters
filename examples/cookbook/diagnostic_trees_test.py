@@ -1,7 +1,7 @@
-import pprint
-from cookbook.recipes.schema import ObjectFilter
-from django_graphene_filters.filter_arguments_factory import FilterArgumentsFactory
 from anytree import RenderTree
+from cookbook.recipes.schema import ObjectFilter
+
+from django_graphene_filters.filter_arguments_factory import FilterArgumentsFactory
 
 print("--- DIAGNOSTIC START ---")
 
@@ -29,7 +29,8 @@ for tree in trees:
         if path == "object_type__description__icontains":
             found = True
             break
-    if found: break
+    if found:
+        break
 
 if found:
     print("\n[SUCCESS] Tree contains object_type__description__icontains")

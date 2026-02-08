@@ -8,31 +8,23 @@ import copy
 import operator
 import warnings
 from collections import OrderedDict
-from graphene import String  # GraphQL String type
-
+from collections.abc import Callable, Iterator
+from functools import reduce
 from typing import (
     Any,
-    Callable,
-    Dict,
-    Iterator,
-    List,
     Optional,
-    Tuple,
-    Type,
-    Union,
     cast,
 )
-from functools import reduce
 
 from django.db import connection, models
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 from django.db.models.constants import LOOKUP_SEP
 from django.forms import Form
 from django.forms.utils import ErrorDict
-from django_filters import Filter
-from django_filters import filterset
+from django_filters import Filter, filterset
 from django_filters.conf import settings as django_settings
 from django_filters.utils import get_model_field
+from graphene import String  # GraphQL String type
 from wrapt import ObjectProxy
 
 from . import filters, utils
@@ -40,8 +32,7 @@ from .conf import settings
 
 
 class QuerySetProxy(ObjectProxy):
-    """
-    Proxy class for Django QuerySet object.
+    """Proxy class for Django QuerySet object.
 
     This class allows us to work with the Django QuerySet in a way
     that also considers the 'Q' object for complex queries.
@@ -55,13 +46,12 @@ class QuerySetProxy(ObjectProxy):
 
     __slots__ = "q"
 
-    def __init__(self, wrapped: models.QuerySet, q: Optional[models.Q] = None) -> None:
+    def __init__(self, wrapped: models.QuerySet, q: models.Q | None = None) -> None:
         super().__init__(wrapped)
         self.q = q or models.Q()
 
     def __getattr__(self, name: str) -> Any:
-        """
-        Override QuerySet attribute access behavior for all cases except `filter` and `exclude`.
+        """Override QuerySet attribute access behavior for all cases except `filter` and `exclude`.
 
         Args:
             name: Name of the attribute to access.
@@ -79,8 +69,7 @@ class QuerySetProxy(ObjectProxy):
         return attr
 
     def _make_callable_proxy(self, attr: Callable) -> Callable:
-        """
-        Wrap callable attributes to return a QuerySetProxy when a QuerySet is returned.
+        """Wrap callable attributes to return a QuerySetProxy when a QuerySet is returned.
 
         Args:
             attr: Callable attribute from the wrapped QuerySet.
@@ -98,8 +87,7 @@ class QuerySetProxy(ObjectProxy):
         return func
 
     def __iter__(self) -> Iterator[Any]:
-        """
-        Allow iteration over the proxy.
+        """Allow iteration over the proxy.
 
         Returns:
             An iterator for the wrapped QuerySet and the Q object.
@@ -107,8 +95,7 @@ class QuerySetProxy(ObjectProxy):
         return iter([self.__wrapped__, self.q])
 
     def filter_(self, *args, **kwargs) -> "QuerySetProxy":
-        """
-        Override the 'filter' method of QuerySet.
+        """Override the 'filter' method of QuerySet.
 
         Args:
             args, kwargs: Arguments passed to the filter.
@@ -124,8 +111,7 @@ class QuerySetProxy(ObjectProxy):
         return self
 
     def exclude_(self, *args, **kwargs) -> "QuerySetProxy":
-        """
-        Override the 'exclude' method of QuerySet.
+        """Override the 'exclude' method of QuerySet.
 
         Args:
             args, kwargs: Arguments passed to the exclude.
@@ -142,8 +128,7 @@ class QuerySetProxy(ObjectProxy):
 
 
 def is_full_text_search_lookup_expr(lookup_expr: str) -> bool:
-    """
-    Determine if the given lookup_expression is a full text search expression.
+    """Determine if the given lookup_expression is a full text search expression.
 
     Args:
         lookup_expr (str): The lookup expression to be checked.
@@ -155,8 +140,7 @@ def is_full_text_search_lookup_expr(lookup_expr: str) -> bool:
 
 
 def is_regular_lookup_expr(lookup_expr: str) -> bool:
-    """
-    Determine if the lookup_expr must be processed in a regular way.
+    """Determine if the lookup_expr must be processed in a regular way.
 
     Args:
         lookup_expr (str): The lookup expression to be checked.
@@ -171,8 +155,7 @@ def is_regular_lookup_expr(lookup_expr: str) -> bool:
 
 
 class FilterSetMetaclass(filterset.FilterSetMetaclass):
-    """
-    Custom metaclass for creating FilterSet classes.
+    """Custom metaclass for creating FilterSet classes.
 
     Extends the behavior of the FilterSetMetaclass from the
     `rest_framework_filters` package. It specifically enriches the creation
@@ -190,13 +173,12 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
     """
 
     def __new__(
-        cls: Type["FilterSetMetaclass"],
+        cls: type["FilterSetMetaclass"],
         name: str,
         bases: tuple,
-        attrs: Dict[str, Any],
+        attrs: dict[str, Any],
     ) -> "FilterSetMetaclass":
-        """
-        Overridden __new__ method to extend the FilterSet class creation logic.
+        """Overridden __new__ method to extend the FilterSet class creation logic.
 
         Args:
             name (str): The name of the new class.
@@ -206,16 +188,12 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         Returns:
             FilterSetMetaclass: A new FilterSetMetaclass object.
         """
-
         # Allow users to use `filter_fields` instead of `fields` in Meta
         # to match graphene-django conventions.
         meta_class = attrs.get("Meta")
-        if meta_class:
-            if hasattr(meta_class, "filter_fields") and not hasattr(
-                meta_class, "fields"
-            ):
-                # Map filter_fields to fields so django-filter can process it normally
-                setattr(meta_class, "fields", meta_class.filter_fields)
+        if meta_class and hasattr(meta_class, "filter_fields") and not hasattr(meta_class, "fields"):
+            # Map filter_fields to fields so django-filter can process it normally
+            setattr(meta_class, "fields", meta_class.filter_fields)
 
         # Create the new class using the parent class's __new__ method
         new_class = super().__new__(cls, name, bases, attrs)
@@ -247,10 +225,8 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         new_class: "FilterSetMetaclass",
         filter_name: str,
         f: filters.BaseRelatedFilter,
-    ) -> Dict[str, "Filter"]:
-        """
-        Expand a RelatedFilter by grabbing filters from the target FilterSet.
-        """
+    ) -> dict[str, "Filter"]:
+        """Expand a RelatedFilter by grabbing filters from the target FilterSet."""
         expanded = OrderedDict()
 
         # 1. Get the target FilterSet class
@@ -287,13 +263,12 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
 
     @classmethod
     def expand_auto_filter(
-        cls: Type["FilterSetMetaclass"],
+        cls: type["FilterSetMetaclass"],
         new_class: "FilterSetMetaclass",
         filter_name: str,
         f: filters.BaseRelatedFilter,
-    ) -> Dict[str, "Filter"]:
-        """
-        Resolve an `AutoFilter` or `BaseRelatedFilter` into individual filters based on lookup methods.
+    ) -> dict[str, "Filter"]:
+        """Resolve an `AutoFilter` or `BaseRelatedFilter` into individual filters based on lookup methods.
 
         This method name is slightly inaccurate since it handles both
         :class:`rest_framework_filters.filters.AutoFilter` and
@@ -366,11 +341,10 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     # Flag to prevent infinite recursion in get_filters
     _is_expanding_filters = False
 
-
     @classmethod
     def get_filters(cls) -> OrderedDict:
-        """
-        Get all filters for the filterset.
+        """Get all filters for the filterset.
+
         This method is overridden to perform LAZY expansion of RelatedFilters.
         """
         # If we have already expanded and cached, return it.
@@ -411,8 +385,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
                 ]
             )
 
-            # Cache the result on the class to avoid re-calculation
-            # cls._expanded_filters = all_filters
             return all_filters
         finally:
             # CRITICAL: Reset the flag so future calls (e.g. in other FilterSets)
@@ -424,8 +396,8 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
 
         def __init__(
             self,
-            and_forms: Optional[List["AdvancedFilterSet.TreeFormMixin"]] = None,
-            or_forms: Optional[List["AdvancedFilterSet.TreeFormMixin"]] = None,
+            and_forms: list["AdvancedFilterSet.TreeFormMixin"] | None = None,
+            or_forms: list["AdvancedFilterSet.TreeFormMixin"] | None = None,
             not_form: Optional["AdvancedFilterSet.TreeFormMixin"] = None,
             *args,
             **kwargs,
@@ -451,27 +423,25 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
             return self_errors
 
     @classmethod
-    def get_filter_fields(cls):
-        """
-        Ensure 'search' is added to the filter input type.
-        """
+    def get_filter_fields(cls) -> dict[str, Any]:
+        """Ensure 'search' is added to the filter input type."""
         fields = super().get_filter_fields()  # Get existing filter fields
         fields["search"] = String()  # Explicitly add 'search' as a String type
         return fields
 
     # Search_fields code
-    def get_search_fields(self):
+    def get_search_fields(self) -> list[str] | None:
         """Retrieve the search_fields attribute from Meta."""
         return getattr(self.Meta, "search_fields", None)
 
-    def construct_search(self, field_name):
+    def construct_search(self, field_name: str) -> str:
         """Constructs the search query lookup based on prefixes."""
         lookup = LOOKUP_PREFIXES.get(field_name[0], "icontains")
         if field_name[0] in LOOKUP_PREFIXES:
             field_name = field_name[1:]  # Strip prefix if exists
         return f"{field_name}__{lookup}"
 
-    def build_search_conditions(self, queryset, search_query):
+    def build_search_conditions(self, queryset: QuerySet, search_query: str) -> QuerySet:
         """Constructs Q objects for search terms across search_fields."""
         search_fields = self.get_search_fields()
         if not search_fields or not search_query:
@@ -484,16 +454,15 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         # Construct combined Q object for all terms and fields
         search_conditions = Q()
         for term in search_terms:
-            term_conditions = reduce(
-                operator.or_, (Q(**{lookup: term}) for lookup in orm_lookups)
-            )
+            term_conditions = reduce(operator.or_, (Q(**{lookup: term}) for lookup in orm_lookups))
             search_conditions &= term_conditions
 
         # Apply the filter to the queryset
         return queryset.filter(search_conditions)
 
     @property
-    def qs(self):
+    def qs(self) -> QuerySet:
+        """Return the filtered queryset."""
         queryset = super().qs  # Retrieve the base queryset
         # Check if 'search' is part of the data and apply it if present
         search_query = self.data.get("search")
@@ -503,15 +472,14 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         return queryset
 
     # Filters
-    def get_form_class(self) -> Type[Union[Form, TreeFormMixin]]:
-        """
-        Return a django Form class suitable of validating the filterset data.
+    def get_form_class(self) -> type[Form | TreeFormMixin]:
+        """Return a django Form class suitable of validating the filterset data.
 
         The form must be tree-like because the data is tree-like.
         """
-        form_class = super(AdvancedFilterSet, self).get_form_class()
+        form_class = super().get_form_class()
         tree_form = cast(
-            Type[Union[Form, AdvancedFilterSet.TreeFormMixin]],
+            type[Form | AdvancedFilterSet.TreeFormMixin],
             type(
                 f'{form_class.__name__.replace("Form", "")}TreeForm',
                 (form_class, AdvancedFilterSet.TreeFormMixin),
@@ -521,7 +489,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         return tree_form
 
     @property
-    def form(self) -> Union[Form, TreeFormMixin]:
+    def form(self) -> Form | TreeFormMixin:
         """Return a django Form suitable of validating the filterset data."""
         if not hasattr(self, "_form"):
             form_class = self.get_form_class()
@@ -533,22 +501,15 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
 
     def create_form(
         self,
-        form_class: Type[Union[Form, TreeFormMixin]],
-        data: Dict[str, Any],
-    ) -> Union[Form, TreeFormMixin]:
+        form_class: type[Form | TreeFormMixin],
+        data: dict[str, Any],
+    ) -> Form | TreeFormMixin:
         """Create a form from a form class and data."""
         return form_class(
             data={k: v for k, v in data.items() if k not in ("and", "or", "not")},
-            and_forms=[
-                self.create_form(form_class, and_data)
-                for and_data in data.get("and", [])
-            ],
-            or_forms=[
-                self.create_form(form_class, or_data) for or_data in data.get("or", [])
-            ],
-            not_form=(
-                self.create_form(form_class, data["not"]) if data.get("not") else None
-            ),
+            and_forms=[self.create_form(form_class, and_data) for and_data in data.get("and", [])],
+            or_forms=[self.create_form(form_class, or_data) for or_data in data.get("or", [])],
+            not_form=(self.create_form(form_class, data["not"]) if data.get("not") else None),
         )
 
     def find_filter(self, data_key: str) -> Filter:
@@ -562,18 +523,11 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
             field_name, lookup_expr = data_key.rsplit(LOOKUP_SEP, 1)
         else:
             field_name, lookup_expr = data_key, django_settings.DEFAULT_LOOKUP_EXPR
-        key = (
-            field_name
-            if lookup_expr == django_settings.DEFAULT_LOOKUP_EXPR
-            else data_key
-        )
+        key = field_name if lookup_expr == django_settings.DEFAULT_LOOKUP_EXPR else data_key
         if key in self.filters:
             return self.filters[key]
         for filter_value in self.filters.values():
-            if (
-                filter_value.field_name == field_name
-                and filter_value.lookup_expr == lookup_expr
-            ):
+            if filter_value.field_name == field_name and filter_value.lookup_expr == lookup_expr:
                 return filter_value
 
     def filter_queryset(self, queryset: models.QuerySet) -> models.QuerySet:
@@ -585,7 +539,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     def get_queryset_proxy_for_form(
         self,
         queryset: models.QuerySet,
-        form: Union[Form, TreeFormMixin],
+        form: Form | TreeFormMixin,
     ) -> QuerySetProxy:
         """Return a `QuerySetProxy` object for a form's `cleaned_data`."""
         qs = queryset
@@ -606,7 +560,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         else:
             not_q = models.Q()
         return QuerySetProxy(qs, q & and_q & or_q & not_q)
-
 
     @classmethod
     def create_full_text_search_filters(
@@ -642,9 +595,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
             new_filters = OrderedDict(
                 [
                     *new_filters.items(),
-                    *cls.create_special_filters(
-                        base_filters, TrigramFilter, field_name
-                    ).items(),
+                    *cls.create_special_filters(base_filters, TrigramFilter, field_name).items(),
                 ]
             )
         return new_filters
@@ -653,8 +604,8 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     def create_special_filters(
         cls,
         base_filters: OrderedDict,
-        filter_class: Union[Type[Filter], Any],
-        field_name: Optional[str] = None,
+        filter_class: type[Filter] | Any,
+        field_name: str | None = None,
     ) -> OrderedDict:
         """Create special filters using a filter class and a field name."""
         new_filters = OrderedDict()
@@ -682,11 +633,9 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         return cls._get_fields(is_full_text_search_lookup_expr)
 
     @classmethod
-    def _get_fields(
-        cls, predicate: Callable[[str], bool], visited: Optional[set[Type]] = None
-    ) -> OrderedDict:
-        """
-        Resolve the `Meta.fields` argument including lookups that match the predicate.
+    def _get_fields(cls, predicate: Callable[[str], bool], visited: set[type] | None = None) -> OrderedDict:
+        """Resolve the `Meta.fields` argument including lookups that match the predicate.
+
         Includes recursion protection for circular dependencies.
         """
         if visited is None:
@@ -701,7 +650,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         if not cls._meta.model:
             return OrderedDict()
 
-        fields: List[Tuple[str, List[str]]] = []
+        fields: list[tuple[str, list[str]]] = []
 
         related_filters_val = getattr(cls, "related_filters", OrderedDict())
         for related_name in related_filters_val:
@@ -730,9 +679,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
                 else:
                     fields.append((k, []))
             else:
-                regular_field = [
-                    lookup_expr for lookup_expr in v if predicate(lookup_expr)
-                ]
+                regular_field = [lookup_expr for lookup_expr in v if predicate(lookup_expr)]
                 if len(regular_field):
                     fields.append((k, regular_field))
         return OrderedDict(fields)

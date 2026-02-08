@@ -1,4 +1,3 @@
-import pprint
 from cookbook.recipes.schema import ObjectFilter
 
 print("--- DIAGNOSTIC START ---")

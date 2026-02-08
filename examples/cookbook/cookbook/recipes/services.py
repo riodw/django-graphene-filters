@@ -1,11 +1,9 @@
-from faker import Faker
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
+from faker import Faker
 
 
 def create_people(count: int):
-    """
-    Creates X number of People objects with associated Email, Phone, and City values.
-    """
+    """Creates X number of People objects with associated Email, Phone, and City values."""
     fake = Faker()
 
     # 1. Get or create ObjectType "People"

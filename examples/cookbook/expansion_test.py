@@ -1,5 +1,6 @@
-import pprint
-from cookbook.recipes.schema import ObjectFilter  # Adjust import based on your app structure
+from cookbook.recipes.schema import (
+    ObjectFilter,
+)  # Adjust import based on your app structure
 
 print("--- DIAGNOSTIC START ---")
 
@@ -7,7 +8,7 @@ print("--- DIAGNOSTIC START ---")
 print(f"Related Filters detected: {list(ObjectFilter.related_filters.keys())}")
 
 # 2. Check the Target FilterSet
-rf = ObjectFilter.related_filters['object_type']
+rf = ObjectFilter.related_filters["object_type"]
 print(f"Target FilterSet: {rf.filterset}")
 print(f"Target Base Filters: {list(rf.filterset.base_filters.keys())}")
 

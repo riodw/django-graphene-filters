@@ -1,5 +1,4 @@
-"""
-`AdvancedDjangoFilterConnectionField` class module.
+"""`AdvancedDjangoFilterConnectionField` class module.
 
 Use the `AdvancedDjangoFilterConnectionField` class from this
 module instead of the `DjangoFilterConnectionField` from graphene-django.
@@ -7,7 +6,8 @@ module instead of the `DjangoFilterConnectionField` from graphene-django.
 
 import warnings
 from collections import OrderedDict
-from typing import Any, Callable, Dict, Iterable, Optional, Type, Union
+from collections.abc import Callable, Iterable
+from typing import Any
 
 import graphene
 from django.core.exceptions import ValidationError
@@ -21,8 +21,8 @@ from graphene_django.filter.utils import get_filtering_args_from_filterset
 
 # Local imports
 from .conf import settings
-from .filters import BaseRelatedFilter
 from .filter_arguments_factory import FilterArgumentsFactory
+from .filters import BaseRelatedFilter
 from .filterset import AdvancedFilterSet
 from .filterset_factories import get_filterset_class
 from .input_data_factories import tree_input_type_to_data
@@ -33,18 +33,16 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
 
     def __init__(
         self,
-        type: Union[Type[DjangoObjectType], Callable[[], Type[DjangoObjectType]], str],
-        fields: Optional[Dict[str, list]] = None,
+        type: type[DjangoObjectType] | Callable[[], type[DjangoObjectType]] | str,
+        fields: dict[str, list] | None = None,
         order_by: Any = None,
-        extra_filter_meta: Optional[Dict[str, Any]] = None,
-        filterset_class: Optional[Type[AdvancedFilterSet]] = None,
-        filter_input_type_prefix: Optional[str] = None,
+        extra_filter_meta: dict[str, Any] | None = None,
+        filterset_class: type[AdvancedFilterSet] | None = None,
+        filter_input_type_prefix: str | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        super().__init__(
-            type, fields, order_by, extra_filter_meta, filterset_class, *args, **kwargs
-        )
+        super().__init__(type, fields, order_by, extra_filter_meta, filterset_class, *args, **kwargs)
 
         # Validate that the provided FilterSet class is an AdvancedFilterSet
         assert self.provided_filterset_class is None or issubclass(
@@ -65,10 +63,7 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
                 "can result in different types with the same name in the schema.",
             )
 
-        if (
-            self._filter_input_type_prefix is None
-            and self.node_type._meta.filterset_class
-        ):
+        if self._filter_input_type_prefix is None and self.node_type._meta.filterset_class:
             warnings.warn(
                 f"The `filterset_class` field of `{self.node_type.__name__}` Meta "
                 "without the `filter_input_type_prefix` argument "
@@ -76,17 +71,13 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             )
 
     @property
-    def provided_filterset_class(self) -> Optional[Type[AdvancedFilterSet]]:
-        """
-        Return the provided AdvancedFilterSet class, if any.
-        """
+    def provided_filterset_class(self) -> type[AdvancedFilterSet] | None:
+        """Return the provided AdvancedFilterSet class, if any."""
         return self._provided_filterset_class or self.node_type._meta.filterset_class
 
     @property
     def filter_input_type_prefix(self) -> str:
-        """
-        Return a prefix for the filter input type name.
-        """
+        """Return a prefix for the filter input type name."""
         if self._filter_input_type_prefix:
             return self._filter_input_type_prefix
 
@@ -98,25 +89,20 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             return node_type_name
 
     @property
-    def filterset_class(self) -> Type[AdvancedFilterSet]:
-        """
-        Return the AdvancedFilterSet class to use for filtering.
-        """
+    def filterset_class(self) -> type[AdvancedFilterSet]:
+        """Return the AdvancedFilterSet class to use for filtering."""
         if not self._filterset_class:
             fields = self._fields or self.node_type._meta.filter_fields
             meta = {"model": self.model, "fields": fields}
             if self._extra_filter_meta:
                 meta.update(self._extra_filter_meta)
 
-            self._filterset_class = get_filterset_class(
-                self.provided_filterset_class, **meta
-            )
+            self._filterset_class = get_filterset_class(self.provided_filterset_class, **meta)
         return self._filterset_class
 
     @property
     def filtering_args(self) -> dict:
-        """
-        Generate and return filtering arguments for GraphQL schema filterset.
+        """Generate and return filtering arguments for GraphQL schema filterset.
 
         This merges:
         1. Standard Graphene arguments (flat, e.g., 'department_Name')
@@ -128,9 +114,7 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             # from the root-level arguments.
             trimmed_class = self._get_trimmed_filterset_class()
 
-            standard_args = get_filtering_args_from_filterset(
-                trimmed_class, self.node_type
-            )
+            standard_args = get_filtering_args_from_filterset(trimmed_class, self.node_type)
 
             # 2. Get Advanced Arguments (The 'filter' tree input)
             # We use the FULL class here so the tree is built correctly
@@ -144,9 +128,8 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
 
         return self._filtering_args
 
-    def _get_trimmed_filterset_class(self) -> Type[AdvancedFilterSet]:
-        """
-        Create a temporary FilterSet subclass that excludes expanded related filters.
+    def _get_trimmed_filterset_class(self) -> type[AdvancedFilterSet]:
+        """Create a temporary FilterSet subclass that excludes expanded related filters.
 
         This prevents arguments like `values_Value_Icontains` from appearing in the
         schema root, ensuring they are only accessible via the nested `filter` argument.
@@ -171,8 +154,7 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             # Keep the filter if it's not an expanded child and NOT a RelatedFilter itself
             # We check both isinstance and class name for robustness
             if not is_expanded_child and not (
-                isinstance(f, BaseRelatedFilter) or
-                f.__class__.__name__.endswith("RelatedFilter")
+                isinstance(f, BaseRelatedFilter) or f.__class__.__name__.endswith("RelatedFilter")
             ):
                 trimmed_filters[name] = f
 
@@ -194,12 +176,11 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         connection: object,
         iterable: Iterable,
         info: graphene.ResolveInfo,
-        args: Dict[str, Any],
-        filtering_args: Dict[str, graphene.InputField],
-        filterset_class: Type[AdvancedFilterSet],
+        args: dict[str, Any],
+        filtering_args: dict[str, graphene.InputField],
+        filterset_class: type[AdvancedFilterSet],
     ) -> models.QuerySet:
-        """
-        Return a filtered QuerySet.
+        """Return a filtered QuerySet.
 
         Handles both the nested 'filter' argument and standard flat arguments.
         """
@@ -219,14 +200,16 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         # We need to extract arguments that are NOT the advanced filter key
         flat_args = {k: v for k, v in args.items() if k != settings.FILTER_KEY}
 
-        # We must map Graphene arguments (e.g. 'department_Name') back to FilterSet keys (e.g. 'department__name')
+        # We must map Graphene arguments (e.g. 'department_Name') back to
+        # FilterSet keys (e.g. 'department__name')
         # We can leverage the filtering_args dictionary to find the mapping if available,
         # or rely on the filterset's declared filters.
         flat_data = cls.map_arguments_to_filters(flat_args, filtering_args)
 
         # 3. Merge Data
         # Flattened args are added to the advanced data.
-        # This allows users to mix `filter: {...}` and `name: "..."` in the same query if they really wanted to.
+        # This allows users to mix `filter: {...}` and `name: "..."` in the
+        # same query if they really wanted to.
         combined_data = {**advanced_data, **flat_data}
 
         # Create filterset with combined data
@@ -244,11 +227,10 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
 
     @staticmethod
     def map_arguments_to_filters(
-        args: Dict[str, Any],
-        filtering_args: Dict[str, graphene.InputField],
-    ) -> Dict[str, Any]:
-        """
-        Map Graphene argument names back to Django FilterSet field names.
+        args: dict[str, Any],
+        filtering_args: dict[str, graphene.InputField],
+    ) -> dict[str, Any]:
+        """Map Graphene argument names back to Django FilterSet field names.
 
         Graphene usually converts `department__name` -> `department_Name`.
         We need to reverse this so the FilterSet recognizes the data.

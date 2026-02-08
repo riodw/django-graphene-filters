@@ -1,6 +1,6 @@
 """Functions for converting tree data into data suitable for the FilterSet."""
 
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any
 
 # Django imports
 from django.contrib.postgres.search import (
@@ -39,18 +39,16 @@ DATA_FACTORIES = {}  # Define this dict based on your actual factories
 
 
 def tree_input_type_to_data(
-    filterset_class: Type[AdvancedFilterSet],
+    filterset_class: type[AdvancedFilterSet],
     tree_input_type: InputObjectTypeContainer,
     prefix: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Convert a tree_input_type to a FilterSet data."""
-    result: Dict[str, Any] = {}
+    result: dict[str, Any] = {}
     for key, value in tree_input_type.items():
         # Handling logical operations on the filter set
         if key in ("and", "or"):
-            result[key] = [
-                tree_input_type_to_data(filterset_class, subtree) for subtree in value
-            ]
+            result[key] = [tree_input_type_to_data(filterset_class, subtree) for subtree in value]
         elif key == "not":
             result[key] = tree_input_type_to_data(filterset_class, value)
         else:
@@ -68,9 +66,7 @@ def tree_input_type_to_data(
     return result
 
 
-def create_data(
-    key: str, value: Any, filterset_class: Type[AdvancedFilterSet]
-) -> Dict[str, Any]:
+def create_data(key: str, value: Any, filterset_class: type[AdvancedFilterSet]) -> dict[str, Any]:
     """Create data from a key and a value based on factory methods."""
     for factory_key, factory in DATA_FACTORIES.items():
         if factory_key in key:
@@ -85,10 +81,9 @@ def create_data(
 def create_search_query_data(
     input_type: SearchQueryFilterInputType,
     key: str,
-    filterset_class: Type[AdvancedFilterSet],
-) -> Dict[str, SearchQueryFilter.Value]:
-    """
-    Create a dictionary suitable for the `SearchQueryFilter` class.
+    filterset_class: type[AdvancedFilterSet],
+) -> dict[str, SearchQueryFilter.Value]:
+    """Create a dictionary suitable for the `SearchQueryFilter` class.
 
     Parameters:
     - input_type (SearchQueryFilterInputType): Input data to create the search query
@@ -111,12 +106,11 @@ def create_search_query_data(
 
 
 def create_search_rank_data(
-    input_type: Union[SearchRankFilterInputType, InputObjectTypeContainer],
+    input_type: SearchRankFilterInputType | InputObjectTypeContainer,
     key: str,
-    filterset_class: Type[AdvancedFilterSet],
-) -> Dict[str, SearchRankFilter.Value]:
-    """
-    Create a dictionary suitable for the `SearchRankFilter` class.
+    filterset_class: type[AdvancedFilterSet],
+) -> dict[str, SearchRankFilter.Value]:
+    """Create a dictionary suitable for the `SearchRankFilter` class.
 
     Parameters:
     - input_type (Union[SearchRankFilterInputType, InputObjectTypeContainer]): Input data for
@@ -164,13 +158,10 @@ def create_search_rank_data(
 
 def create_trigram_data(
     input_type: TrigramFilterInputType, key: str, *args
-) -> Dict[str, TrigramFilter.Value]:
+) -> dict[str, TrigramFilter.Value]:
     """Create a data for the `TrigramFilter` class."""
     trigram_data = {}
-    if input_type.kind == TrigramSearchKind.SIMILARITY:
-        trigram_class = TrigramSimilarity
-    else:
-        trigram_class = TrigramDistance
+    trigram_class = TrigramSimilarity if input_type.kind == TrigramSearchKind.SIMILARITY else TrigramDistance
     for lookup, value in input_type.lookups.items():
         k = (key + LOOKUP_SEP + lookup).replace(
             LOOKUP_SEP + django_settings.DEFAULT_LOOKUP_EXPR,
@@ -187,11 +178,10 @@ def create_trigram_data(
 
 
 def create_search_vector(
-    input_type: Union[SearchVectorInputType, InputObjectTypeContainer],
-    filterset_class: Type[AdvancedFilterSet],
+    input_type: SearchVectorInputType | InputObjectTypeContainer,
+    filterset_class: type[AdvancedFilterSet],
 ) -> SearchVector:
-    """
-    Create an object of the `SearchVector` class based on the provided input_type and filterset_class.
+    """Create an object of the `SearchVector` class based on the provided input_type and filterset_class.
 
     Args:
         input_type (Union[SearchVectorInputType, InputObjectTypeContainer]): The input data
@@ -222,10 +212,9 @@ def create_search_vector(
 
 
 def create_search_query(
-    input_type: Union[SearchQueryInputType, InputObjectTypeContainer],
-) -> Optional[SearchQuery]:
-    """
-    Create an object of the `SearchQuery` class based on the provided input_type.
+    input_type: SearchQueryInputType | InputObjectTypeContainer,
+) -> SearchQuery | None:
+    """Create an object of the `SearchQuery` class based on the provided input_type.
 
     Args:
         input_type (Union[SearchQueryInputType, InputObjectTypeContainer]): The input
@@ -263,41 +252,35 @@ def create_search_query(
             or_search_query = or_search_query | create_search_query(or_input_type)
     not_input_type = input_type.get(settings.NOT_KEY)
     not_search_query = create_search_query(not_input_type) if not_input_type else None
-    valid_queries = (
-        q
-        for q in (and_search_query, or_search_query, not_search_query)
-        if q is not None
-    )
+    valid_queries = (q for q in (and_search_query, or_search_query, not_search_query) if q is not None)
     for valid_query in valid_queries:
         search_query = search_query & valid_query if search_query else valid_query
     return search_query
 
 
-def create_search_config(input_type: SearchConfigInputType) -> Union[str, models.F]:
+def create_search_config(input_type: SearchConfigInputType) -> str | models.F:
     """Create a `SearchVector` or `SearchQuery` object config."""
     return models.F(input_type.value) if input_type.is_field else input_type.value
 
 
-def create_search_rank_weights(input_type: SearchRankWeightsInputType) -> List[float]:
+def create_search_rank_weights(input_type: SearchRankWeightsInputType) -> list[float]:
     """Create a search rank weights list."""
     return [input_type.D, input_type.C, input_type.B, input_type.A]
 
 
 def validate_search_vector_fields(
-    filterset_class: Type[AdvancedFilterSet],
-    fields: List[str],
+    filterset_class: type[AdvancedFilterSet],
+    fields: list[str],
 ) -> None:
     """Validate that fields is included in full text search fields."""
     full_text_search_fields = filterset_class.get_full_text_search_fields()
     for field in fields:
         if field not in full_text_search_fields:
-            raise ValidationError(
-                f"The `{field}` field is not included in full text search fields"
-            )
+            raise ValidationError(f"The `{field}` field is not included in full text search fields")
 
 
 def validate_search_query(
-    input_type: Union[SearchQueryInputType, InputObjectTypeContainer],
+    input_type: SearchQueryInputType | InputObjectTypeContainer,
 ) -> None:
     """Validate that search query contains at least one required field."""
     if all(

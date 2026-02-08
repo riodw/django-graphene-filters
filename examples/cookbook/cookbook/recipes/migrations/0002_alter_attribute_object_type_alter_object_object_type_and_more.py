@@ -7,28 +7,44 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('recipes', '0001_initial'),
+        ("recipes", "0001_initial"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='attribute',
-            name='object_type',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='attributes', to='recipes.objecttype'),
+            model_name="attribute",
+            name="object_type",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="attributes",
+                to="recipes.objecttype",
+            ),
         ),
         migrations.AlterField(
-            model_name='object',
-            name='object_type',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='objects', to='recipes.objecttype'),
+            model_name="object",
+            name="object_type",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="objects",
+                to="recipes.objecttype",
+            ),
         ),
         migrations.AlterField(
-            model_name='value',
-            name='attribute',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='values', to='recipes.attribute'),
+            model_name="value",
+            name="attribute",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="values",
+                to="recipes.attribute",
+            ),
         ),
         migrations.AlterField(
-            model_name='value',
-            name='object',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='values', to='recipes.object'),
+            model_name="value",
+            name="object",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="values",
+                to="recipes.object",
+            ),
         ),
     ]

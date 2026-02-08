@@ -1,8 +1,7 @@
-from django.contrib import admin, messages
-from django.shortcuts import redirect
-
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
 from cookbook.recipes.services import create_people
+from django.contrib import admin, messages
+from django.shortcuts import redirect
 
 
 class ObjectInline(admin.TabularInline):
@@ -71,7 +70,13 @@ class ObjectAdmin(admin.ModelAdmin):
 
 @admin.register(Attribute)
 class AttributeAdmin(admin.ModelAdmin):
-    list_display = ("name", "description", "object_type", "created_date", "updated_date")
+    list_display = (
+        "name",
+        "description",
+        "object_type",
+        "created_date",
+        "updated_date",
+    )
     list_filter = ("object_type", "created_date")
     search_fields = ("name", "description")
     autocomplete_fields = ["object_type"]
@@ -79,7 +84,14 @@ class AttributeAdmin(admin.ModelAdmin):
 
 @admin.register(Value)
 class ValueAdmin(admin.ModelAdmin):
-    list_display = ("value", "description", "attribute", "object", "created_date", "updated_date")
+    list_display = (
+        "value",
+        "description",
+        "attribute",
+        "object",
+        "created_date",
+        "updated_date",
+    )
     list_filter = (
         "attribute__object_type",
         "attribute",

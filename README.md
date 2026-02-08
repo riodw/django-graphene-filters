@@ -11,12 +11,15 @@ This package contains Advanced auto related filters for [graphene-django](https:
 pip install django-graphene-filters
 # poetry
 poetry add django-graphene-filters
+# uv
+uv add django-graphene-filters
 ```
 
 # Build
 
 ```shell
 poetry update
+poetry lock
 poetry build
 ```
 
@@ -56,16 +59,19 @@ pipenv lock
 
 ## Updating:
 
-- poetry upgradeable packages
+- poetry show --outdated
 
 ```shell
+poetry show --outdated
 poetry show -o
 poetry add --dev
-poetry show --outdated
-poetry lock
 poetry env remove 3.11
-poetry run flake8 .
+```
+
+## Formatting and Linting:
+```shell
 poetry run black .
+poetry run ruff check --fix .
 ```
 
 ## Updating Version:

@@ -1,13 +1,12 @@
 """Library settings."""
 
-from functools import lru_cache
-from typing import Any, Dict, Optional, Union
+from functools import cache
+from typing import Any
 
 # Django
 from django.conf import settings as django_settings
 from django.db import connection
 from django.test.signals import setting_changed
-
 
 # Define constants for default and fixed settings keys
 FILTER_KEY = "FILTER_KEY"
@@ -30,8 +29,8 @@ DEFAULT_SETTINGS = {
 
 
 # 5 - Cache the function to avoid repeated database calls
-@lru_cache(maxsize=None)
-def get_fixed_settings() -> Dict[str, bool]:
+@cache
+def get_fixed_settings() -> dict[str, bool]:
     """Return fixed settings related to the database."""
     is_postgresql = connection.vendor == "postgresql"
     has_trigram_extension = check_pg_trigram_extension() if is_postgresql else False
@@ -45,9 +44,7 @@ def get_fixed_settings() -> Dict[str, bool]:
 def check_pg_trigram_extension() -> bool:
     """Check if the PostgreSQL trigram extension is available."""
     with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT COUNT(*) FROM pg_available_extensions WHERE name='pg_trgm'"
-        )
+        cursor.execute("SELECT COUNT(*) FROM pg_available_extensions WHERE name='pg_trgm'")
         return cursor.fetchone()[0] == 1
 
 
@@ -63,7 +60,7 @@ class Settings:
     and configurable settings that can be defined in Django's settings.py.
     """
 
-    def __init__(self, user_settings: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, user_settings: dict[str, Any] | None = None) -> None:
         """Initialize with optional user settings."""
         self._user_settings = user_settings
 
@@ -74,7 +71,7 @@ class Settings:
             self._user_settings = getattr(django_settings, DJANGO_SETTINGS_KEY, {})
         return self._user_settings
 
-    def __getattr__(self, name: str) -> Union[str, bool]:
+    def __getattr__(self, name: str) -> str | bool:
         """Retrieve a setting's value using attribute-style access."""
         # Raise an error if the setting name is invalid
         if name not in FIXED_SETTINGS and name not in DEFAULT_SETTINGS:

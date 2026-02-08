@@ -1,7 +1,7 @@
 """Additional filters for special lookups."""
 
-from typing import Any, Callable, List, NamedTuple, Optional, Type, Union
-from collections import OrderedDict
+from collections.abc import Callable
+from typing import Any, NamedTuple
 
 from django.contrib.postgres.search import (
     SearchQuery,
@@ -22,8 +22,7 @@ from django_filters.rest_framework.filters import ModelChoiceFilter
 
 
 class AnnotatedFilter(Filter):
-    """
-    A filter class that adds QuerySet annotations for advanced filtering.
+    """A filter class that adds QuerySet annotations for advanced filtering.
 
     The filter allows the use of QuerySet annotations to apply filters dynamically
     based on a given value. It works for different types of lookups.
@@ -38,11 +37,11 @@ class AnnotatedFilter(Filter):
 
     def __init__(
         self,
-        field_name: Optional[str] = None,
-        lookup_expr: Optional[str] = None,
+        field_name: str | None = None,
+        lookup_expr: str | None = None,
         *,
-        label: Optional[str] = None,
-        method: Optional[Union[str, Callable]] = None,
+        label: str | None = None,
+        method: str | Callable | None = None,
         distinct: bool = False,
         exclude: bool = False,
         **kwargs,
@@ -64,8 +63,7 @@ class AnnotatedFilter(Filter):
         return f"{self.field_name}_{self.postfix}_{self.creation_counter}_{self.filter_counter}"
 
     def filter(self, qs: models.QuerySet, value: Value) -> models.QuerySet:
-        """
-        Apply the filter to the QuerySet using annotation.
+        """Apply the filter to the QuerySet using annotation.
 
         Generates a QuerySet annotation and filters based on the generated annotation.
         """
@@ -81,8 +79,7 @@ class AnnotatedFilter(Filter):
 
 
 class SearchQueryFilter(AnnotatedFilter):
-    """
-    A specialized `AnnotatedFilter` for performing full-text search.
+    """A specialized `AnnotatedFilter` for performing full-text search.
 
     Full text search filter using the `SearchVector` and `SearchQuery` object.
     """
@@ -95,8 +92,7 @@ class SearchQueryFilter(AnnotatedFilter):
     available_lookups = ("exact",)
 
     def filter(self, qs: models.QuerySet, value: Value) -> models.QuerySet:
-        """
-        Apply full-text search filtering on the QuerySet.
+        """Apply full-text search filtering on the QuerySet.
 
         Uses the `SearchVector` and `SearchQuery` object.
         """
@@ -104,8 +100,7 @@ class SearchQueryFilter(AnnotatedFilter):
 
 
 class SearchRankFilter(AnnotatedFilter):
-    """
-    A specialized `AnnotatedFilter` for ranking search results.
+    """A specialized `AnnotatedFilter` for ranking search results.
 
     Full text search filter using the `SearchRank` object.
     """
@@ -123,23 +118,21 @@ class SearchRankFilter(AnnotatedFilter):
 
 
 class TrigramFilter(AnnotatedFilter):
-    """
-    A specialized `AnnotatedFilter` for trigram-based text search.
+    """A specialized `AnnotatedFilter` for trigram-based text search.
 
     This filter can be either similarity or distance-based.
     It performs full text search using similarity or distance of trigram.
     """
 
     class Value(NamedTuple):
-        annotation_value: Union[TrigramSimilarity, TrigramDistance]
+        annotation_value: TrigramSimilarity | TrigramDistance
         search_value: float
 
     postfix = "trigram"
     available_lookups = ("exact", "gt", "gte", "lt", "lte")
 
     def filter(self, qs: models.QuerySet, value: Value) -> models.QuerySet:
-        """
-        Apply the filter based on trigram similarity or distance on the QuerySet.
+        """Apply the filter based on trigram similarity or distance on the QuerySet.
 
         Uses similarity or distance of trigram to perform the filtering.
         """
@@ -147,17 +140,16 @@ class TrigramFilter(AnnotatedFilter):
 
 
 class BaseRelatedFilter:
-    """
-    Base class for related filters.
+    """Base class for related filters.
 
     A base filter class for related models. This class serves as the foundation for related filters.
     """
 
     def __init__(
         self,
-        filterset: Union[str, Type["BaseFilterSet"]],
+        filterset: str | type["BaseFilterSet"],
         *args,
-        lookups: Optional[List[str]] = None,
+        lookups: list[str] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
@@ -165,13 +157,13 @@ class BaseRelatedFilter:
         self._filterset = filterset  # Changed from self.filterset to self._filterset
         self.lookups = lookups or []
 
-    def bind_filterset(self, filterset: Type["BaseFilterSet"]) -> None:
+    def bind_filterset(self, filterset: type["BaseFilterSet"]) -> None:
         """Bind a filterset class to the current filter instance."""
         if not hasattr(self, "bound_filterset"):
             self.bound_filterset = filterset
 
     @property
-    def filterset(self) -> Type["BaseFilterSet"]:
+    def filterset(self) -> type["BaseFilterSet"]:
         """Lazy-load the filterset class if it is specified as a string."""
         if isinstance(self._filterset, str):
             try:
@@ -186,7 +178,7 @@ class BaseRelatedFilter:
         return self._filterset
 
     @filterset.setter
-    def filterset(self, value: Type["BaseFilterSet"]) -> None:
+    def filterset(self, value: type["BaseFilterSet"]) -> None:
         self._filterset = value
 
     def get_queryset(self, request: HttpRequest) -> QuerySet:
@@ -240,10 +232,10 @@ class RelatedFilter(BaseRelatedFilter, ModelChoiceFilter):
             functions similarly to the `AutoFilter.lookups` argument.
     """
 
+
 class AutoFilter(BaseRelatedFilter, Filter):
-    """
-    A placeholder filter that is expanded into multiple filters based on lookups.
-    """
-    def __init__(self, lookups: Optional[List[str]] = None, **kwargs) -> None:
+    """A placeholder filter that is expanded into multiple filters based on lookups."""
+
+    def __init__(self, lookups: list[str] | None = None, **kwargs) -> None:
         # AutoFilter doesn't need a filterset class initially
         super().__init__(filterset=None, lookups=lookups, **kwargs)

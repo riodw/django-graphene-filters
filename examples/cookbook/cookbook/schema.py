@@ -1,7 +1,6 @@
+import cookbook.recipes.schema
 import graphene
 from graphene_django.debug import DjangoDebug
-
-import cookbook.recipes.schema
 
 
 class Query(
