@@ -29,6 +29,8 @@ jobs:
   test:
     name: Python ${{ matrix.python }} - Django ${{ matrix.django }}
     runs-on: ubuntu-slim
+    permissions:
+      contents: write
     strategy:
       # If one version fails, don't stop the others
       fail-fast: false
@@ -79,3 +81,11 @@ jobs:
           else
             poetry run pytest
           fi
+
+      - name: Update Coverage Badge
+        # Only run on master and only for the latest Python/Django combination
+        if: github.ref == 'refs/heads/master' && matrix.python == '3.14' && matrix.django == 'latest'
+        uses: cicirello/py-coverage-badge@v1
+        with:
+          action: update-readme
+          readme-path: README.md

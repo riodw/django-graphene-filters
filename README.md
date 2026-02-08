@@ -2,8 +2,9 @@
 
 [![build][build-image]][build-url]
 [![pypi][pypi-image]][pypi-url]
-[![Anaconda-Server Badge][conda-image]][conda-url]
-[![coveralls][coveralls-image]][coveralls-url]
+<!-- py-coverage:start -->
+![coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)
+<!-- py-coverage:end -->
 ![PyPI - License](https://img.shields.io/pypi/l/django-graphene-filters)
 
 [build-image]: https://github.com/riodw/django-graphene-filters/actions/workflows/django.yml/badge.svg
