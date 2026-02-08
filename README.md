@@ -1,11 +1,13 @@
 # ![Graphene Logo](http://graphene-python.org/favicon.png) Django Graphene Filters (Beta)
 
-[![build][build-image]][build-url] [![pypi][pypi-image]][pypi-url] <!-- py-coverage:start -->[![coverage](https://img.shields.io/badge/coverage-100%25-brightgreen)][build-url]<!-- py-coverage:end --> [![license][license-image]][license-url]
+[![build][build-image]][build-url] [![pypi][pypi-image]][pypi-url] [![coveralls][coveralls-image]][coveralls-url] [![license][license-image]][license-url]
 
 [build-image]: https://github.com/riodw/django-graphene-filters/actions/workflows/django.yml/badge.svg
 [build-url]: https://github.com/riodw/django-graphene-filters/actions
 [pypi-image]: https://img.shields.io/pypi/v/django-graphene-filters.svg?style=flat
 [pypi-url]: https://pypi.org/project/django-graphene-filters/
+[coveralls-image]: https://coveralls.io/repos/github/riodw/django-graphene-filters/badge.svg?branch=master
+[coveralls-url]: https://coveralls.io/github/riodw/django-graphene-filters?branch=master
 [license-image]: https://img.shields.io/pypi/l/django-graphene-filters
 [license-url]: https://github.com/riodw/django-graphene-filters/blob/master/LICENSE
 
