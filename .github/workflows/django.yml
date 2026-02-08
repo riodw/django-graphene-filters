@@ -78,14 +78,18 @@ jobs:
           if [ "${{ matrix.python }}" == "3.14" ] && [ "${{ matrix.django }}" == "latest" ]; then
             poetry run coverage run -m pytest
             poetry run coverage report --fail-under=100
+            poetry run coverage json
           else
             poetry run pytest
           fi
 
       - name: Update Coverage Badge
-        # Only run on master and only for the latest Python/Django combination
         if: github.ref == 'refs/heads/master' && matrix.python == '3.14' && matrix.django == 'latest'
-        uses: cicirello/python-coverage-badge@v1
+        uses: MishaKav/pytest-coverage-commenter@v1.1.53
         with:
-          action: update-readme
+          pytest-coverage-stats-json: coverage.json
+          badge-title: coverage
+          badge-prefix: coverage-
+          create-new-comment: false
+          update-readme-badge: true
           readme-path: README.md
