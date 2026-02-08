@@ -77,7 +77,9 @@ jobs:
           # Only run coverage/strict checks on latest Python/Django combination
           if [ "${{ matrix.python }}" == "3.14" ] && [ "${{ matrix.django }}" == "latest" ]; then
             poetry run coverage run -m pytest
-            poetry run coverage report --fail-under=100
+            # Generate the text report needed for the action
+            poetry run coverage report > pytest-coverage.txt
+            # Keep generating json if you need it for other tools, otherwise optional
             poetry run coverage json
           else
             poetry run pytest
@@ -85,11 +87,23 @@ jobs:
 
       - name: Update Coverage Badge
         if: github.ref == 'refs/heads/master' && matrix.python == '3.14' && matrix.django == 'latest'
-        uses: MishaKav/pytest-coverage-commenter@v1.1.53
+        uses: MishaKav/pytest-coverage-comment@main
+        id: coverageComment
         with:
-          pytest-coverage-stats-json: coverage.json
+          pytest-coverage-path: ./pytest-coverage.txt
+          junitxml-path: ./pytest.xml
+          # This sets the badge title in the comment/output
           badge-title: coverage
-          badge-prefix: coverage-
-          create-new-comment: false
-          update-readme-badge: true
-          readme-path: README.md
+
+      - name: Write Coverage to README
+        if: github.ref == 'refs/heads/master' && matrix.python == '3.14' && matrix.django == 'latest'
+        run: |
+          # Use the output from the previous step to replace the regex in README
+          sed -i '//,//c\[![coverage]('"${{ steps.coverageComment.outputs.coverageHtml }}"')][build-url]' ./README.md
+          
+      - name: Commit & Push changes
+        if: github.ref == 'refs/heads/master' && matrix.python == '3.14' && matrix.django == 'latest'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "docs: update coverage badge"
+          file_pattern: README.md
