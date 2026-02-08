@@ -8,6 +8,24 @@ on:
   workflow_dispatch:
 
 jobs:
+  lint:
+    name: Lint & Format Check
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install poetry
+          poetry install
+      - name: Black Check
+        run: poetry run black --check .
+      - name: Ruff Check
+        run: poetry run ruff check .
+
   test:
     name: Python ${{ matrix.python }} - Django ${{ matrix.django }}
     runs-on: ubuntu-slim
@@ -57,7 +75,6 @@ jobs:
           # Only run coverage/strict checks on latest Python/Django combination
           if [ "${{ matrix.python }}" == "3.14" ] && [ "${{ matrix.django }}" == "latest" ]; then
             poetry run coverage run -m pytest
-            poetry run ruff check .
             poetry run coverage report --fail-under=100
           else
             poetry run pytest
