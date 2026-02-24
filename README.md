@@ -16,7 +16,7 @@ This package contains Advanced auto related filters for [graphene-django](https:
 
 
 #### This package takes inspiration from:
-- https://pypi.org/project/graphene-django-filter/
+- https://pypi.org/project/graphene-django-filter
 - https://pypi.org/project/djangorestframework-filters
 
 

@@ -60,6 +60,8 @@ GRAPHENE = {
 
 ROOT_URLCONF = "cookbook.urls"
 
+APPEND_SLASH = True
+
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",

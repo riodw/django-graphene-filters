@@ -19,6 +19,7 @@ Cookbook Example (Relay) Django Project
 # Setup
 
 ```bash
+cd examples/cookbook 
 # Create a virtualenv in which we can install the dependencies
 virtualenv env
 source env/bin/activate
