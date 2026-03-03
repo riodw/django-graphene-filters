@@ -14,6 +14,8 @@ from .filters import (
     TrigramFilter,
 )
 from .filterset import AdvancedFilterSet
+from .orders import BaseRelatedOrder, RelatedOrder
+from .orderset import AdvancedOrderSet
 
 __version__ = "0.1.2"
 
@@ -28,4 +30,7 @@ __all__ = [
     "RelatedFilter",
     "AdvancedDjangoFilterConnectionField",
     "AdvancedFilterSet",
+    "BaseRelatedOrder",
+    "RelatedOrder",
+    "AdvancedOrderSet",
 ]

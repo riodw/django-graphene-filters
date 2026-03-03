@@ -26,6 +26,7 @@ from .filters import BaseRelatedFilter
 from .filterset import AdvancedFilterSet
 from .filterset_factories import get_filterset_class
 from .input_data_factories import tree_input_type_to_data
+from .order_arguments_factory import OrderArgumentsFactory
 
 
 class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
@@ -39,9 +40,16 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         extra_filter_meta: dict[str, Any] | None = None,
         filterset_class: type[AdvancedFilterSet] | None = None,
         filter_input_type_prefix: str | None = None,
+        orderset_class: Any | None = None,
+        order_input_type_prefix: str | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        self._provided_orderset_class = orderset_class
+        self._order_input_type_prefix = order_input_type_prefix
+        self._orderset_class = None
+        self._ordering_args = None
+
         super().__init__(type, fields, order_by, extra_filter_meta, filterset_class, *args, **kwargs)
 
         # Validate that the provided FilterSet class is an AdvancedFilterSet
@@ -69,6 +77,49 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
                 "without the `filter_input_type_prefix` argument "
                 "can result in different types with the same name in the schema.",
             )
+
+    @property
+    def provided_orderset_class(self) -> Any | None:
+        """Return the provided AdvancedOrderSet class, if any."""
+        return self._provided_orderset_class or getattr(self.node_type._meta, "orderset_class", None)
+
+    @property
+    def order_input_type_prefix(self) -> str:
+        """Return a prefix for the order input type name."""
+        if self._order_input_type_prefix:
+            return self._order_input_type_prefix
+
+        node_type_name = self.node_type.__name__.replace("Type", "")
+
+        if self.provided_orderset_class:
+            return f"{node_type_name}{self.provided_orderset_class.__name__}"
+        else:
+            return node_type_name
+
+    @property
+    def orderset_class(self) -> Any | None:
+        """Return the AdvancedOrderSet class to use for ordering."""
+        # TODO: Implement optional creation/factory if needed
+        if not self._orderset_class:
+            self._orderset_class = self.provided_orderset_class
+        return self._orderset_class
+
+    @property
+    def ordering_args(self) -> dict:
+        """Generate and return ordering arguments for GraphQL schema orderset."""
+        if not self._ordering_args and self.orderset_class:
+            self._ordering_args = OrderArgumentsFactory(
+                self.orderset_class,
+                self.order_input_type_prefix,
+            ).arguments
+        return self._ordering_args or {}
+
+    @property
+    def args(self) -> dict:
+        """Merge standard Graphene args, filtering args, and ordering args."""
+        args = super().args.copy()
+        args.update(self.ordering_args)
+        return args
 
     @property
     def provided_filterset_class(self) -> type[AdvancedFilterSet] | None:
@@ -221,7 +272,17 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
 
         if filterset.form.is_valid():
             # Apply .distinct() to remove duplicates caused by relationship joins
-            return filterset.qs.distinct()
+            qs = filterset.qs.distinct()
+
+            # Extract orderBy from args and apply orderset_class logic here
+            order_arg = args.get("orderBy", [])
+            orderset_class = getattr(connection._meta.node._meta, "orderset_class", None)
+            
+            if orderset_class and order_arg:
+                orderset = orderset_class(data=order_arg, queryset=qs, request=info.context)
+                qs = orderset.qs
+
+            return qs
 
         raise ValidationError(filterset.form.errors.as_json())
 
