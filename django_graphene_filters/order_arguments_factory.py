@@ -1,16 +1,15 @@
 """Module for converting a AdvancedOrderSet class to ordering arguments."""
 
 import graphene
+from .mixins import InputObjectTypeFactoryMixin
 
 class OrderDirection(graphene.Enum):
     """Enum to represent the sorting direction of a field."""
     ASC = "asc"
     DESC = "desc"
 
-class OrderArgumentsFactory:
+class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
     """Factory for creating ordering arguments in GraphQL from an AdvancedOrderSet class."""
-
-    input_object_types: dict[str, type[graphene.InputObjectType]] = {}
 
     def __init__(
         self,
@@ -39,8 +38,8 @@ class OrderArgumentsFactory:
         prefix = prefix or self.input_type_prefix
         type_name = f"{prefix}OrderInputType"
         
-        if type_name in self.input_object_types:
-            return self.input_object_types[type_name]
+        if type_name in type(self).input_object_types:
+            return type(self).input_object_types[type_name]
             
         fields = {}
         # Fetch the available ordering fields from the Meta class and RelatedOrders
@@ -56,9 +55,4 @@ class OrderArgumentsFactory:
                 # Flat field (no traversal, leaf node)
                 fields[field_name] = graphene.InputField(OrderDirection)
                 
-        self.input_object_types[type_name] = type(
-            type_name,
-            (graphene.InputObjectType,),
-            fields,
-        )
-        return self.input_object_types[type_name]
+        return type(self).create_input_object_type(type_name, fields)

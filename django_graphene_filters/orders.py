@@ -1,9 +1,9 @@
 """Additional ordering classes for traversing relationships."""
 
 from django.db.models import QuerySet
-from django.utils.module_loading import import_string
+from .mixins import LazyRelatedClassMixin
 
-class BaseRelatedOrder:
+class BaseRelatedOrder(LazyRelatedClassMixin):
     """Base class for related ordering. Serves as foundation for relationship sorting."""
 
     def __init__(self, orderset, *args, **kwargs) -> None:
@@ -18,16 +18,7 @@ class BaseRelatedOrder:
     @property
     def orderset(self):
         """Lazy-load the orderset class if it is specified as a string."""
-        if isinstance(self._orderset, str):
-            try:
-                # Assume absolute import path
-                self._orderset = import_string(self._orderset)
-            except ImportError:
-                # Fallback to building import path relative to bind class
-                path = ".".join([self.bound_orderset.__module__, self._orderset])
-                self._orderset = import_string(path)
-        elif callable(self._orderset) and not isinstance(self._orderset, type):
-            self._orderset = self._orderset()
+        self._orderset = self.resolve_lazy_class(self._orderset, getattr(self, "bound_orderset", None))
         return self._orderset
 
     @orderset.setter

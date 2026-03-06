@@ -20,9 +20,10 @@ from .input_types import (
     SearchRankFilterInputType,
     TrigramFilterInputType,
 )
+from .mixins import InputObjectTypeFactoryMixin
 
 
-class FilterArgumentsFactory:
+class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
     """Factory for creating filter arguments in GraphQL from a given `AdvancedFilterSet` class."""
 
     # Special GraphQL filter input types and their associated factories
@@ -160,27 +161,6 @@ class FilterArgumentsFactory:
             self.create_input_object_type(f"{prefix}{pascalcase(root.name)}FilterInputType", fields),
             description=description,
         )
-
-    @classmethod
-    def create_input_object_type(
-        cls,
-        name: str,
-        fields: dict[str, Any],
-    ) -> type[graphene.InputObjectType]:
-        """Create a new GraphQL type inheritor inheriting from `graphene.InputObjectType` class."""
-        # Use a cache to avoid creating the same InputObjectType again
-        if name in cls.input_object_types:
-            return cls.input_object_types[name]
-
-        cls.input_object_types[name] = cast(
-            type[graphene.InputObjectType],
-            type(
-                name,
-                (graphene.InputObjectType,),
-                fields,
-            ),
-        )
-        return cls.input_object_types[name]
 
     def get_field(self, name: str, filter_obj: Filter) -> graphene.InputField:
         """Create and return a Graphene input field from a Django Filter field.

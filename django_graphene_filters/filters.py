@@ -16,9 +16,10 @@ from django.db.models.constants import LOOKUP_SEP
 from django.http import HttpRequest
 from django.utils.module_loading import import_string
 from django_filters import Filter
-from django_filters.constants import EMPTY_VALUES
 from django_filters.filterset import BaseFilterSet
 from django_filters.rest_framework.filters import ModelChoiceFilter
+
+from .mixins import LazyRelatedClassMixin
 
 
 class AnnotatedFilter(Filter):
@@ -139,7 +140,7 @@ class TrigramFilter(AnnotatedFilter):
         return super().filter(qs, value)
 
 
-class BaseRelatedFilter:
+class BaseRelatedFilter(LazyRelatedClassMixin):
     """Base class for related filters.
 
     A base filter class for related models. This class serves as the foundation for related filters.
@@ -165,16 +166,7 @@ class BaseRelatedFilter:
     @property
     def filterset(self) -> type["BaseFilterSet"]:
         """Lazy-load the filterset class if it is specified as a string."""
-        if isinstance(self._filterset, str):
-            try:
-                # Assume absolute import path
-                self._filterset = import_string(self._filterset)
-            except ImportError:
-                # Fallback to building import path relative to bind class
-                path = ".".join([self.bound_filterset.__module__, self._filterset])
-                self._filterset = import_string(path)
-        elif callable(self._filterset) and not isinstance(self._filterset, type):
-            self._filterset = self._filterset()
+        self._filterset = self.resolve_lazy_class(self._filterset, getattr(self, "bound_filterset", None))
         return self._filterset
 
     @filterset.setter
