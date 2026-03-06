@@ -1,7 +1,6 @@
 from graphene import Node
-from graphene_django.types import DjangoObjectType
 
-from django_graphene_filters import AdvancedDjangoFilterConnectionField
+from django_graphene_filters import AdvancedDjangoFilterConnectionField, AdvancedDjangoObjectType
 
 from . import models
 
@@ -27,7 +26,7 @@ Nodes
 """
 
 
-class ObjectTypeNode(DjangoObjectType):
+class ObjectTypeNode(AdvancedDjangoObjectType):
     class Meta:
         model = models.ObjectType
         interfaces = (Node,)
@@ -36,7 +35,7 @@ class ObjectTypeNode(DjangoObjectType):
         orderset_class = ObjectTypeOrder
 
 
-class ObjectNode(DjangoObjectType):
+class ObjectNode(AdvancedDjangoObjectType):
     class Meta:
         model = models.Object
         interfaces = (Node,)
@@ -45,7 +44,7 @@ class ObjectNode(DjangoObjectType):
         orderset_class = ObjectOrder
 
 
-class AttributeNode(DjangoObjectType):
+class AttributeNode(AdvancedDjangoObjectType):
     class Meta:
         model = models.Attribute
         interfaces = (Node,)
@@ -54,7 +53,7 @@ class AttributeNode(DjangoObjectType):
         orderset_class = AttributeOrder
 
 
-class ValueNode(DjangoObjectType):
+class ValueNode(AdvancedDjangoObjectType):
     class Meta:
         model = models.Value
         interfaces = (Node,)
