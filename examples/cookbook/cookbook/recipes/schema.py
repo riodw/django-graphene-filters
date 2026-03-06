@@ -79,7 +79,7 @@ class ObjectFilter(filters.AdvancedFilterSet):
         model = models.Object
         interfaces = (Node,)
         filter_fields = {
-            "name": ["exact", "icontains"],
+            "name": "__all__",
             "description": ["exact", "icontains"],
             # "object_type": ["exact"],
             "object_type__name": ["exact"],
