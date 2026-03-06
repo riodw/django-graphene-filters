@@ -1,5 +1,6 @@
 """`AdvancedOrderSet` class module."""
 
+import enum
 from collections import OrderedDict
 from collections.abc import Mapping
 from graphene.utils.str_converters import to_snake_case
@@ -79,7 +80,8 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
                              flat_orders.extend(cls.get_flat_orders([value], current_prefix))
                         else:
                              # Reached the leaf node -> direction is attached here
-                             direction = "-" if str(value).lower() == "desc" else ""
+                             direction_str = value.value if isinstance(value, enum.Enum) else str(value)
+                             direction = "-" if direction_str.lower() == "desc" else ""
                              field_path = current_prefix.rstrip("__") 
                              flat_orders.append(f"{direction}{field_path}")
         return flat_orders
