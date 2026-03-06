@@ -14,6 +14,12 @@ from .filters import (
     AttributeFilter,
     ValueFilter,
 )
+from .orders import (
+    ObjectTypeOrder,
+    ObjectOrder,
+    AttributeOrder,
+    ValueOrder,
+)
 
 
 """
@@ -27,7 +33,7 @@ class ObjectTypeNode(DjangoObjectType):
         interfaces = (Node,)
         fields = "__all__"
         filterset_class = ObjectTypeFilter
-        # filter_fields = ["name"]
+        orderset_class = ObjectTypeOrder
 
 
 class ObjectNode(DjangoObjectType):
@@ -36,11 +42,7 @@ class ObjectNode(DjangoObjectType):
         interfaces = (Node,)
         fields = "__all__"
         filterset_class = ObjectFilter
-        # filter_fields = {
-        #     "name": ["exact", "icontains", "istartswith"],
-        #     "object_type": ["exact"],
-        #     "object_type__name": ["exact"],
-        # }
+        orderset_class = ObjectOrder
 
 
 class AttributeNode(DjangoObjectType):
@@ -49,7 +51,7 @@ class AttributeNode(DjangoObjectType):
         interfaces = (Node,)
         fields = "__all__"
         filterset_class = AttributeFilter
-        # filter_fields = ["name", "object_type"]
+        orderset_class = AttributeOrder
 
 
 class ValueNode(DjangoObjectType):
@@ -58,11 +60,7 @@ class ValueNode(DjangoObjectType):
         interfaces = (Node,)
         fields = "__all__"
         filterset_class = ValueFilter
-        # filter_fields = {
-        #     "value": ["exact", "icontains"],
-        #     "object": ["exact"],
-        #     "attribute": ["exact"],
-        # }
+        orderset_class = ValueOrder
 
 
 class Query:
