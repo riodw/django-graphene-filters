@@ -60,6 +60,9 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
 
         self._filter_input_type_prefix = filter_input_type_prefix
 
+        # Merge ordering args into the field's arguments
+        self.args.update(self.ordering_args)
+
         # Handle cases where the filter_input_type_prefix is not provided
         self._handle_prefix_warnings()
 
@@ -113,13 +116,6 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
                 self.order_input_type_prefix,
             ).arguments
         return self._ordering_args or {}
-
-    @property
-    def args(self) -> dict:
-        """Merge standard Graphene args, filtering args, and ordering args."""
-        args = super().args.copy()
-        args.update(self.ordering_args)
-        return args
 
     @property
     def provided_filterset_class(self) -> type[AdvancedFilterSet] | None:
