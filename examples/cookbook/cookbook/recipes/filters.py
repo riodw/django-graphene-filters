@@ -1,4 +1,5 @@
 from graphene import Node
+from graphql import GraphQLError
 
 import django_graphene_filters as filters
 
@@ -14,6 +15,12 @@ class ObjectTypeFilter(filters.AdvancedFilterSet):
             # "name": ["exact", "icontains"],
             "description": ["exact", "icontains"],
         }
+
+    def check_name_permission(self, request):
+        """Only staff users may filter by ObjectType.name."""
+        user = getattr(request, "user", None)
+        if not user or not user.is_staff:
+            raise GraphQLError("You must be a staff user to filter by ObjectType name.")
 
 
 class ObjectFilter(filters.AdvancedFilterSet):

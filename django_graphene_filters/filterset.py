@@ -341,6 +341,71 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     # Flag to prevent infinite recursion in get_filters
     _is_expanding_filters = False
 
+    def __init__(self, data=None, queryset=None, *, request=None, **kwargs):
+        super().__init__(data=data, queryset=queryset, request=request, **kwargs)
+        if self.data:
+            requested_fields = set()
+            self._collect_filter_fields(self.data, requested_fields)
+            if requested_fields:
+                self.check_permissions(request, requested_fields)
+
+    def check_permissions(self, request, requested_fields):
+        """Validate whether the user is allowed to filter by these fields.
+
+        It looks for methods on the filterset prefixed by ``check_`` and
+        suffixed with ``_permission``.  E.g. for a filter whose
+        ``field_name`` is ``category__name``, it searches for
+        ``check_category_name_permission(request)``.
+
+        For related paths the check is also delegated to the child
+        filterset so that permission methods defined there are honoured.
+        """
+        for field_path in requested_fields:
+            method_name = f"check_{field_path.replace('__', '_')}_permission"
+
+            if hasattr(self, method_name):
+                getattr(self, method_name)(request)
+
+            # Delegate to the child filterset that owns the remainder of the path
+            for rel_filter in getattr(self.__class__, "related_filters", {}).values():
+                prefix = f"{rel_filter.field_name}__"
+                if field_path.startswith(prefix):
+                    remainder = field_path[len(prefix):]
+                    target_class = rel_filter.filterset
+                    if target_class:
+                        child = object.__new__(target_class)
+                        child.check_permissions(request, {remainder})
+                    break
+
+    def _collect_filter_fields(self, data, fields):
+        """Extract unique ``field_name`` paths from the (possibly nested) filter data."""
+        if not isinstance(data, dict):
+            return
+        for key, value in data.items():
+            if key in ("and", "or"):
+                if isinstance(value, list):
+                    for sub in value:
+                        self._collect_filter_fields(sub, fields)
+            elif key == "not":
+                self._collect_filter_fields(value, fields)
+            else:
+                # Try direct lookup first (covers non-related fields)
+                f = self.filters.get(key)
+                if f:
+                    fields.add(f.field_name)
+                else:
+                    # Handle expanded related-filter keys (e.g. "related__title")
+                    for rel_name, rel_filter in getattr(type(self), "related_filters", {}).items():
+                        prefix = f"{rel_name}__"
+                        if key.startswith(prefix):
+                            remainder = key[len(prefix):]
+                            target_class = rel_filter.filterset
+                            if target_class:
+                                child_f = target_class.base_filters.get(remainder)
+                                if child_f:
+                                    fields.add(f"{rel_filter.field_name}__{child_f.field_name}")
+                            break
+
     @classmethod
     def get_filters(cls) -> OrderedDict:
         """Get all filters for the filterset.
