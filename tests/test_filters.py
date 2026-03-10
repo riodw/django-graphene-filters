@@ -79,8 +79,8 @@ def test_related_filter_lazy_loading():
             model = FilterTestModel
             fields = []
 
-    # Test string path
-    with patch("django_graphene_filters.filters.import_string", return_value=MockFS):
+    # Test string path (import_string lives in mixins, used by LazyRelatedClassMixin)
+    with patch("django_graphene_filters.mixins.import_string", return_value=MockFS):
         f = RelatedFilter(filterset="path.to.MockFS")
         assert f.filterset == MockFS
 
@@ -97,7 +97,7 @@ def test_related_filter_lazy_loading_relative():
     bound_fs.__module__ = "my.module"
     f.bound_filterset = bound_fs
 
-    with patch("django_graphene_filters.filters.import_string") as mock_import:
+    with patch("django_graphene_filters.mixins.import_string") as mock_import:
         # First call fails, triggers relative path
         mock_import.side_effect = [ImportError, MockFS]
         assert f.filterset == MockFS
