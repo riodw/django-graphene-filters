@@ -1,9 +1,8 @@
 import json
 
-from django.contrib.auth import get_user_model
-
 from cookbook.recipes.models import Object
 from cookbook.recipes.services import create_people
+from django.contrib.auth import get_user_model
 from graphene_django.utils import GraphQLTestCase
 
 User = get_user_model()
@@ -23,9 +22,7 @@ class RecipesTests(GraphQLTestCase):
 
     def setUp(self):
         super().setUp()
-        self.staff_user = User.objects.create_user(
-            username="staff", password="testpass", is_staff=True
-        )
+        self.staff_user = User.objects.create_user(username="staff", password="testpass", is_staff=True)
         self.client.login(username="staff", password="testpass")
 
     def test_01_ensure_three_people(self):
