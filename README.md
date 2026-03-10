@@ -11,14 +11,12 @@
 [license-image]: https://img.shields.io/pypi/l/django-graphene-filters
 [license-url]: https://github.com/riodw/django-graphene-filters/blob/master/LICENSE
 
-
 This package contains Advanced auto related filters for [graphene-django](https://github.com/graphql-python/graphene-django).
 
-
 #### This package takes inspiration from:
+
 - https://pypi.org/project/graphene-django-filter
 - https://pypi.org/project/djangorestframework-filters
-
 
 ## Installation
 
@@ -29,6 +27,33 @@ pip install django-graphene-filters
 poetry add django-graphene-filters
 # uv
 uv add django-graphene-filters
+```
+
+## Running
+
+```shell
+poetry run python examples/cookbook/manage.py runserver
+```
+
+## Testing
+
+```shell
+poetry run coverage run -m pytest
+poetry run coverage report --fail-under=100
+poetry run coverage report --show-missing
+
+poetry run coverage run -m pytest tests/test_input_data_factories.py && poetry run coverage report -m django_graphene_filters/input_data_factories.py
+# Run Full Test Pipeline
+https://github.com/riodw/django-graphene-filters/actions/workflows/django.yml
+```
+
+### Formatting and Linting:
+
+```shell
+# pyproject.toml [tool.black]
+poetry run black .
+# pyproject.toml [tool.ruff]
+poetry run ruff check --fix .
 ```
 
 ## Build
@@ -45,36 +70,11 @@ poetry build
 poetry publish --username __token__ --password PASSWORD
 ```
 
-## Testing
-```shell
-poetry run coverage run -m pytest
-poetry run coverage report --fail-under=100
-poetry run coverage report --show-missing
+### Updating Version:
 
-poetry run coverage run -m pytest tests/test_input_data_factories.py && poetry run coverage report -m django_graphene_filters/input_data_factories.py
-# Run Full Test Pipeline
-https://github.com/riodw/django-graphene-filters/actions/workflows/django.yml
-```
-
-## Running 
-```shell
-poetry run python examples/cookbook/manage.py runserver
-```
-
-
-### Local usage
-
-1. go to the project you want to install the package
-2. run `pipenv shell`
-3. run `pip install -e .`
-
-EXAMPLE:
-```
-cd ~/projects/django-graphene-filters
-pipenv install -e .
-cd ~/projects/doormatkey.django/doormatkey
-pipenv lock
-```
+- pyproject.toml:4
+- django_graphene_filters/**init**.py:18
+- tests/test_django_graphene_filters.py:8
 
 ### Updating:
 
@@ -87,18 +87,20 @@ poetry add --dev
 poetry env remove 3.11
 ```
 
-### Formatting and Linting:
-```shell
-# pyproject.toml [tool.black]
-poetry run black .
-# pyproject.toml [tool.ruff]
-poetry run ruff check --fix .
-```
+### Local usage
 
-### Updating Version:
-- pyproject.toml:4
-- django_graphene_filters/__init__.py:18
-- tests/test_django_graphene_filters.py:8
+1. go to the project you want to install the package
+2. run `pipenv shell`
+3. run `pip install -e .`
+
+EXAMPLE:
+
+```
+cd ~/projects/django-graphene-filters
+pipenv install -e .
+cd ~/projects/doormatkey.django/doormatkey
+pipenv lock
+```
 
 ## Notes:
 
