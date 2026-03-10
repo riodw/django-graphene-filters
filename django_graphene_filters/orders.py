@@ -1,7 +1,9 @@
 """Additional ordering classes for traversing relationships."""
 
 from django.db.models import QuerySet
+
 from .mixins import LazyRelatedClassMixin
+
 
 class BaseRelatedOrder(LazyRelatedClassMixin):
     """Base class for related ordering. Serves as foundation for relationship sorting."""

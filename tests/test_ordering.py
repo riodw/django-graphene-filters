@@ -15,7 +15,6 @@ from django_graphene_filters.order_arguments_factory import OrderArgumentsFactor
 from django_graphene_filters.orders import BaseRelatedOrder, RelatedOrder
 from django_graphene_filters.orderset import AdvancedOrderSet
 
-
 # ---------------------------------------------------------------------------
 # Shared test models / classes
 # ---------------------------------------------------------------------------

@@ -3,8 +3,11 @@
 import enum
 from collections import OrderedDict
 from collections.abc import Mapping
+
 from graphene.utils.str_converters import to_snake_case
+
 from . import orders
+
 
 class OrderSetMetaclass(type):
     """Custom metaclass for creating OrderSet classes and attaching RelatedOrders."""
@@ -30,10 +33,10 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
         if self.data and self.qs is not None:
             # Flatten the GraphQL nested InputObjectType array into Django __ paths
             flat_orders = self.get_flat_orders(self.data)
-            
+
             # Hook validation (so you can reject before applying)
             self.check_permissions(self.request, flat_orders)
-            
+
             # Apply to QuerySet
             self.qs = self.qs.order_by(*flat_orders)
 
@@ -49,9 +52,9 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
         """
         for order_path in requested_orderings:
             # Remove leading `-`
-            clean_path = order_path.lstrip('-')
+            clean_path = order_path.lstrip("-")
             method_name = f"check_{clean_path.replace('__', '_')}_permission"
-            
+
             if hasattr(self, method_name):
                 getattr(self, method_name)(request)
 
@@ -76,27 +79,27 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
                 for key, value in order_item.items():
                     snake_key = to_snake_case(key)
                     related_orders = getattr(cls, "related_orders", {})
-                    
+
                     if snake_key in related_orders:
                         # Fetch correct model field_name incase it diverges from GraphQL alias
                         real_field_name = related_orders[snake_key].field_name
                         current_prefix = f"{prefix}{real_field_name}__" if prefix else f"{real_field_name}__"
-                        
+
                         target_orderset = related_orders[snake_key].orderset
                         if isinstance(value, Mapping) and target_orderset:
                              # Recurse with prefix (e.g., 'category__')
                              flat_orders.extend(target_orderset.get_flat_orders([value], current_prefix))
                     else:
                         current_prefix = f"{prefix}{snake_key}__" if prefix else f"{snake_key}__"
-                        
+
                         if isinstance(value, Mapping):
-                             # Native field recurse if any, although leaf nodes generally shouldn't be objects 
+                             # Native field recurse if any, although leaf nodes generally shouldn't be objects
                              flat_orders.extend(cls.get_flat_orders([value], current_prefix))
                         else:
                              # Reached the leaf node -> direction is attached here
                              direction_str = value.value if isinstance(value, enum.Enum) else str(value)
                              direction = "-" if direction_str.lower() == "desc" else ""
-                             field_path = current_prefix.rstrip("__") 
+                             field_path = current_prefix.rstrip("__")
                              flat_orders.append(f"{direction}{field_path}")
         return flat_orders
 
@@ -106,15 +109,15 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
         fields = OrderedDict()
         if hasattr(cls, "Meta") and hasattr(cls.Meta, "fields"):
             meta_fields = cls.Meta.fields
-            # It could be a list ["name", "description"] or a dict mapping lookups 
+            # It could be a list ["name", "description"] or a dict mapping lookups
             if isinstance(meta_fields, dict):
                 for k in meta_fields.keys():
                     fields[k] = None
             else:
                 for k in meta_fields:
                     fields[k] = None
-                    
+
         for k, v in getattr(cls, "related_orders", {}).items():
             fields[k] = v
-            
+
         return fields

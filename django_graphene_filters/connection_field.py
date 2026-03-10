@@ -282,7 +282,7 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             # Extract orderBy from args and apply orderset_class logic here
             order_arg = args.get("orderBy", [])
             orderset_class = getattr(connection._meta.node._meta, "orderset_class", None)
-            
+
             if orderset_class and order_arg:
                 orderset = orderset_class(data=order_arg, queryset=qs, request=info.context)
                 qs = orderset.qs

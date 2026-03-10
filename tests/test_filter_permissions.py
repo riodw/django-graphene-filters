@@ -6,7 +6,6 @@ from django.db import models
 from django_graphene_filters.filters import RelatedFilter
 from django_graphene_filters.filterset import AdvancedFilterSet
 
-
 # ---------------------------------------------------------------------------
 # Shared test models / filtersets
 # ---------------------------------------------------------------------------

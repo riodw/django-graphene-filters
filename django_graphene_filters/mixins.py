@@ -1,8 +1,10 @@
 """Shared mixins for filters and orders."""
 
 from typing import Any, cast
+
 import graphene
 from django.utils.module_loading import import_string
+
 
 class LazyRelatedClassMixin:
     """Mixin providing utilities to lazily resolve class imports by string paths.

@@ -1,7 +1,7 @@
 """Module for converting a AdvancedFilterSet class to filter arguments."""
 
 from collections.abc import Callable, Sequence
-from typing import Any, cast
+from typing import cast
 
 import graphene
 from anytree import Node
