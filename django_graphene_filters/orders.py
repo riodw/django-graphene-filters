@@ -30,7 +30,7 @@ class BaseRelatedOrder(LazyRelatedClassMixin):
 
 class RelatedOrder(BaseRelatedOrder):
     """A specialized ordering class for related models.
-    
+
     This order allows for sorting across relationships by utilizing another OrderSet
     class defined for the related model.
     """

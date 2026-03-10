@@ -370,7 +370,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
             for rel_filter in getattr(self.__class__, "related_filters", {}).values():
                 prefix = f"{rel_filter.field_name}__"
                 if field_path.startswith(prefix):
-                    remainder = field_path[len(prefix):]
+                    remainder = field_path[len(prefix) :]
                     target_class = rel_filter.filterset
                     if target_class:
                         child = object.__new__(target_class)
@@ -398,7 +398,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
                     for rel_name, rel_filter in getattr(type(self), "related_filters", {}).items():
                         prefix = f"{rel_name}__"
                         if key.startswith(prefix):
-                            remainder = key[len(prefix):]
+                            remainder = key[len(prefix) :]
                             target_class = rel_filter.filterset
                             if target_class:
                                 child_f = target_class.base_filters.get(remainder)
@@ -546,7 +546,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         tree_form = cast(
             type[Form | AdvancedFilterSet.TreeFormMixin],
             type(
-                f'{form_class.__name__.replace("Form", "")}TreeForm',
+                f"{form_class.__name__.replace('Form', '')}TreeForm",
                 (form_class, AdvancedFilterSet.TreeFormMixin),
                 {},
             ),

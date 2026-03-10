@@ -33,10 +33,10 @@ def test_annotated_filter_logic():
     value = AnnotatedFilter.Value(annotation_value="annotated_val", search_value="search_val")
 
     # This will trigger QS.annotate and QS.filter
-    with patch.object(models.QuerySet, "annotate", return_value=qs) as mock_annotate, patch.object(
-        models.QuerySet, "filter", return_value=qs
-    ) as mock_filter:
-
+    with (
+        patch.object(models.QuerySet, "annotate", return_value=qs) as mock_annotate,
+        patch.object(models.QuerySet, "filter", return_value=qs) as mock_filter,
+    ):
         f.filter(qs, value)
         assert mock_annotate.called
         assert mock_filter.called

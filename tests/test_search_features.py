@@ -52,8 +52,9 @@ def test_search_rank_with_weights():
             model = Push98Model
             fields = {"name": ["full_text_search"]}
 
-    with patch("django_graphene_filters.input_data_factories.create_search_vector"), patch(
-        "django_graphene_filters.input_data_factories.create_search_query"
+    with (
+        patch("django_graphene_filters.input_data_factories.create_search_vector"),
+        patch("django_graphene_filters.input_data_factories.create_search_query"),
     ):
         result = create_search_rank_data(input_type, "name__search_rank", TestFS)
         assert result is not None
@@ -85,8 +86,9 @@ def test_search_rank_with_normalization():
             model = Push98Model
             fields = {"name": ["full_text_search"]}
 
-    with patch("django_graphene_filters.input_data_factories.create_search_vector"), patch(
-        "django_graphene_filters.input_data_factories.create_search_query"
+    with (
+        patch("django_graphene_filters.input_data_factories.create_search_vector"),
+        patch("django_graphene_filters.input_data_factories.create_search_query"),
     ):
         result = create_search_rank_data(input_type, "name__search_rank", TestFS)
         assert result is not None

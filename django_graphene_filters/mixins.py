@@ -8,13 +8,13 @@ from django.utils.module_loading import import_string
 
 class LazyRelatedClassMixin:
     """Mixin providing utilities to lazily resolve class imports by string paths.
-    
+
     This is extremely useful when defining related classes inline to avoid circular imports.
     """
 
     def resolve_lazy_class(self, class_ref: Any, bound_class: type | None) -> Any:
         """Resolve a class reference.
-        
+
         If it's a string, attempts absolute import and falls back to relative import
         using the bound class's module. If callable (but not a class type), executes it.
         Otherwise, returns it as-is.
@@ -46,7 +46,7 @@ class InputObjectTypeFactoryMixin:
         fields: dict[str, Any],
     ) -> type[graphene.InputObjectType]:
         """Create a new GraphQL type inheritor inheriting from `graphene.InputObjectType`.
-        
+
         Uses a shared cache to avoid duplicating types with the same name.
         """
         if name in cls.input_object_types:

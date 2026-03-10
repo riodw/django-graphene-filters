@@ -10,6 +10,7 @@ from django_graphene_filters.filterset import AdvancedFilterSet
 # Shared test models / filtersets
 # ---------------------------------------------------------------------------
 
+
 class PermModel(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(default="")

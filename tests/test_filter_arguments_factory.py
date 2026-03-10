@@ -54,10 +54,10 @@ def test_get_field_model_formfield():
     f_obj.extra = {}
     f_obj.field = MagicMock()  # original field
 
-    with patch("django_graphene_filters.filter_arguments_factory.get_model_field") as mock_get_field, patch(
-        "django_graphene_filters.filter_arguments_factory.convert_form_field"
-    ) as mock_convert:
-
+    with (
+        patch("django_graphene_filters.filter_arguments_factory.get_model_field") as mock_get_field,
+        patch("django_graphene_filters.filter_arguments_factory.convert_form_field") as mock_convert,
+    ):
         mock_model_field = MagicMock()
         mock_get_field.return_value = mock_model_field
         mock_convert.return_value = MagicMock()

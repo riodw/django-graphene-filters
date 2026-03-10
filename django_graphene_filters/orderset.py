@@ -42,7 +42,7 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
 
     def check_permissions(self, request, requested_orderings):
         """Validate whether the user is allowed to order by these fields.
-        
+
         It looks for strictly matching methods on the orderset prefixed by `check_` and `_permission`.
         E.g. for `category__name`, it searches for `check_category_name_permission(request)`.
         If the user lacks permission, you can raise an error or drop the field.
@@ -62,7 +62,7 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
             for rel_order in getattr(self.__class__, "related_orders", {}).values():
                 prefix = f"{rel_order.field_name}__"
                 if clean_path.startswith(prefix):
-                    remainder = clean_path[len(prefix):]
+                    remainder = clean_path[len(prefix) :]
                     target_class = rel_order.orderset
                     if target_class:
                         child = object.__new__(target_class)
@@ -87,20 +87,20 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
 
                         target_orderset = related_orders[snake_key].orderset
                         if isinstance(value, Mapping) and target_orderset:
-                             # Recurse with prefix (e.g., 'category__')
-                             flat_orders.extend(target_orderset.get_flat_orders([value], current_prefix))
+                            # Recurse with prefix (e.g., 'category__')
+                            flat_orders.extend(target_orderset.get_flat_orders([value], current_prefix))
                     else:
                         current_prefix = f"{prefix}{snake_key}__" if prefix else f"{snake_key}__"
 
                         if isinstance(value, Mapping):
-                             # Native field recurse if any, although leaf nodes generally shouldn't be objects
-                             flat_orders.extend(cls.get_flat_orders([value], current_prefix))
+                            # Native field recurse if any, although leaf nodes generally shouldn't be objects
+                            flat_orders.extend(cls.get_flat_orders([value], current_prefix))
                         else:
-                             # Reached the leaf node -> direction is attached here
-                             direction_str = value.value if isinstance(value, enum.Enum) else str(value)
-                             direction = "-" if direction_str.lower() == "desc" else ""
-                             field_path = current_prefix.rstrip("__")
-                             flat_orders.append(f"{direction}{field_path}")
+                            # Reached the leaf node -> direction is attached here
+                            direction_str = value.value if isinstance(value, enum.Enum) else str(value)
+                            direction = "-" if direction_str.lower() == "desc" else ""
+                            field_path = current_prefix.rstrip("__")
+                            flat_orders.append(f"{direction}{field_path}")
         return flat_orders
 
     @classmethod

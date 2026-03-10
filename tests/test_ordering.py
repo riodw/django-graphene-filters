@@ -19,6 +19,7 @@ from django_graphene_filters.orderset import AdvancedOrderSet
 # Shared test models / classes
 # ---------------------------------------------------------------------------
 
+
 class OrderModel(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(default="")
@@ -481,6 +482,7 @@ class TestConnectionFieldOrdering:
 
     def test_orderset_class_from_init_arg(self):
         """orderset_class passed directly to the field should also work."""
+
         class DirectNode(AdvancedDjangoObjectType):
             class Meta:
                 model = RelatedModel
@@ -488,14 +490,16 @@ class TestConnectionFieldOrdering:
                 fields = "__all__"
 
         field = AdvancedDjangoFilterConnectionField(
-            DirectNode, orderset_class=ChildOrderSet,
+            DirectNode,
+            orderset_class=ChildOrderSet,
         )
         assert field.provided_orderset_class is ChildOrderSet
         assert "orderBy" in field.ordering_args
 
     def test_custom_order_input_type_prefix(self):
         field = AdvancedDjangoFilterConnectionField(
-            IntegrationNode, order_input_type_prefix="Custom",
+            IntegrationNode,
+            order_input_type_prefix="Custom",
         )
         assert field.order_input_type_prefix == "Custom"
 

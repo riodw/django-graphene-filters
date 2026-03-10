@@ -76,10 +76,10 @@ def test_create_search_query_data(filterset_class):
     input_type.vector = MagicMock()
     input_type.query = MagicMock()
 
-    with patch("django_graphene_filters.input_data_factories.create_search_vector") as mock_vector, patch(
-        "django_graphene_filters.input_data_factories.create_search_query"
-    ) as mock_query:
-
+    with (
+        patch("django_graphene_filters.input_data_factories.create_search_vector") as mock_vector,
+        patch("django_graphene_filters.input_data_factories.create_search_query") as mock_query,
+    ):
         mock_vector.return_value = "mock_vector"
         mock_query.return_value = "mock_query"
 
@@ -102,14 +102,12 @@ def test_create_search_rank_data(filterset_class):
         "normalization": 1,
     }.get(k)
 
-    with patch("django_graphene_filters.input_data_factories.create_search_vector") as mock_vector, patch(
-        "django_graphene_filters.input_data_factories.create_search_query"
-    ) as mock_query, patch(
-        "django_graphene_filters.input_data_factories.create_search_rank_weights"
-    ) as mock_weights, patch(
-        "django_graphene_filters.input_data_factories.SearchRank"
-    ) as mock_rank:
-
+    with (
+        patch("django_graphene_filters.input_data_factories.create_search_vector") as mock_vector,
+        patch("django_graphene_filters.input_data_factories.create_search_query") as mock_query,
+        patch("django_graphene_filters.input_data_factories.create_search_rank_weights") as mock_weights,
+        patch("django_graphene_filters.input_data_factories.SearchRank") as mock_rank,
+    ):
         mock_vector.return_value = "v"
         mock_query.return_value = "q"
         mock_weights.return_value = [0.1, 0.2, 0.3, 0.4]
@@ -159,10 +157,11 @@ def test_create_search_vector(filterset_class):
         "weight": MagicMock(value="A"),
     }.get(k)
 
-    with patch("django_graphene_filters.input_data_factories.validate_search_vector_fields"), patch(
-        "django_graphene_filters.input_data_factories.create_search_config"
-    ) as mock_config, patch("django_graphene_filters.input_data_factories.SearchVector") as mock_vector:
-
+    with (
+        patch("django_graphene_filters.input_data_factories.validate_search_vector_fields"),
+        patch("django_graphene_filters.input_data_factories.create_search_config") as mock_config,
+        patch("django_graphene_filters.input_data_factories.SearchVector") as mock_vector,
+    ):
         mock_config.return_value = "english_config"
         mock_vector.return_value = "VECTOR_OBJ"
 
@@ -182,10 +181,11 @@ def test_create_search_query():
     }.get(k, default)
     input_type.value = "search term"
 
-    with patch("django_graphene_filters.input_data_factories.validate_search_query"), patch(
-        "django_graphene_filters.input_data_factories.create_search_config"
-    ) as mock_config, patch("django_graphene_filters.input_data_factories.SearchQuery") as mock_query:
-
+    with (
+        patch("django_graphene_filters.input_data_factories.validate_search_query"),
+        patch("django_graphene_filters.input_data_factories.create_search_config") as mock_config,
+        patch("django_graphene_filters.input_data_factories.SearchQuery") as mock_query,
+    ):
         mock_config.return_value = "english_config"
         mock_query.return_value = MagicMock()
 
@@ -202,10 +202,10 @@ def test_create_search_query_complex():
     input_and = MagicMock()
     input_and.get.side_effect = lambda k, default=None: {"and": [input_term]}.get(k, default)
 
-    with patch("django_graphene_filters.input_data_factories.validate_search_query"), patch(
-        "django_graphene_filters.input_data_factories.SearchQuery"
-    ) as mock_query:
-
+    with (
+        patch("django_graphene_filters.input_data_factories.validate_search_query"),
+        patch("django_graphene_filters.input_data_factories.SearchQuery") as mock_query,
+    ):
         q1 = MagicMock()
         mock_query.return_value = q1
 
@@ -274,10 +274,10 @@ def test_create_search_query_complex_operations():
         if k == local_settings.NOT_KEY:
             return t1
 
-    with patch("django_graphene_filters.input_data_factories.validate_search_query"), patch(
-        "django_graphene_filters.input_data_factories.SearchQuery"
-    ) as mock_query:
-
+    with (
+        patch("django_graphene_filters.input_data_factories.validate_search_query"),
+        patch("django_graphene_filters.input_data_factories.SearchQuery") as mock_query,
+    ):
         q1 = MagicMock()
         q1.__and__.return_value = q1
         q1.__or__.return_value = q1

@@ -7,8 +7,10 @@ from .mixins import InputObjectTypeFactoryMixin
 
 class OrderDirection(graphene.Enum):
     """Enum to represent the sorting direction of a field."""
+
     ASC = "asc"
     DESC = "desc"
+
 
 class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
     """Factory for creating ordering arguments in GraphQL from an AdvancedOrderSet class."""

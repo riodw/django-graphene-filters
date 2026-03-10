@@ -68,14 +68,16 @@ def test_resolve_queryset_invalid_form():
 
     # Mock resolve_queryset to avoid complex super calls
     mock_connection = MagicMock()
-    with patch(
-        "graphene_django.filter.DjangoFilterConnectionField.resolve_queryset",
-        return_value=ConnModel.objects.none(),
-    ) as mock_super_resolve, patch(
-        "django_graphene_filters.connection_field.tree_input_type_to_data",
-        return_value={},
+    with (
+        patch(
+            "graphene_django.filter.DjangoFilterConnectionField.resolve_queryset",
+            return_value=ConnModel.objects.none(),
+        ) as mock_super_resolve,
+        patch(
+            "django_graphene_filters.connection_field.tree_input_type_to_data",
+            return_value={},
+        ),
     ):
-
         # We need mock_super_resolve to NOT call the actual super, but wait,
         # I'm already patching it! So it won't call the actual one.
         # But wait, AdvancedDjangoFilterConnectionField.resolve_queryset calls:
