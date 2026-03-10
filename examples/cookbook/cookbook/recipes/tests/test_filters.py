@@ -2,12 +2,21 @@ import json
 
 from cookbook.recipes.models import Object, ObjectType
 from cookbook.recipes.services import create_people
+from django.contrib.auth import get_user_model
 from graphene_django.utils import GraphQLTestCase
+
+User = get_user_model()
 
 
 class FilterTests(GraphQLTestCase):
+    GRAPHQL_URL = "/graphql/"
+
     def setUp(self):
         super().setUp()
+        # Authenticate as staff to satisfy filter permission checks
+        self.staff_user = User.objects.create_user(username="staff", password="testpass", is_staff=True)
+        self.client.login(username="staff", password="testpass")
+
         # Ensure clean state
         Object.objects.all().delete()
         ObjectType.objects.all().delete()
