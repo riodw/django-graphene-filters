@@ -43,6 +43,9 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
         It looks for strictly matching methods on the orderset prefixed by `check_` and `_permission`.
         E.g. for `category__name`, it searches for `check_category_name_permission(request)`.
         If the user lacks permission, you can raise an error or drop the field.
+
+        For related paths (e.g. `object_type__name`), the check is also delegated
+        to the child orderset so that permission methods defined there are honoured.
         """
         for order_path in requested_orderings:
             # Remove leading `-`
@@ -51,6 +54,17 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
             
             if hasattr(self, method_name):
                 getattr(self, method_name)(request)
+
+            # Delegate to the child orderset that owns the remainder of the path
+            for rel_order in getattr(self.__class__, "related_orders", {}).values():
+                prefix = f"{rel_order.field_name}__"
+                if clean_path.startswith(prefix):
+                    remainder = clean_path[len(prefix):]
+                    target_class = rel_order.orderset
+                    if target_class:
+                        child = object.__new__(target_class)
+                        child.check_permissions(request, [remainder])
+                    break
 
     @classmethod
     def get_flat_orders(cls, order_data, prefix=""):

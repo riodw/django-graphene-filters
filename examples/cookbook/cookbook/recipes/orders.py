@@ -1,3 +1,5 @@
+from graphql import GraphQLError
+
 import django_graphene_filters as orders
 
 from . import models
@@ -7,6 +9,12 @@ class ObjectTypeOrder(orders.AdvancedOrderSet):
     class Meta:
         model = models.ObjectType
         fields = ["name", "description"]
+
+    def check_name_permission(self, request):
+        """Only staff users may order by ObjectType.name."""
+        user = getattr(request, "user", None)
+        if not user or not user.is_staff:
+            raise GraphQLError("You must be a staff user to order by ObjectType name.")
 
 
 class ObjectOrder(orders.AdvancedOrderSet):
