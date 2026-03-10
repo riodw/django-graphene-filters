@@ -17,7 +17,7 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
 
     def __init__(
         self,
-        orderset_class,
+        orderset_class: type,
         input_type_prefix: str,
     ) -> None:
         """Initialize the factory with an orderset class and an input type prefix."""
@@ -36,7 +36,9 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
             ),
         }
 
-    def create_order_input_type(self, orderset_class=None, prefix=None) -> type[graphene.InputObjectType]:
+    def create_order_input_type(
+        self, orderset_class: type | None = None, prefix: str | None = None
+    ) -> type[graphene.InputObjectType]:
         """Dynamically build nested GraphQL InputObjectTypes based on relationships."""
         orderset_class = orderset_class or self.orderset_class
         prefix = prefix or self.input_type_prefix

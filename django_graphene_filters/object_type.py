@@ -12,10 +12,18 @@ class AdvancedDjangoObjectType(DjangoObjectType):
     """A DjangoObjectType subclass that supports `orderset_class` in Meta."""
 
     class Meta:
+        """Mark this type as abstract so it is not registered as a concrete node."""
+
         abstract = True
 
     @classmethod
-    def __init_subclass_with_meta__(cls, orderset_class=None, _meta=None, **options):
+    def __init_subclass_with_meta__(
+        cls,
+        orderset_class: type | None = None,
+        _meta: DjangoObjectTypeOptions | None = None,
+        **options,
+    ) -> None:
+        """Capture ``orderset_class`` from Meta and attach it to ``_meta``."""
         if not _meta:
             _meta = DjangoObjectTypeOptions(cls)
         _meta.orderset_class = orderset_class

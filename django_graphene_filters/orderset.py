@@ -3,6 +3,7 @@
 import enum
 from collections import OrderedDict
 from collections.abc import Mapping
+from typing import Any
 
 from graphene.utils.str_converters import to_snake_case
 
@@ -12,7 +13,8 @@ from . import orders
 class OrderSetMetaclass(type):
     """Custom metaclass for creating OrderSet classes and attaching RelatedOrders."""
 
-    def __new__(cls, name, bases, attrs):
+    def __new__(cls, name: str, bases: tuple, attrs: dict[str, Any]) -> "OrderSetMetaclass":
+        """Create a new OrderSet class and populate ``related_orders``."""
         new_class = super().__new__(cls, name, bases, attrs)
         new_class.related_orders = OrderedDict(
             [(n, f) for n, f in attrs.items() if isinstance(f, orders.BaseRelatedOrder)]
@@ -23,9 +25,14 @@ class OrderSetMetaclass(type):
 
 
 class AdvancedOrderSet(metaclass=OrderSetMetaclass):
-    """Base class for generating and applying advanced relationship sorting, complete with permission checks."""
+    """Base class for advanced relationship sorting with permission checks."""
 
-    def __init__(self, data=None, queryset=None, request=None):
+    def __init__(
+        self,
+        data: list | None = None,
+        queryset: Any = None,
+        request: Any = None,
+    ) -> None:
         self.data = data or []
         self.qs = queryset
         self.request = request
@@ -40,7 +47,7 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
             # Apply to QuerySet
             self.qs = self.qs.order_by(*flat_orders)
 
-    def check_permissions(self, request, requested_orderings):
+    def check_permissions(self, request: Any, requested_orderings: list[str]) -> None:
         """Validate whether the user is allowed to order by these fields.
 
         It looks for strictly matching methods on the orderset prefixed by `check_` and `_permission`.
@@ -70,7 +77,7 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
                     break
 
     @classmethod
-    def get_flat_orders(cls, order_data, prefix=""):
+    def get_flat_orders(cls, order_data: list, prefix: str = "") -> list[str]:
         """Recursively parses nested order dictionaries downwards."""
         flat_orders = []
         for order_item in order_data:
@@ -104,14 +111,14 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
         return flat_orders
 
     @classmethod
-    def get_fields(cls):
+    def get_fields(cls) -> OrderedDict:
         """Fetches flat order fields from the Meta definitions merging with explicit Relationships."""
         fields = OrderedDict()
         if hasattr(cls, "Meta") and hasattr(cls.Meta, "fields"):
             meta_fields = cls.Meta.fields
             # It could be a list ["name", "description"] or a dict mapping lookups
             if isinstance(meta_fields, dict):
-                for k in meta_fields.keys():
+                for k in meta_fields:
                     fields[k] = None
             else:
                 for k in meta_fields:

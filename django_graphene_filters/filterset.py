@@ -341,15 +341,22 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     # Flag to prevent infinite recursion in get_filters
     _is_expanding_filters = False
 
-    def __init__(self, data=None, queryset=None, *, request=None, **kwargs):
+    def __init__(
+        self,
+        data: dict | None = None,
+        queryset: models.QuerySet | None = None,
+        *,
+        request: Any = None,
+        **kwargs,
+    ) -> None:
         super().__init__(data=data, queryset=queryset, request=request, **kwargs)
         if self.data:
-            requested_fields = set()
+            requested_fields: set[str] = set()
             self._collect_filter_fields(self.data, requested_fields)
             if requested_fields:
                 self.check_permissions(request, requested_fields)
 
-    def check_permissions(self, request, requested_fields):
+    def check_permissions(self, request: Any, requested_fields: set[str]) -> None:
         """Validate whether the user is allowed to filter by these fields.
 
         It looks for methods on the filterset prefixed by ``check_`` and
@@ -377,7 +384,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
                         child.check_permissions(request, {remainder})
                     break
 
-    def _collect_filter_fields(self, data, fields):
+    def _collect_filter_fields(self, data: Any, fields: set[str]) -> None:
         """Extract unique ``field_name`` paths from the (possibly nested) filter data."""
         if not isinstance(data, dict):
             return

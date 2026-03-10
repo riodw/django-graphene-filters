@@ -3,10 +3,6 @@ from graphene import Node
 from django_graphene_filters import AdvancedDjangoFilterConnectionField, AdvancedDjangoObjectType
 
 from . import models
-
-"""
-Filters
-"""
 from .filters import (
     AttributeFilter,
     ObjectFilter,

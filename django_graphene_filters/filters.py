@@ -15,6 +15,7 @@ from django.db.models import QuerySet
 from django.db.models.constants import LOOKUP_SEP
 from django.http import HttpRequest
 from django_filters import Filter
+from django_filters.constants import EMPTY_VALUES
 from django_filters.filterset import BaseFilterSet
 from django_filters.rest_framework.filters import ModelChoiceFilter
 
