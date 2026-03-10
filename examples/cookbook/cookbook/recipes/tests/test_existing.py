@@ -1,8 +1,12 @@
 import json
 
+from django.contrib.auth import get_user_model
+
 from cookbook.recipes.models import Object
 from cookbook.recipes.services import create_people
 from graphene_django.utils import GraphQLTestCase
+
+User = get_user_model()
 
 
 def ensure_people_count(x: int):
@@ -15,7 +19,14 @@ def ensure_people_count(x: int):
 
 
 class RecipesTests(GraphQLTestCase):
-    # Enforce order using numeric prefixes
+    GRAPHQL_URL = "/graphql/"
+
+    def setUp(self):
+        super().setUp()
+        self.staff_user = User.objects.create_user(
+            username="staff", password="testpass", is_staff=True
+        )
+        self.client.login(username="staff", password="testpass")
 
     def test_01_ensure_three_people(self):
         ensure_people_count(3)
