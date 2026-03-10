@@ -64,17 +64,17 @@ poetry lock
 poetry build
 ```
 
-## Publish
-
-```shell
-poetry publish --username __token__ --password PASSWORD
-```
-
 ### Updating Version:
 
 - pyproject.toml:4
 - django_graphene_filters/**init**.py:18
 - tests/test_django_graphene_filters.py:8
+
+## Publish
+
+```shell
+poetry publish --username __token__ --password PASSWORD
+```
 
 ### Updating:
 
