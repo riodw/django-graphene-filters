@@ -8,7 +8,7 @@ from . import models
 class ObjectTypeOrder(orders.AdvancedOrderSet):
     class Meta:
         model = models.ObjectType
-        fields = ["name", "description"]
+        fields = "__all__"
 
     def check_name_permission(self, request):
         """Only staff users may order by ObjectType.name."""
@@ -32,7 +32,7 @@ class ObjectOrder(orders.AdvancedOrderSet):
 
     class Meta:
         model = models.Object
-        fields = ["name", "description"]
+        fields = "__all__"
 
 
 class AttributeOrder(orders.AdvancedOrderSet):
@@ -44,7 +44,7 @@ class AttributeOrder(orders.AdvancedOrderSet):
 
     class Meta:
         model = models.Attribute
-        fields = ["name", "description"]
+        fields = "__all__"
 
 
 class ValueOrder(orders.AdvancedOrderSet):
@@ -56,4 +56,4 @@ class ValueOrder(orders.AdvancedOrderSet):
 
     class Meta:
         model = models.Value
-        fields = ["value", "description"]
+        fields = "__all__"

@@ -3,7 +3,16 @@
 from typing import Any, cast
 
 import graphene
+from django.db import models
 from django.utils.module_loading import import_string
+
+
+def get_concrete_field_names(model: type[models.Model]) -> list[str]:
+    """Return the names of all concrete (column-backed) fields on a Django model.
+
+    This excludes reverse relations, many-to-many managers, and other virtual fields.
+    """
+    return [f.name for f in model._meta.get_fields() if hasattr(f, "column")]
 
 
 class LazyRelatedClassMixin:

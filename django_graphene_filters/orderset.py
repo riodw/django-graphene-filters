@@ -8,6 +8,7 @@ from typing import Any
 from graphene.utils.str_converters import to_snake_case
 
 from . import orders
+from .mixins import get_concrete_field_names
 
 
 class OrderSetMetaclass(type):
@@ -116,8 +117,13 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
         fields = OrderedDict()
         if hasattr(cls, "Meta") and hasattr(cls.Meta, "fields"):
             meta_fields = cls.Meta.fields
-            # It could be a list ["name", "description"] or a dict mapping lookups
-            if isinstance(meta_fields, dict):
+            if meta_fields == "__all__":
+                # Resolve all concrete model fields (excluding relations)
+                model = getattr(cls.Meta, "model", None)
+                if model:
+                    for name in get_concrete_field_names(model):
+                        fields[name] = None
+            elif isinstance(meta_fields, dict):
                 for k in meta_fields:
                     fields[k] = None
             else:
