@@ -347,9 +347,11 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         queryset: models.QuerySet | None = None,
         *,
         request: Any = None,
+        search_fields: tuple[str, ...] | list[str] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(data=data, queryset=queryset, request=request, **kwargs)
+        self._search_fields = search_fields
         if self.data:
             requested_fields: set[str] = set()
             self._collect_filter_fields(self.data, requested_fields)
@@ -502,8 +504,10 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         return fields
 
     # Search_fields code
-    def get_search_fields(self) -> list[str] | None:
-        """Retrieve the search_fields attribute from Meta."""
+    def get_search_fields(self) -> tuple[str, ...] | list[str] | None:
+        """Retrieve search_fields from the instance (passed from ObjectType Meta) or FilterSet Meta."""
+        if self._search_fields:
+            return self._search_fields
         return getattr(self.Meta, "search_fields", None)
 
     def construct_search(self, field_name: str) -> str:

@@ -115,10 +115,28 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         return self._ordering_args or {}
 
     @property
+    def search_fields(self) -> tuple[str, ...] | None:
+        """Return search_fields from the node type's Meta, if defined."""
+        return getattr(self.node_type._meta, "search_fields", None)
+
+    @property
+    def search_args(self) -> dict:
+        """Return a ``search`` argument if the node type defines ``search_fields``."""
+        if self.search_fields:
+            return {
+                "search": graphene.Argument(
+                    graphene.String,
+                    description="Search across fields defined in search_fields",
+                ),
+            }
+        return {}
+
+    @property
     def args(self) -> dict:
-        """Merge standard Graphene args, filtering args, and ordering args."""
+        """Merge standard Graphene args, filtering args, ordering args, and search args."""
         args = super().args.copy()
         args.update(self.ordering_args)
+        args.update(self.search_args)
         return args
 
     @args.setter
@@ -252,9 +270,12 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         filter_arg = args.get(settings.FILTER_KEY, {})
         advanced_data = tree_input_type_to_data(filterset_class, filter_arg)
 
+        # 1b. Extract search argument (handled separately by the filterset's qs property)
+        search_query = args.get("search")
+
         # 2. Process Standard Filters (Flat structure)
-        # We need to extract arguments that are NOT the advanced filter key
-        flat_args = {k: v for k, v in args.items() if k != settings.FILTER_KEY}
+        # We need to extract arguments that are NOT the advanced filter key or search
+        flat_args = {k: v for k, v in args.items() if k not in (settings.FILTER_KEY, "search")}
 
         # We must map Graphene arguments (e.g. 'department_Name') back to
         # FilterSet keys (e.g. 'department__name')
@@ -268,11 +289,19 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         # same query if they really wanted to.
         combined_data = {**advanced_data, **flat_data}
 
+        # 4. Inject search into combined data so the filterset's qs property picks it up
+        if search_query:
+            combined_data["search"] = search_query
+
+        # 5. Propagate search_fields from the node type Meta to the filterset
+        search_fields = getattr(connection._meta.node._meta, "search_fields", None)
+
         # Create filterset with combined data
         filterset = filterset_class(
             data=combined_data,
             queryset=qs,
             request=info.context,
+            search_fields=search_fields,
         )
 
         if filterset.form.is_valid():

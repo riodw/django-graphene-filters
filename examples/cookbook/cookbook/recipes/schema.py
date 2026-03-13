@@ -28,6 +28,10 @@ class ObjectTypeNode(AdvancedDjangoObjectType):
         fields = "__all__"
         filterset_class = ObjectTypeFilter
         orderset_class = ObjectTypeOrder
+        search_fields = (
+            "name",
+            "description",
+        )
 
 
 class ObjectNode(AdvancedDjangoObjectType):
@@ -37,6 +41,12 @@ class ObjectNode(AdvancedDjangoObjectType):
         fields = "__all__"
         filterset_class = ObjectFilter
         orderset_class = ObjectOrder
+        search_fields = (
+            "name",
+            "description",
+            "object_type__name",
+            "object_type__description",
+        )
 
 
 class AttributeNode(AdvancedDjangoObjectType):
@@ -46,6 +56,12 @@ class AttributeNode(AdvancedDjangoObjectType):
         fields = "__all__"
         filterset_class = AttributeFilter
         orderset_class = AttributeOrder
+        search_fields = (
+            "name",
+            "description",
+            "object_type__name",
+            "object_type__description",
+        )
 
 
 class ValueNode(AdvancedDjangoObjectType):
@@ -55,6 +71,12 @@ class ValueNode(AdvancedDjangoObjectType):
         fields = "__all__"
         filterset_class = ValueFilter
         orderset_class = ValueOrder
+        search_fields = (
+            "value",
+            "description",
+            "attribute__name",
+            "object__name",
+        )
 
 
 class Query:
