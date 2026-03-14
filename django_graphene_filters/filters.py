@@ -153,6 +153,7 @@ class BaseRelatedFilter(LazyRelatedClassMixin):
         lookups: list[str] | None = None,
         **kwargs,
     ) -> None:
+        self._has_explicit_queryset = kwargs.get("queryset") is not None
         super().__init__(*args, **kwargs)
         # using private member to avoid collision with property method
         self._filterset = filterset  # Changed from self.filterset to self._filterset
@@ -174,8 +175,17 @@ class BaseRelatedFilter(LazyRelatedClassMixin):
         self._filterset = value
 
     def get_queryset(self, request: HttpRequest) -> QuerySet:
-        """Get the QuerySet for this filter."""
+        """Get the QuerySet for this filter.
+
+        If no queryset was explicitly provided, derive one from the target
+        filterset's ``Meta.model`` using ``.objects.all()``.
+        """
         queryset = super().get_queryset(request)
+        if queryset is None:
+            # Auto-derive from the target filterset's model
+            target = self.filterset
+            if target and hasattr(target, "_meta") and hasattr(target._meta, "model") and target._meta.model:
+                return target._meta.model.objects.all()
         assert queryset is not None, (
             f"Expected .get_queryset() on related filter '{self.parent.__class__.__name__}.{self.field_name}'"
             " to return a `QuerySet`, but got `None`."

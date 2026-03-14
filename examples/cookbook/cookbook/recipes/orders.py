@@ -21,13 +21,11 @@ class ObjectOrder(orders.AdvancedOrderSet):
     object_type = orders.RelatedOrder(
         ObjectTypeOrder,
         field_name="object_type",
-        queryset=models.ObjectType.objects.all(),
     )
     # Relationships
     values = orders.RelatedOrder(
         "ValueOrder",
         field_name="values",
-        queryset=models.Value.objects.all(),
     )
 
     class Meta:
@@ -39,7 +37,6 @@ class AttributeOrder(orders.AdvancedOrderSet):
     object_type = orders.RelatedOrder(
         ObjectTypeOrder,
         field_name="object_type",
-        queryset=models.ObjectType.objects.all(),
     )
 
     class Meta:
@@ -51,9 +48,9 @@ class ValueOrder(orders.AdvancedOrderSet):
     attribute = orders.RelatedOrder(
         AttributeOrder,
         field_name="attribute",
-        queryset=models.Attribute.objects.all(),
     )
 
     class Meta:
         model = models.Value
-        fields = "__all__"
+        # Explicitly list only "value" — "description" is intentionally excluded
+        fields = ["value"]

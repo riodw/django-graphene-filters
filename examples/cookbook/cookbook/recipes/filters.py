@@ -27,13 +27,11 @@ class ObjectFilter(filters.AdvancedFilterSet):
     object_type = filters.RelatedFilter(
         ObjectTypeFilter,
         field_name="object_type",
-        queryset=models.ObjectType.objects.all(),
     )
     # Relationships
     values = filters.RelatedFilter(
         "ValueFilter",
         field_name="values",
-        queryset=models.Value.objects.all(),
     )
 
     class Meta:
@@ -51,7 +49,6 @@ class AttributeFilter(filters.AdvancedFilterSet):
     object_type = filters.RelatedFilter(
         ObjectTypeFilter,
         field_name="object_type",
-        queryset=models.ObjectType.objects.all(),
     )
     # Relationships
     # values = filters.RelatedFilter(
@@ -70,10 +67,12 @@ class AttributeFilter(filters.AdvancedFilterSet):
 
 
 class ValueFilter(filters.AdvancedFilterSet):
+    # Explicit queryset: excludes attributes named "Secret", acting as a scope
+    # boundary. Values linked to a "Secret" attribute will never appear in results.
     attribute = filters.RelatedFilter(
         AttributeFilter,
         field_name="attribute",
-        queryset=models.Attribute.objects.all(),
+        queryset=models.Attribute.objects.exclude(name="Secret"),
     )
 
     class Meta:

@@ -295,6 +295,45 @@ class OrderingTests(GraphQLTestCase):
     # Combined filter + search + order
     # ------------------------------------------------------------------
 
+    def test_order_values_by_value_asc(self):
+        """ValueOrder has fields=["value"], so ordering by value should work."""
+        response = self.query("""
+            query {
+              allValues(orderBy: [{ value: ASC }]) {
+                edges {
+                  node {
+                    value
+                  }
+                }
+              }
+            }
+            """)
+        self.assertResponseNoErrors(response)
+        edges = self._get_edges(response)
+        values = [e["node"]["value"] for e in edges]
+        self.assertEqual(values, sorted(values))
+
+    def test_order_values_by_description_is_ignored(self):
+        """ValueOrder has fields=["value"] — description is excluded.
+
+        Attempting to order by description should be silently ignored
+        (the field doesn't exist in the schema), so this query should error.
+        """
+        response = self.query("""
+            query {
+              allValues(orderBy: [{ description: ASC }]) {
+                edges {
+                  node {
+                    value
+                  }
+                }
+              }
+            }
+            """)
+        content = json.loads(response.content)
+        # description is not in the ValueOrder schema, so GraphQL should reject it
+        self.assertIn("errors", content)
+
     def test_filter_search_and_order_combined(self):
         """Filter to Animals, search for 'in' (feline, canine, insect), order by name DESC."""
         response = self.query("""

@@ -540,11 +540,33 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     def qs(self) -> QuerySet:
         """Return the filtered queryset."""
         queryset = super().qs  # Retrieve the base queryset
+
+        # Apply explicit queryset constraints from RelatedFilters.
+        # When a RelatedFilter declares an explicit queryset, it acts as a
+        # scope: only objects whose FK points into that queryset are returned.
+        queryset = self._apply_related_queryset_constraints(queryset)
+
         # Check if 'search' is part of the data and apply it if present
         search_query = self.data.get("search")
         if search_query:
             # Apply search filter if search_query exists
             queryset = self.build_search_conditions(queryset, search_query)
+        return queryset
+
+    def _apply_related_queryset_constraints(self, queryset: QuerySet) -> QuerySet:
+        """Constrain the queryset for any RelatedFilter with an explicit queryset.
+
+        When a RelatedFilter is declared with ``queryset=...``, the main
+        queryset is filtered so that the FK field only references objects
+        within the provided queryset.  This makes the explicit queryset act
+        as a security/scope boundary that cannot be bypassed via nested
+        filters.
+        """
+        for rel_filter in getattr(self.__class__, "related_filters", {}).values():
+            if getattr(rel_filter, "_has_explicit_queryset", False):
+                constraint_qs = rel_filter.queryset
+                if constraint_qs is not None:
+                    queryset = queryset.filter(**{f"{rel_filter.field_name}__in": constraint_qs})
         return queryset
 
     # Filters
