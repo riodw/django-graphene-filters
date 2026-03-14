@@ -246,3 +246,89 @@ def test_filterset_collect_filter_fields_related_child_f_none_skip():
     # rel__missing is not in ChildFS
     fs._collect_filter_fields({"rel__missing": "val"}, fields)
     assert len(fields) == 0
+
+
+# ---------------------------------------------------------------------------
+# Branch coverage: filters.py line 187->189
+# ---------------------------------------------------------------------------
+
+
+def test_related_filter_get_queryset_assert_when_no_model():
+    """Test filters.py line 187->189: assert fires when auto-derive fails (no model)."""
+
+    class EmptyFS(AdvancedFilterSet):
+        class Meta:
+            model = None
+            fields = []
+
+    rf = RelatedFilter(EmptyFS, field_name="rel")
+    rf.model = FinalUniqueCoverageModel  # needed so Filter internals don't break
+
+    # Parent must be set for the assertion message
+    parent_mock = MagicMock()
+    parent_mock.__class__.__name__ = "TestParent"
+    rf.parent = parent_mock
+
+    with pytest.raises(AssertionError, match="Expected .get_queryset"):
+        rf.get_queryset(MagicMock())
+
+
+# ---------------------------------------------------------------------------
+# Branch coverage: filterset.py line 568->565
+# ---------------------------------------------------------------------------
+
+
+def test_apply_related_queryset_constraints_no_explicit_qs():
+    """Test filterset.py line 568->565: loop completes with no explicit querysets."""
+
+    class FSNoExplicit(AdvancedFilterSet):
+        # RelatedFilter WITHOUT explicit queryset — _has_explicit_queryset is False
+        rel = RelatedFilter("tests.test_final_coverage.FSNoExplicit", field_name="name")
+
+        class Meta:
+            model = FinalUniqueCoverageModel
+            fields = ["name"]
+
+    fs = FSNoExplicit(queryset=FinalUniqueCoverageModel.objects.none())
+    qs = FinalUniqueCoverageModel.objects.none()
+    result = fs._apply_related_queryset_constraints(qs)
+    # Should return the queryset unchanged
+    assert result.query.where == qs.query.where
+
+
+def test_apply_related_queryset_constraints_explicit_but_none():
+    """Test filterset.py line 568->565: _has_explicit_queryset=True but queryset is None."""
+
+    class FSExplicitNone(AdvancedFilterSet):
+        rel = RelatedFilter("tests.test_final_coverage.FSExplicitNone", field_name="name")
+
+        class Meta:
+            model = FinalUniqueCoverageModel
+            fields = ["name"]
+
+    # Manually set the flag to True but leave queryset as None
+    FSExplicitNone.related_filters["rel"]._has_explicit_queryset = True
+    FSExplicitNone.related_filters["rel"].queryset = None
+
+    fs = FSExplicitNone(queryset=FinalUniqueCoverageModel.objects.none())
+    qs = FinalUniqueCoverageModel.objects.none()
+    result = fs._apply_related_queryset_constraints(qs)
+    # constraint_qs is None so no filter applied — queryset unchanged
+    assert result.query.where == qs.query.where
+
+
+# ---------------------------------------------------------------------------
+# Branch coverage: orderset.py line 123->133
+# ---------------------------------------------------------------------------
+
+
+def test_orderset_get_fields_all_no_model():
+    """Test orderset.py line 123->133: __all__ with no Meta.model."""
+
+    class OSNoModel(AdvancedOrderSet):
+        class Meta:
+            model = None
+            fields = "__all__"
+
+    fields = OSNoModel.get_fields()
+    assert len(fields) == 0
