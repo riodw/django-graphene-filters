@@ -48,6 +48,14 @@ class ObjectNode(AdvancedDjangoObjectType):
             "object_type__description",
         )
 
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        """Non-admin users cannot see objects whose object_type name is 'Secret'."""
+        user = getattr(info.context, "user", None)
+        if user is None or not user.is_staff:
+            return queryset.exclude(object_type__name="Secret")
+        return queryset
+
 
 class AttributeNode(AdvancedDjangoObjectType):
     class Meta:

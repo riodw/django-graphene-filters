@@ -44,6 +44,15 @@ class ObjectFilter(filters.AdvancedFilterSet):
             "object_type__name": ["exact"],
         }
 
+    # TODO: Implement permission check?
+    # def check_values_permission(self, queryset, request):
+    #     """Only staff users may filter by Object.values."""
+    #     user = getattr(request, "user", None)
+    #     if not user or not user.is_staff:
+    #         return queryset.filter(object_type__name="Secret")
+    #     return queryset
+            
+
 
 class AttributeFilter(filters.AdvancedFilterSet):
     object_type = filters.RelatedFilter(
