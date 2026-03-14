@@ -51,7 +51,6 @@ class ObjectFilter(filters.AdvancedFilterSet):
     #     if not user or not user.is_staff:
     #         return queryset.filter(object_type__name="Secret")
     #     return queryset
-            
 
 
 class AttributeFilter(filters.AdvancedFilterSet):

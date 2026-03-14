@@ -1,6 +1,6 @@
 import json
 
-from cookbook.recipes.models import Attribute, Object, ObjectType, Value
+from cookbook.recipes.models import Object, ObjectType
 from django.contrib.auth import get_user_model
 from graphene_django.utils import GraphQLTestCase
 
@@ -47,12 +47,8 @@ class GetQuerysetPermissionTests(GraphQLTestCase):
         Object.objects.create(name="ClassifiedAgent", object_type=self.secret_type)
 
         # Users
-        self.staff_user = User.objects.create_user(
-            username="admin", password="testpass", is_staff=True
-        )
-        self.regular_user = User.objects.create_user(
-            username="regular", password="testpass", is_staff=False
-        )
+        self.staff_user = User.objects.create_user(username="admin", password="testpass", is_staff=True)
+        self.regular_user = User.objects.create_user(username="regular", password="testpass", is_staff=False)
 
     # -----------------------------------------------------------------
     # Anonymous user
