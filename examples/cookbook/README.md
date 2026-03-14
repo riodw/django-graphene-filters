@@ -10,40 +10,38 @@ Cookbook Example (Relay) Django Project
 # Or for even more detail (including database creation steps):
 ./manage.py test cookbook.recipes -v 3
 
-./env/bin/python manage.py shell -c "exec(open('check_no_flat_filters_test.py').read())"
-./env/bin/python manage.py shell -c "exec(open('diagnostic_trees_test.py').read())"
-./env/bin/python manage.py shell -c "exec(open('expansion_test.py').read())"
-./env/bin/python manage.py shell -c "exec(open('schema_arguments_test.py').read())"
+uv run python manage.py shell -c "exec(open('check_no_flat_filters_test.py').read())"
+uv run python manage.py shell -c "exec(open('diagnostic_trees_test.py').read())"
+uv run python manage.py shell -c "exec(open('expansion_test.py').read())"
+uv run python manage.py shell -c "exec(open('schema_arguments_test.py').read())"
 ```
 
 # Setup
 
 ```bash
-cd examples/cookbook 
-# Create a virtualenv in which we can install the dependencies
-virtualenv env
-source env/bin/activate
+cd examples/cookbook
 
-pip install -r requirements.txt
+# Install dependencies (uses the pyproject.toml in this directory,
+# which references the parent package via editable install)
+uv sync
 ```
 
 Now setup our database:
 
 ```bash
 # Setup the database
-./manage.py makemigrations
-./manage.py migrate
+uv run python manage.py makemigrations
+uv run python manage.py migrate
 
 # Create an admin user (useful for logging into the admin UI
 # at http://127.0.0.1:8000/admin)
-./manage.py createsuperuser
+uv run python manage.py createsuperuser
 ```
 
 Now you should be ready to start the server:
 
 ```bash
-source env/bin/activate
-./manage.py runserver
+uv run python manage.py runserver
 ```
 
 Generate Dummy Data
@@ -53,10 +51,10 @@ You can quickly populate the database with random "People" objects (including Em
 
 ```bash
 # Create 50 people (default)
-./manage.py create_people
+uv run python manage.py create_people
 
 # Create a specific number of people
-./manage.py create_people 100
+uv run python manage.py create_people 100
 ```
 
 You can also populate through `/admin`

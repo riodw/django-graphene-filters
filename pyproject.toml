@@ -1,16 +1,18 @@
-# Metadata about the Python package https://python-poetry.org/docs/pyproject/
-[tool.poetry]
+# https://packaging.python.org/en/latest/guides/writing-pyproject-toml/
+[project]
 name = "django-graphene-filters"
 version = "0.2.0"
 description = "Advanced auto related filters for Graphene Django"
-authors = ["Rio Weber <riodweber@gmail.com>"]
-maintainers = ["Rio Weber <riodweber@gmail.com>"]
-license = "LICENSE"
 readme = "README.md"
-homepage = "https://github.com/riodw/django-graphene-filters"
-repository = "https://github.com/riodw/django-graphene-filters"
+license = { file = "LICENSE" }
+requires-python = ">=3.10,<4.0"
+authors = [
+    { name = "Rio Weber", email = "riodweber@gmail.com" },
+]
+maintainers = [
+    { name = "Rio Weber", email = "riodweber@gmail.com" },
+]
 keywords = ["django", "graphene", "filters", "related"]
-# Classifiers helps to find project by categorizing it
 classifiers = [
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3.10",
@@ -22,43 +24,41 @@ classifiers = [
     "Framework :: Django :: 5.2",
     "Framework :: Django :: 6.0",
 ]
+dependencies = [
+    "Django>=5.2",
+    "graphene>=3,<4",
+    "graphene-django>=3.0.0",
+    "django-filter>=25.2",
+    "psycopg2-binary>=2.9.3",
+    "stringcase>=1.2.0",
+    "anytree>=2.13.0",
+    "wrapt>=2.0.1",
+]
 
-[tool.poetry.urls]
+[project.urls]
 Homepage = "https://pypi.org/project/django-graphene-filters"
-repository = "https://pypi.org/project/django-graphene-filters"
-issues = "https://github.com/riodw/django-graphene-filters/issues"
-# DOWNLOAD = "https://github.com/riodw/django-graphene-filters"
+Repository = "https://github.com/riodw/django-graphene-filters"
+Issues = "https://github.com/riodw/django-graphene-filters/issues"
 
-# Dependencies needed to run the package
-[tool.poetry.dependencies]
-python = ">=3.10,<4.0"
-Django = ">=5.2"
-graphene = ">=3,<4"
-graphene-django = ">=3.0.0"
-django-filter = "^25.2"
-psycopg2-binary = "^2.9.3"
-stringcase = "^1.2.0"
-anytree = "^2.13.0"
-wrapt = "^2.0.1"
-
-
-
-# How the package will be built
-
-[tool.poetry.group.dev.dependencies]
-black = "^26.1.0"
-coverage = "^7.13.2"
-pre-commit = "^4.5.1"
-pytest = "^9.0.2"
-pytest-django = "^4.5.2"
-django-seed = "^0.3.1"
-python-dotenv = "^1.0.0"
-factory-boy = "^3.3.0"
-ruff = "^0.15.0"
+[dependency-groups]
+dev = [
+    "black>=26.1.0",
+    "coverage>=7.13.2",
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "pytest-django>=4.5.2",
+    "django-seed>=0.3.1",
+    "python-dotenv>=1.0.0",
+    "factory-boy>=3.3.0",
+    "ruff>=0.15.0",
+]
 
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["django_graphene_filters"]
 
 [tool.black]
 line-length = 110
@@ -152,9 +152,6 @@ version_variable = [
     "pyproject.toml:version",
 ]
 branch = "master"
-# Whether to upload to PyPI
 upload_to_pypi = true
-# Whether to upload to GitHub Releases
 upload_to_release = true
-# Build command before release
-build_command = "pip install poetry && poetry build"
+build_command = "uv build"

@@ -18,31 +18,42 @@ This package contains Advanced auto related filters for [graphene-django](https:
 - https://pypi.org/project/graphene-django-filter
 - https://pypi.org/project/djangorestframework-filters
 
+
 ## Installation
 
 ```shell
 # pip
 pip install django-graphene-filters
-# poetry
-poetry add django-graphene-filters
 # uv
 uv add django-graphene-filters
+```
+
+## Development Setup
+
+```shell
+# Install uv (if not already installed)
+# https://docs.astral.sh/uv/getting-started/installation/
+
+# Clone and install
+git clone https://github.com/riodw/django-graphene-filters.git
+cd django-graphene-filters
+uv sync
 ```
 
 ## Running
 
 ```shell
-poetry run python examples/cookbook/manage.py runserver
+uv run python examples/cookbook/manage.py runserver
 ```
 
 ## Testing
 
 ```shell
-poetry run coverage run -m pytest
-poetry run coverage report --fail-under=100
-poetry run coverage report --show-missing
+uv run coverage run -m pytest
+uv run coverage report --fail-under=100
+uv run coverage report --show-missing
 
-poetry run coverage run -m pytest tests/test_input_data_factories.py && poetry run coverage report -m django_graphene_filters/input_data_factories.py
+uv run coverage run -m pytest tests/test_input_data_factories.py && uv run coverage report -m django_graphene_filters/input_data_factories.py
 # Run Full Test Pipeline
 https://github.com/riodw/django-graphene-filters/actions/workflows/django.yml
 ```
@@ -51,17 +62,16 @@ https://github.com/riodw/django-graphene-filters/actions/workflows/django.yml
 
 ```shell
 # pyproject.toml [tool.black]
-poetry run black .
+uv run black .
 # pyproject.toml [tool.ruff]
-poetry run ruff check --fix .
+uv run ruff check --fix .
 ```
 
 ## Build
 
 ```shell
-poetry update
-poetry lock
-poetry build
+uv lock
+uv build
 ```
 
 ### Updating Version:
@@ -73,33 +83,38 @@ poetry build
 ## Publish
 
 ```shell
-poetry publish --username __token__ --password PASSWORD
+uv publish --token PASSWORD
 ```
 
 ### Updating:
 
-- poetry show --outdated
-
 ```shell
-poetry show --outdated
-poetry show -o
-poetry add --dev
-poetry env remove 3.11
+# Show outdated packages
+uv pip list --outdated
+
+# Add a dev dependency
+uv add --group dev <package>
+
+# Remove the virtual environment
+rm -rf .venv
 ```
 
 ### Local usage
 
 1. go to the project you want to install the package
-2. run `pipenv shell`
-3. run `pip install -e .`
+2. add `django-graphene-filters` to your `pyproject.toml` dependencies
+3. point it at your local checkout:
 
-EXAMPLE:
-
+```toml
+# In your project's pyproject.toml
+[tool.uv.sources]
+django-graphene-filters = { path = "../django-graphene-filters", editable = true }
 ```
-cd ~/projects/django-graphene-filters
-pipenv install -e .
-cd ~/projects/doormatkey.django/doormatkey
-pipenv lock
+
+Then run:
+
+```shell
+uv sync
 ```
 
 ## Notes:

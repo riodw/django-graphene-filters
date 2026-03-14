@@ -1,0 +1,15 @@
+[project]
+name = "cookbook-example"
+version = "0.1.0"
+description = "Example Django project demonstrating django-graphene-filters"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=6.0.1",
+    "django-filter>=25.2",
+    "graphene-django>=3.2.2",
+    "factory-boy>=3.3.3",
+    "django-graphene-filters",
+]
+
+[tool.uv.sources]
+django-graphene-filters = { path = "../..", editable = true }

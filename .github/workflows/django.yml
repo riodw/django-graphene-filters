@@ -13,18 +13,18 @@ jobs:
     runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.12"
+          enable-cache: true
+      - name: Set up Python 3.12
+        run: uv python install 3.12
       - name: Install dependencies
-        run: |
-          pip install poetry
-          poetry install
+        run: uv sync
       - name: Black Check
-        run: poetry run black --check .
+        run: uv run black --check .
       - name: Ruff Check
-        run: poetry run ruff check .
+        run: uv run ruff check .
 
   test:
     name: Python ${{ matrix.python }} - Django ${{ matrix.django }}
@@ -49,37 +49,38 @@ jobs:
           ]') || fromJSON('[
             {"django": "latest", "python": "3.14"}
           ]') }}
-    
+
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Set up Python ${{ matrix.python }}
-        uses: actions/setup-python@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ matrix.python }}
-          
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
       - name: Install dependencies
-        run: |
-          pip install poetry
-          poetry install
-          
+        run: uv sync --python ${{ matrix.python }}
+
       - name: Install Django ${{ matrix.django }}
         run: |
           if [ "${{ matrix.django }}" == "latest" ]; then
-            poetry run pip install "Django" --upgrade
+            uv pip install "Django" --upgrade
           else
-            poetry run pip install "Django==${{ matrix.django }}"
+            uv pip install "Django==${{ matrix.django }}"
           fi
-          poetry run django-admin --version
-          
+          uv run django-admin --version
+
       - name: Run Tests
         run: |
           if [ "${{ matrix.python }}" == "3.14" ] && [ "${{ matrix.django }}" == "latest" ]; then
             # Run with coverage on the primary matrix node
-            poetry run coverage run -m pytest
+            uv run coverage run -m pytest
           else
             # Standard run for others
-            poetry run pytest
+            uv run pytest
           fi
 
       - name: Upload Coverage to Coveralls
@@ -88,5 +89,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pip install coveralls
-          coveralls
+          uv pip install coveralls
+          uv run coveralls
