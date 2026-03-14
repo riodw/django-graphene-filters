@@ -258,9 +258,7 @@ class ExplicitQuerysetFilterTests(GraphQLTestCase):
         self.secret_attr = Attribute.objects.create(
             name="Secret", description="Hidden attribute", object_type=self.obj_type
         )
-        self.obj = Object.objects.create(
-            name="Gizmo", description="A gizmo", object_type=self.obj_type
-        )
+        self.obj = Object.objects.create(name="Gizmo", description="A gizmo", object_type=self.obj_type)
         # Two values: one public, one linked to the "Secret" attribute
         Value.objects.create(value="Red", attribute=self.public_attr, object=self.obj)
         Value.objects.create(value="classified", attribute=self.secret_attr, object=self.obj)

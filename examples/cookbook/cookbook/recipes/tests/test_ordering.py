@@ -33,15 +33,9 @@ class OrderingTests(GraphQLTestCase):
         )
 
         # Objects with deliberate names for sort testing
-        self.cat = Object.objects.create(
-            name="Cat", description="Small feline", object_type=self.animal_type
-        )
-        self.dog = Object.objects.create(
-            name="Dog", description="Loyal canine", object_type=self.animal_type
-        )
-        self.ant = Object.objects.create(
-            name="Ant", description="Tiny insect", object_type=self.animal_type
-        )
+        self.cat = Object.objects.create(name="Cat", description="Small feline", object_type=self.animal_type)
+        self.dog = Object.objects.create(name="Dog", description="Loyal canine", object_type=self.animal_type)
+        self.ant = Object.objects.create(name="Ant", description="Tiny insect", object_type=self.animal_type)
         self.fern = Object.objects.create(
             name="Fern", description="Ancient plant", object_type=self.plant_type
         )
