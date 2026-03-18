@@ -479,8 +479,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
             #    The expand_related_filter step above accesses .filterset, so
             #    any string that could be resolved has been resolved by now.
             if "related_filters" in cls.__dict__ and all(
-                not isinstance(f._filterset, str)
-                for f in cls.related_filters.values()
+                not isinstance(f._filterset, str) for f in cls.related_filters.values()
             ):
                 cls._expanded_filters = all_filters
             return all_filters
