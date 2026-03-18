@@ -161,6 +161,53 @@ def test_get_filters_cache_hit():
     assert CacheFS.get_filters() == {"foo": "bar"}
 
 
+def test_get_filters_cache_written_after_first_call():
+    """Regression: _expanded_filters must be populated after the first get_filters() call.
+
+    On slow servers (1 vCPU) the first request expanded every RelatedFilter from
+    scratch on every call because the cache was never written.  The fix writes the
+    result to cls._expanded_filters so subsequent calls return immediately.
+
+    This test verifies three invariants:
+    1. The cache is absent before the first explicit call (the metaclass must NOT
+       pre-populate it, since it runs before related_filters is set on the class).
+    2. The cache is populated after the first call completes.
+    3. Subsequent calls hit the cache: the underlying super().get_filters() is called
+       exactly once regardless of how many times get_filters() is invoked.
+    """
+    import django_filters.filterset as base_module
+
+    class OnceFS(AdvancedFilterSet):
+        class Meta:
+            model = FilterSetTestModel
+            fields = ["name"]
+
+    # 1. Cache absent before any explicit call
+    assert getattr(OnceFS, "_expanded_filters", None) is None
+
+    call_count = 0
+    original = base_module.BaseFilterSet.get_filters.__func__
+
+    def counting_get_filters(cls):
+        nonlocal call_count
+        call_count += 1
+        return original(cls)
+
+    with patch.object(base_module.BaseFilterSet, "get_filters", classmethod(counting_get_filters)):
+        first_result = OnceFS.get_filters()
+        second_result = OnceFS.get_filters()
+        third_result = OnceFS.get_filters()
+
+    # 2. Cache written after first call
+    assert OnceFS._expanded_filters is not None
+
+    # 3. super().get_filters() called only once — subsequent calls served from cache
+    assert call_count == 1, f"Expected 1 super call, got {call_count}"
+
+    # All three results are the identical cached object
+    assert first_result is second_result is third_result
+
+
 def test_get_filters_with_auto_filter():
     from django_graphene_filters.filters import AutoFilter
 

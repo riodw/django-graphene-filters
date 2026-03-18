@@ -459,6 +459,30 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
                 ]
             )
 
+            # Cache only when the expansion is definitely complete.
+            #
+            # Two conditions must both hold:
+            #
+            # 1. `"related_filters" in cls.__dict__` (not just inherited).
+            #    Our FilterSetMetaclass sets `related_filters` on the class
+            #    *after* super().__new__() returns — and super().__new__() is
+            #    exactly where get_filters() is first called.  During that
+            #    metaclass call the attribute exists only on parent classes
+            #    (AdvancedFilterSet has an empty OrderedDict), so hasattr()
+            #    would return True even though the real related_filters for
+            #    this class haven't been attached yet.  Using __dict__ ensures
+            #    we only cache once the class's own related_filters is present.
+            #
+            # 2. All lazy-string references were resolved to real classes.
+            #    Forward references like RelatedFilter("ValueFilter", ...) stay
+            #    as strings until the first access of the .filterset property.
+            #    The expand_related_filter step above accesses .filterset, so
+            #    any string that could be resolved has been resolved by now.
+            if "related_filters" in cls.__dict__ and all(
+                not isinstance(f._filterset, str)
+                for f in cls.related_filters.values()
+            ):
+                cls._expanded_filters = all_filters
             return all_filters
         finally:
             # CRITICAL: Reset the flag so future calls (e.g. in other FilterSets)
