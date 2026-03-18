@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [0.3.1] - 2026-03-18
+
+### Fixed
+
+- **`_expanded_filters` cache never written** — `get_filters()` checked the
+  cache on every call but never populated it, so every request re-expanded all
+  `RelatedFilter` trees from scratch. On single-core servers this caused
+  first-request timeouts. The cache is now written after a full, non-recursive
+  expansion completes. A `"related_filters" in cls.__dict__` guard prevents the
+  metaclass from storing a partial result at class-creation time, before
+  `related_filters` is set on the new class.
+
+### Tests
+
+- **`test_get_filters_cache_written_after_first_call`** — regression test that
+  asserts the cache is absent before the first call, populated after it, and
+  that `BaseFilterSet.get_filters()` (the expensive super call) is invoked
+  exactly once regardless of how many times `get_filters()` is called
+  subsequently.
+
 ## [0.3.0] - 2026-03-14
 
 ### Added
@@ -122,6 +142,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline** — GitHub Actions testing across Python 3.10–3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
+[0.3.1]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.3.1
 [0.3.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.3.0
 [0.2.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.2.0
 [0.1.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.1.0
