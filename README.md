@@ -77,7 +77,7 @@ uv build
 ### Updating Version:
 
 - pyproject.toml:4
-- django_graphene_filters/**init**.py:18
+- django_graphene_filters/**init**.py:21
 - tests/test_django_graphene_filters.py:8
 
 ## Publish
