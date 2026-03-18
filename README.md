@@ -1,6 +1,6 @@
 # ![Graphene Logo](http://graphene-python.org/favicon.png) Django Graphene Filters (Beta)
 
-[![build][build-image]][build-url] [![pypi][pypi-image]][pypi-url] [![coveralls][coveralls-image]][coveralls-url] [![license][license-image]][license-url]
+[![build][build-image]][build-url] [![pypi][pypi-image]][pypi-url] [![coveralls][coveralls-image]][coveralls-url] [![license][license-image]][license-url] [![changelog][changelog-image]][changelog-url]
 
 [build-image]: https://github.com/riodw/django-graphene-filters/actions/workflows/django.yml/badge.svg
 [build-url]: https://github.com/riodw/django-graphene-filters/actions
@@ -10,6 +10,8 @@
 [coveralls-url]: https://coveralls.io/github/riodw/django-graphene-filters?branch=master
 [license-image]: https://img.shields.io/pypi/l/django-graphene-filters
 [license-url]: https://github.com/riodw/django-graphene-filters/blob/master/LICENSE
+[changelog-image]: https://img.shields.io/badge/changelog-CHANGELOG.md-blue
+[changelog-url]: https://github.com/riodw/django-graphene-filters/blob/master/CHANGELOG.md
 
 This package contains Advanced auto related filters for [graphene-django](https://github.com/graphql-python/graphene-django).
 
