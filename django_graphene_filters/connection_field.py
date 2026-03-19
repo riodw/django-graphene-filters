@@ -4,7 +4,6 @@ Use the `AdvancedDjangoFilterConnectionField` class from this
 module instead of the `DjangoFilterConnectionField` from graphene-django.
 """
 
-import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from typing import Any
@@ -59,24 +58,6 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         ), "Use the `AdvancedFilterSet` class with `AdvancedDjangoFilterConnectionField`"
 
         self._filter_input_type_prefix = filter_input_type_prefix
-
-        # Handle cases where the filter_input_type_prefix is not provided
-        self._handle_prefix_warnings()
-
-    def _handle_prefix_warnings(self) -> None:
-        """Handle warnings related to missing `filter_input_type_prefix`."""
-        if self._filter_input_type_prefix is None and self._provided_filterset_class:
-            warnings.warn(
-                "The `filterset_class` argument without `filter_input_type_prefix` "
-                "can result in different types with the same name in the schema.",
-            )
-
-        if self._filter_input_type_prefix is None and self.node_type._meta.filterset_class:
-            warnings.warn(
-                f"The `filterset_class` field of `{self.node_type.__name__}` Meta "
-                "without the `filter_input_type_prefix` argument "
-                "can result in different types with the same name in the schema.",
-            )
 
     @property
     def provided_orderset_class(self) -> Any | None:

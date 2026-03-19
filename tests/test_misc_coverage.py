@@ -87,7 +87,7 @@ def test_special_filter_input_type_factory():
         mock_settings.IS_POSTGRESQL = True
         mock_settings.HAS_TRIGRAM_EXTENSION = False
 
-        factory = FilterArgumentsFactory(SpecialFS, "Special")
+        factory = FilterArgumentsFactory(SpecialFS, "MiscSpecial")
 
         # This should trigger the special filter handling
         args = factory.arguments

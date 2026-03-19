@@ -1,3 +1,4 @@
+import warnings
 from unittest.mock import MagicMock, patch
 
 import graphene
@@ -44,6 +45,66 @@ def test_create_input_object_type_cache():
     t1 = FilterArgumentsFactory.create_input_object_type("CachedType", {"f": graphene.String()})
     t2 = FilterArgumentsFactory.create_input_object_type("CachedType", {"f": graphene.String()})
     assert t1 is t2
+
+
+def test_collision_warning_fires_for_different_filterset_same_prefix():
+    """Warn when two filtersets share a type name — the second silently overwrites the first."""
+
+    class AltModel(models.Model):
+        title = models.CharField(max_length=100)
+
+        class Meta:
+            app_label = "recipes"
+
+    class AltFilterSet(AdvancedFilterSet):
+        class Meta:
+            model = AltModel
+            fields = ["title"]
+
+    prefix = "CollisionTestPrefix"
+    type_name = f"{prefix}FilterInputType"
+
+    # Clear any prior state for this prefix
+    FilterArgumentsFactory.input_object_types.pop(type_name, None)
+    FilterArgumentsFactory._type_filterset_registry.pop(type_name, None)
+
+    # First registration — no warning
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        FilterArgumentsFactory(FactFilterSet, prefix).arguments
+    assert not any("overwritten" in str(w.message) for w in caught)
+
+    # Second registration with a *different* filterset — must warn
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        FilterArgumentsFactory(AltFilterSet, prefix).arguments
+    collision_warnings = [w for w in caught if "overwritten" in str(w.message)]
+    assert collision_warnings, "Expected a collision warning when two filtersets share a prefix"
+    assert "CollisionTestPrefix" in str(collision_warnings[0].message)
+
+    # Cleanup
+    FilterArgumentsFactory.input_object_types.pop(type_name, None)
+    FilterArgumentsFactory._type_filterset_registry.pop(type_name, None)
+
+
+def test_no_collision_warning_for_same_filterset_same_prefix():
+    """No warning when the same filterset is registered twice under the same prefix (cache hit path)."""
+    prefix = "NoDupWarnPrefix"
+    type_name = f"{prefix}FilterInputType"
+
+    FilterArgumentsFactory.input_object_types.pop(type_name, None)
+    FilterArgumentsFactory._type_filterset_registry.pop(type_name, None)
+
+    FilterArgumentsFactory(FactFilterSet, prefix).arguments  # prime the cache
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        FilterArgumentsFactory(FactFilterSet, prefix).arguments  # same filterset, same prefix
+    collision_warnings = [w for w in caught if "overwritten" in str(w.message)]
+    assert not collision_warnings
+
+    FilterArgumentsFactory.input_object_types.pop(type_name, None)
+    FilterArgumentsFactory._type_filterset_registry.pop(type_name, None)
 
 
 def test_get_field_model_formfield():

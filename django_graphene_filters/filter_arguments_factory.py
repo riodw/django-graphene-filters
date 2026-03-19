@@ -1,5 +1,6 @@
 """Module for converting a AdvancedFilterSet class to filter arguments."""
 
+import warnings
 from collections.abc import Callable, Sequence
 from typing import cast
 
@@ -44,6 +45,9 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
 
     # Cache for storing input object types
     input_object_types: dict[str, type[graphene.InputObjectType]] = {}
+
+    # Tracks which filterset class built each cached type name; used to detect collisions
+    _type_filterset_registry: dict[str, type] = {}
 
     def __init__(
         self,
@@ -118,6 +122,20 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
             ),
         }
 
+        # Detect collisions: same type name registered for a different filterset class.
+        # This causes silent incorrect behaviour — the second filterset silently replaces
+        # the first in the schema — so we warn loudly instead of failing silently.
+        prior = self._type_filterset_registry.get(self.filter_input_type_name)
+        if prior is not None and prior is not self.filterset_class:
+            warnings.warn(
+                f"InputObjectType '{self.filter_input_type_name}' was previously built for "
+                f"'{prior.__name__}' but is now being overwritten for "
+                f"'{self.filterset_class.__name__}'. "
+                "Queries using the first field will silently use the wrong filter schema. "
+                "Set unique `filter_input_type_prefix` values on each AdvancedDjangoFilterConnectionField to fix this.",
+                stacklevel=4,
+            )
+
         # Combine all fields and create the InputObjectType
         self.input_object_types[self.filter_input_type_name] = cast(
             type[graphene.InputObjectType],
@@ -127,6 +145,7 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
                 {**input_fields, **logic_fields},
             ),
         )
+        self._type_filterset_registry[self.filter_input_type_name] = self.filterset_class
         return self.input_object_types[self.filter_input_type_name]
 
     def create_filter_input_subfield(

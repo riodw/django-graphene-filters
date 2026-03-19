@@ -30,9 +30,11 @@ class ConnNode(DjangoObjectType):
         filterset_class = ConnFilterSet
 
 
-def test_connection_field_prefix_warning():
-    with pytest.warns(UserWarning, match="without `filter_input_type_prefix`"):
-        AdvancedDjangoFilterConnectionField(ConnNode, filterset_class=ConnFilterSet)
+def test_connection_field_auto_derives_prefix_without_warning(recwarn):
+    field = AdvancedDjangoFilterConnectionField(ConnNode, filterset_class=ConnFilterSet)
+    prefix_warnings = [w for w in recwarn.list if "filter_input_type_prefix" in str(w.message)]
+    assert not prefix_warnings, "No prefix warning should be raised when prefix is auto-derived"
+    assert field.filter_input_type_prefix  # auto-derived, non-empty
 
 
 def test_connection_field_custom_prefix():
