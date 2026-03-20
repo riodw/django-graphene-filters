@@ -48,6 +48,20 @@ uv sync
 uv run python examples/cookbook/manage.py runserver
 ```
 
+### Seeding the example database
+
+The cookbook example dynamically discovers **all** Faker providers at runtime and seeds
+the database accordingly. The command is idempotent — it ensures at least N objects exist
+per provider and only creates the shortfall.
+
+```shell
+# Ensure 5 objects per provider (default)
+uv run python examples/cookbook/manage.py create_people
+
+# Ensure 50 objects per provider
+uv run python examples/cookbook/manage.py create_people 50
+```
+
 ## Testing
 
 ```shell

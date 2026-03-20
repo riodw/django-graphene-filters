@@ -1,27 +1,31 @@
-from cookbook.recipes.services import create_people
 from django.core.management.base import BaseCommand
+
+from cookbook.recipes.services import create_data
 
 
 class Command(BaseCommand):
-    help = "Bulk creates random People objects with associated values"
+    help = "Ensures at least N objects exist per Faker provider (only creates the shortfall)"
 
     def add_arguments(self, parser):
         parser.add_argument(
             "count",
             nargs="?",
             type=int,
-            default=50,
-            help="Number of people to create (default is 50)",
+            default=5,
+            help="Desired number of objects per provider (default is 5)",
         )
 
     def handle(self, *args, **options):
         count = options["count"]
-        self.stdout.write(self.style.NOTICE(f"Creating {count} people..."))
+        self.stdout.write(self.style.NOTICE(f"Ensuring {count} objects per Faker provider..."))
 
-        created_count = create_people(count)
+        result = create_data(count)
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Successfully created {created_count} people and {created_count * 3} associated values."
+                f"Done! Created {result['object_types']} object types, "
+                f"{result['attributes']} attributes, "
+                f"{result['objects']} objects, "
+                f"{result['values']} values."
             )
         )

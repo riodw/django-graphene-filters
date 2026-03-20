@@ -1,11 +1,38 @@
 import json
 
-from cookbook.recipes.models import Object
-from cookbook.recipes.services import create_people
+from cookbook.recipes.models import Attribute, Object, ObjectType, Value
 from django.contrib.auth import get_user_model
 from graphene_django.utils import GraphQLTestCase
 
 User = get_user_model()
+
+
+def _create_people(count: int) -> int:
+    """Create test People objects with Email, Phone, and City values."""
+    from faker import Faker
+
+    fake = Faker()
+
+    people_type, _ = ObjectType.objects.get_or_create(
+        name="People",
+        defaults={"description": "Test people"},
+    )
+    email_attr, _ = Attribute.objects.get_or_create(name="Email", object_type=people_type)
+    phone_attr, _ = Attribute.objects.get_or_create(name="Phone", object_type=people_type)
+    city_attr, _ = Attribute.objects.get_or_create(name="City", object_type=people_type)
+
+    created = 0
+    for _ in range(count):
+        person = Object.objects.create(
+            name=fake.first_name(),
+            description=fake.last_name(),
+            object_type=people_type,
+        )
+        Value.objects.create(value=fake.email(), attribute=email_attr, object=person)
+        Value.objects.create(value=fake.phone_number(), attribute=phone_attr, object=person)
+        Value.objects.create(value=fake.city(), attribute=city_attr, object=person)
+        created += 1
+    return created
 
 
 def ensure_people_count(x: int):
@@ -14,7 +41,7 @@ def ensure_people_count(x: int):
     """
     current_count = Object.objects.filter(object_type__name="People").count()
     if current_count < x:
-        create_people(x - current_count)
+        _create_people(x - current_count)
 
 
 class RecipesTests(GraphQLTestCase):

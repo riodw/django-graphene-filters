@@ -47,14 +47,18 @@ uv run python manage.py runserver
 Generate Dummy Data
 -------------------
 
-You can quickly populate the database with random "People" objects (including Email, Phone, and City attributes) using the custom management command:
+The `create_people` management command dynamically discovers **all** Faker providers at runtime
+and seeds the database with one `ObjectType` per provider, one `Attribute` per generator method,
+and N `Object` instances (each with a `Value` for every attribute).
+
+The command is idempotent — it ensures at least N objects exist per provider and only creates the shortfall.
 
 ```bash
-# Create 50 people (default)
+# Ensure 5 objects per provider (default)
 uv run python manage.py create_people
 
-# Create a specific number of people
-uv run python manage.py create_people 100
+# Ensure a specific number per provider
+uv run python manage.py create_people 50
 ```
 
 You can also populate through `/admin`

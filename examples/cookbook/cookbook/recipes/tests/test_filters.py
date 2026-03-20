@@ -1,7 +1,7 @@
 import json
 
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
-from cookbook.recipes.services import create_people
+from cookbook.recipes.tests.test_existing import _create_people
 from django.contrib.auth import get_user_model
 from graphene_django.utils import GraphQLTestCase
 
@@ -22,7 +22,7 @@ class FilterTests(GraphQLTestCase):
         ObjectType.objects.all().delete()
 
         # Create test data using the service to ensure consistent structure
-        create_people(3)
+        _create_people(3)
         self.person_type = ObjectType.objects.get(name="People")
 
     def test_filter_by_object_type(self):

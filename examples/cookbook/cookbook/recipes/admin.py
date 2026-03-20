@@ -1,5 +1,5 @@
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
-from cookbook.recipes.services import create_people
+from cookbook.recipes.services import create_data
 from django.contrib import admin, messages
 from django.shortcuts import redirect
 
@@ -49,10 +49,13 @@ class ObjectAdmin(admin.ModelAdmin):
             try:
                 count = int(create_count)
                 if count > 0:
-                    created_count = create_people(count)
+                    result = create_data(count)
                     self.message_user(
                         request,
-                        f"Successfully created {created_count} people and {created_count * 3} associated values.",
+                        f"Created {result['object_types']} object types, "
+                        f"{result['attributes']} attributes, "
+                        f"{result['objects']} objects, "
+                        f"{result['values']} values.",
                         messages.SUCCESS,
                     )
                 # Redirect back to the same page without the create_people query param
