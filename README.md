@@ -56,10 +56,10 @@ per provider and only creates the shortfall.
 
 ```shell
 # Ensure 5 objects per provider (default)
-uv run python examples/cookbook/manage.py create_people
+uv run python examples/cookbook/manage.py seed_data
 
 # Ensure 50 objects per provider
-uv run python examples/cookbook/manage.py create_people 50
+uv run python examples/cookbook/manage.py seed_data 50
 ```
 
 ## Testing

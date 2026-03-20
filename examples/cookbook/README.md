@@ -20,6 +20,7 @@ uv run python manage.py shell -c "exec(open('schema_arguments_test.py').read())"
 
 ```bash
 cd examples/cookbook
+source .venv/bin/activate
 
 # Install dependencies (uses the pyproject.toml in this directory,
 # which references the parent package via editable install)
@@ -47,7 +48,7 @@ uv run python manage.py runserver
 Generate Dummy Data
 -------------------
 
-The `create_people` management command dynamically discovers **all** Faker providers at runtime
+The `seed_data` management command dynamically discovers **all** Faker providers at runtime
 and seeds the database with one `ObjectType` per provider, one `Attribute` per generator method,
 and N `Object` instances (each with a `Value` for every attribute).
 
@@ -55,14 +56,14 @@ The command is idempotent — it ensures at least N objects exist per provider a
 
 ```bash
 # Ensure 5 objects per provider (default)
-uv run python manage.py create_people
+uv run python manage.py seed_data
 
 # Ensure a specific number per provider
-uv run python manage.py create_people 50
+uv run python manage.py seed_data 50
 ```
 
 You can also populate through `/admin`
-- http://127.0.0.1:8000/admin/recipes/object/?create_people=50
+- http://127.0.0.1:8000/admin/recipes/object/?seed_data=50
 
 Now head on over to
 [http://127.0.0.1:8000/graphql](http://127.0.0.1:8000/graphql)

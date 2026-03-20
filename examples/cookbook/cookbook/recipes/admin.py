@@ -44,7 +44,7 @@ class ObjectAdmin(admin.ModelAdmin):
     autocomplete_fields = ["object_type"]
 
     def changelist_view(self, request, extra_context=None):
-        create_count = request.GET.get("create_people")
+        create_count = request.GET.get("seed_data")
         if create_count:
             try:
                 count = int(create_count)
@@ -58,14 +58,14 @@ class ObjectAdmin(admin.ModelAdmin):
                         f"{result['values']} values.",
                         messages.SUCCESS,
                     )
-                # Redirect back to the same page without the create_people query param
+                # Redirect back to the same page without the seed_data query param
                 new_get = request.GET.copy()
-                new_get.pop("create_people")
+                new_get.pop("seed_data")
                 return redirect(f"{request.path}?{new_get.urlencode()}")
             except (ValueError, TypeError):
                 self.message_user(
                     request,
-                    "Invalid value for create_people. Must be an integer.",
+                    "Invalid value for seed_data. Must be an integer.",
                     messages.ERROR,
                 )
         return super().changelist_view(request, extra_context=extra_context)
