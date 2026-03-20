@@ -7,6 +7,7 @@ class ObjectType(models.Model):
         blank=True,
         default="",
     )
+    is_private = models.BooleanField(default=False)
     # history
     created_date = models.DateTimeField(
         auto_now_add=True,
@@ -43,6 +44,7 @@ class Object(models.Model):
     #     null=True,
     #     blank=True,
     # )
+    is_private = models.BooleanField(default=False)
     # history
     created_date = models.DateTimeField(
         auto_now_add=True,
@@ -73,6 +75,7 @@ class Attribute(models.Model):
         related_name="attributes",
         on_delete=models.CASCADE,
     )
+    is_private = models.BooleanField(default=False)
     # history
     created_date = models.DateTimeField(
         auto_now_add=True,
@@ -108,6 +111,7 @@ class Value(models.Model):
         related_name="values",
         on_delete=models.CASCADE,
     )
+    is_private = models.BooleanField(default=False)
     # history
     created_date = models.DateTimeField(
         auto_now_add=True,

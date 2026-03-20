@@ -132,7 +132,8 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
                 f"'{prior.__name__}' but is now being overwritten for "
                 f"'{self.filterset_class.__name__}'. "
                 "Queries using the first field will silently use the wrong filter schema. "
-                "Set unique `filter_input_type_prefix` values on each AdvancedDjangoFilterConnectionField to fix this.",
+                "Set unique `filter_input_type_prefix` values on each "
+                "AdvancedDjangoFilterConnectionField to fix this.",
                 stacklevel=4,
             )
 
