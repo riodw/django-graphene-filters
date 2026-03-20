@@ -33,6 +33,14 @@ class ObjectTypeNode(AdvancedDjangoObjectType):
             "description",
         )
 
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        """Non-staff users cannot see private ObjectTypes."""
+        user = getattr(info.context, "user", None)
+        if user is None or not user.is_staff:
+            return queryset.filter(is_private=False)
+        return queryset
+
 
 class ObjectNode(AdvancedDjangoObjectType):
     class Meta:
@@ -50,10 +58,10 @@ class ObjectNode(AdvancedDjangoObjectType):
 
     @classmethod
     def get_queryset(cls, queryset, info):
-        """Non-admin users cannot see objects whose object_type name is 'Secret'."""
+        """Non-staff users cannot see private Objects."""
         user = getattr(info.context, "user", None)
         if user is None or not user.is_staff:
-            return queryset.exclude(object_type__name="Secret")
+            return queryset.filter(is_private=False)
         return queryset
 
 
@@ -71,6 +79,14 @@ class AttributeNode(AdvancedDjangoObjectType):
             "object_type__description",
         )
 
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        """Non-staff users cannot see private Attributes."""
+        user = getattr(info.context, "user", None)
+        if user is None or not user.is_staff:
+            return queryset.filter(is_private=False)
+        return queryset
+
 
 class ValueNode(AdvancedDjangoObjectType):
     class Meta:
@@ -85,6 +101,14 @@ class ValueNode(AdvancedDjangoObjectType):
             "attribute__name",
             "object__name",
         )
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        """Non-staff users cannot see private Values."""
+        user = getattr(info.context, "user", None)
+        if user is None or not user.is_staff:
+            return queryset.filter(is_private=False)
+        return queryset
 
 
 class Query:
