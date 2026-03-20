@@ -1,6 +1,5 @@
-from django.core.management.base import BaseCommand
-
 from cookbook.recipes.services import create_data
+from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):

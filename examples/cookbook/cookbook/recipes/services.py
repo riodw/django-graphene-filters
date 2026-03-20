@@ -38,10 +38,9 @@ import pkgutil
 import random
 from collections.abc import Callable
 
+from cookbook.recipes.models import Attribute, Object, ObjectType, Value
 from faker import Faker
 from faker.providers import BaseProvider
-
-from cookbook.recipes.models import Attribute, Object, ObjectType, Value
 
 
 def _is_safe_generator(fake: Faker, method_name: str) -> bool:
@@ -56,10 +55,7 @@ def _is_safe_generator(fake: Faker, method_name: str) -> bool:
         return False
 
     # Only accept simple scalar types that can be meaningfully stored as text
-    if isinstance(result, (str, int, float, bool)):
-        return True
-
-    return False
+    return isinstance(result, (str, int, float, bool))
 
 
 def discover_providers(fake: Faker) -> dict[str, list[str]]:
