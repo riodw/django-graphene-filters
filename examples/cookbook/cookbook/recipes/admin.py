@@ -1,5 +1,5 @@
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
-from cookbook.recipes.services import create_data
+from cookbook.recipes.services import delete_data, seed_data
 from django.contrib import admin, messages
 from django.shortcuts import redirect
 
@@ -44,12 +44,13 @@ class ObjectAdmin(admin.ModelAdmin):
     autocomplete_fields = ["object_type"]
 
     def changelist_view(self, request, extra_context=None):
-        create_count = request.GET.get("seed_data")
-        if create_count:
+        # --- seed_data ---
+        seed_count = request.GET.get("seed_data")
+        if seed_count:
             try:
-                count = int(create_count)
+                count = int(seed_count)
                 if count > 0:
-                    result = create_data(count)
+                    result = seed_data(count)
                     self.message_user(
                         request,
                         f"Created {result['object_types']} object types, "
@@ -58,7 +59,6 @@ class ObjectAdmin(admin.ModelAdmin):
                         f"{result['values']} values.",
                         messages.SUCCESS,
                     )
-                # Redirect back to the same page without the seed_data query param
                 new_get = request.GET.copy()
                 new_get.pop("seed_data")
                 return redirect(f"{request.path}?{new_get.urlencode()}")
@@ -68,6 +68,33 @@ class ObjectAdmin(admin.ModelAdmin):
                     "Invalid value for seed_data. Must be an integer.",
                     messages.ERROR,
                 )
+
+        # --- delete_data ---
+        delete_target = request.GET.get("delete_data")
+        if delete_target:
+            try:
+                result = delete_data(delete_target)
+                parts = []
+                if result["object_types"]:
+                    parts.append(f"{result['object_types']} object types")
+                if result["attributes"]:
+                    parts.append(f"{result['attributes']} attributes")
+                if result["objects"]:
+                    parts.append(f"{result['objects']} objects")
+                if result["values"]:
+                    parts.append(f"{result['values']} values")
+                summary = ", ".join(parts) if parts else "nothing"
+                self.message_user(request, f"Deleted {summary}.", messages.SUCCESS)
+                new_get = request.GET.copy()
+                new_get.pop("delete_data")
+                return redirect(f"{request.path}?{new_get.urlencode()}")
+            except (ValueError, TypeError):
+                self.message_user(
+                    request,
+                    'Invalid value for delete_data. Use an integer, "all", or "everything".',
+                    messages.ERROR,
+                )
+
         return super().changelist_view(request, extra_context=extra_context)
 
 

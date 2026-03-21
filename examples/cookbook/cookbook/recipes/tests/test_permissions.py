@@ -1,7 +1,7 @@
 import json
 
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
-from cookbook.recipes.services import create_data
+from cookbook.recipes.services import seed_data
 from django.contrib.auth import get_user_model
 from graphene_django.utils import GraphQLTestCase
 
@@ -101,7 +101,7 @@ class ObjectTypePermissionTests(GraphQLTestCase):
         Attribute.objects.all().delete()
         ObjectType.objects.all().delete()
 
-        create_data(COUNT)
+        seed_data(COUNT)
 
         self.total = ObjectType.objects.count()
         self.private_count = ObjectType.objects.filter(is_private=True).count()
@@ -137,7 +137,7 @@ class ObjectPermissionTests(GraphQLTestCase):
         Attribute.objects.all().delete()
         ObjectType.objects.all().delete()
 
-        create_data(COUNT)
+        seed_data(COUNT)
 
         self.total = Object.objects.count()
         self.private_count = Object.objects.filter(is_private=True).count()
@@ -173,7 +173,7 @@ class AttributePermissionTests(GraphQLTestCase):
         Attribute.objects.all().delete()
         ObjectType.objects.all().delete()
 
-        create_data(COUNT)
+        seed_data(COUNT)
 
         self.total = Attribute.objects.count()
         self.private_count = Attribute.objects.filter(is_private=True).count()
@@ -203,7 +203,7 @@ class ValuePermissionTests(GraphQLTestCase):
         Attribute.objects.all().delete()
         ObjectType.objects.all().delete()
 
-        create_data(COUNT)
+        seed_data(COUNT)
 
         self.total = Value.objects.count()
         self.private_count = Value.objects.filter(is_private=True).count()

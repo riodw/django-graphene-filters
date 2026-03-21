@@ -60,6 +60,15 @@ uv run python examples/cookbook/manage.py seed_data
 
 # Ensure 50 objects per provider
 uv run python examples/cookbook/manage.py seed_data 50
+
+# Delete the first 10 objects (and their cascading values)
+uv run python examples/cookbook/manage.py delete_data 10
+
+# Delete all objects and values
+uv run python examples/cookbook/manage.py delete_data all
+
+# Wipe all four tables
+uv run python examples/cookbook/manage.py delete_data everything
 ```
 
 ## Testing

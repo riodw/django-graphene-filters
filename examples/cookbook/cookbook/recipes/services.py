@@ -132,7 +132,7 @@ def _fake_value(fake: Faker, method_name: str) -> str:
     return str(result)
 
 
-def create_data(count: int) -> dict[str, int]:
+def seed_data(count: int) -> dict[str, int]:
     """Seed the database with Faker-driven data for every discovered provider.
 
     Ensures at least ``count`` ``Object`` instances exist per provider.
@@ -215,3 +215,51 @@ def create_data(count: int) -> dict[str, int]:
         "objects": total_objects,
         "values": total_values,
     }
+
+
+def delete_data(target: int | str) -> dict[str, int]:
+    """Delete data from the database.
+
+    Modes:
+      - ``target`` is an **int**: delete the first *target* ``Object`` rows
+        (by primary key order). Related ``Value`` rows cascade automatically.
+      - ``target == "all"``: delete every ``Object`` and ``Value``.
+      - ``target == "everything"``: wipe all four tables
+        (``Value``, ``Object``, ``Attribute``, ``ObjectType``).
+
+    Returns a summary dict with counts of deleted rows per model.
+    """
+    result: dict[str, int] = {
+        "object_types": 0,
+        "attributes": 0,
+        "objects": 0,
+        "values": 0,
+    }
+
+    if target == "everything":
+        result["values"] = Value.objects.all().count()
+        result["objects"] = Object.objects.all().count()
+        result["attributes"] = Attribute.objects.all().count()
+        result["object_types"] = ObjectType.objects.all().count()
+        # Delete in FK-safe order
+        Value.objects.all().delete()
+        Object.objects.all().delete()
+        Attribute.objects.all().delete()
+        ObjectType.objects.all().delete()
+
+    elif target == "all":
+        result["values"] = Value.objects.all().count()
+        result["objects"] = Object.objects.all().count()
+        Value.objects.all().delete()
+        Object.objects.all().delete()
+
+    else:
+        count = int(target)
+        pks = list(Object.objects.order_by("pk").values_list("pk", flat=True)[:count])
+        if pks:
+            result["values"] = Value.objects.filter(object__pk__in=pks).count()
+            Value.objects.filter(object__pk__in=pks).delete()
+            result["objects"] = Object.objects.filter(pk__in=pks).count()
+            Object.objects.filter(pk__in=pks).delete()
+
+    return result

@@ -65,6 +65,27 @@ uv run python manage.py seed_data 50
 You can also populate through `/admin`
 - http://127.0.0.1:8000/admin/recipes/object/?seed_data=50
 
+Delete Data
+-----------
+
+The `delete_data` management command removes data from the database.
+
+```bash
+# Delete the first 10 objects (and their cascading values)
+uv run python manage.py delete_data 10
+
+# Delete ALL objects and values
+uv run python manage.py delete_data all
+
+# Wipe all four tables (Value, Object, Attribute, ObjectType)
+uv run python manage.py delete_data everything
+```
+
+You can also delete through `/admin`
+- http://127.0.0.1:8000/admin/recipes/object/?delete_data=10
+- http://127.0.0.1:8000/admin/recipes/object/?delete_data=all
+- http://127.0.0.1:8000/admin/recipes/object/?delete_data=everything
+
 Now head on over to
 [http://127.0.0.1:8000/graphql](http://127.0.0.1:8000/graphql)
 and run some queries!

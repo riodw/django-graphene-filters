@@ -1,4 +1,4 @@
-from cookbook.recipes.services import create_data
+from cookbook.recipes.services import seed_data
 from django.core.management.base import BaseCommand
 
 
@@ -18,7 +18,7 @@ class Command(BaseCommand):
         count = options["count"]
         self.stdout.write(self.style.NOTICE(f"Ensuring {count} objects per Faker provider..."))
 
-        result = create_data(count)
+        result = seed_data(count)
 
         self.stdout.write(
             self.style.SUCCESS(
