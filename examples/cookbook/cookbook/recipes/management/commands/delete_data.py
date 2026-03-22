@@ -29,7 +29,9 @@ class Command(BaseCommand):
                     return
             except ValueError:
                 self.stderr.write(
-                    self.style.ERROR(f'Invalid target "{target}". Use a positive integer, "all", or "everything".')
+                    self.style.ERROR(
+                        f'Invalid target "{target}". Use a positive integer, "all", or "everything".'
+                    )
                 )
                 return
 

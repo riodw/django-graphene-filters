@@ -8,10 +8,11 @@ User = get_user_model()
 
 
 class GetQuerysetPermissionTests(GraphQLTestCase):
-    """Tests for ObjectNode.get_queryset which hides 'Secret' objects from non-staff users.
+    """Tests for ObjectNode.get_queryset which hides private objects from non-privileged users.
 
-    ObjectNode.get_queryset excludes objects whose object_type__name == "Secret"
-    when the request user is not staff.  Staff users see everything.
+    ObjectNode.get_queryset filters out Objects where is_private=True OR where
+    object_type__is_private=True (to prevent non-nullable FK null errors when
+    objectType is queried inline).  Staff users see everything.
     """
 
     GRAPHQL_URL = "/graphql/"
@@ -37,14 +38,16 @@ class GetQuerysetPermissionTests(GraphQLTestCase):
         Object.objects.all().delete()
         ObjectType.objects.all().delete()
 
-        # Two object types: one normal, one secret
+        # Two object types: one normal, one private ("secret")
         self.public_type = ObjectType.objects.create(name="People", description="Normal type")
-        self.secret_type = ObjectType.objects.create(name="Secret", description="Hidden type")
+        self.secret_type = ObjectType.objects.create(
+            name="Secret", description="Hidden type", is_private=True
+        )
 
-        # Objects of each type
+        # Objects of each type — ClassifiedAgent is private at both the Object and ObjectType level
         Object.objects.create(name="Alice", object_type=self.public_type)
         Object.objects.create(name="Bob", object_type=self.public_type)
-        Object.objects.create(name="ClassifiedAgent", object_type=self.secret_type)
+        Object.objects.create(name="ClassifiedAgent", object_type=self.secret_type, is_private=True)
 
         # Users
         self.staff_user = User.objects.create_user(username="admin", password="testpass", is_staff=True)

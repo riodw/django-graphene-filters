@@ -35,11 +35,11 @@ class ObjectTypeNode(AdvancedDjangoObjectType):
 
     @classmethod
     def get_queryset(cls, queryset, info):
-        """Non-staff users cannot see private ObjectTypes."""
+        """Staff or users with view_objecttype permission see everything; others see public only."""
         user = getattr(info.context, "user", None)
-        if user is None or not user.is_staff:
-            return queryset.filter(is_private=False)
-        return queryset
+        if user and (user.is_staff or user.has_perm("recipes.view_objecttype")):
+            return queryset
+        return queryset.filter(is_private=False)
 
 
 class ObjectNode(AdvancedDjangoObjectType):
@@ -58,11 +58,11 @@ class ObjectNode(AdvancedDjangoObjectType):
 
     @classmethod
     def get_queryset(cls, queryset, info):
-        """Non-staff users cannot see private Objects."""
+        """Staff or users with view_object permission see everything; others see public only."""
         user = getattr(info.context, "user", None)
-        if user is None or not user.is_staff:
-            return queryset.filter(is_private=False)
-        return queryset
+        if user and (user.is_staff or user.has_perm("recipes.view_object")):
+            return queryset
+        return queryset.filter(is_private=False)
 
 
 class AttributeNode(AdvancedDjangoObjectType):
@@ -81,11 +81,11 @@ class AttributeNode(AdvancedDjangoObjectType):
 
     @classmethod
     def get_queryset(cls, queryset, info):
-        """Non-staff users cannot see private Attributes."""
+        """Staff or users with view_attribute permission see everything; others see public only."""
         user = getattr(info.context, "user", None)
-        if user is None or not user.is_staff:
-            return queryset.filter(is_private=False)
-        return queryset
+        if user and (user.is_staff or user.has_perm("recipes.view_attribute")):
+            return queryset
+        return queryset.filter(is_private=False)
 
 
 class ValueNode(AdvancedDjangoObjectType):
@@ -104,11 +104,11 @@ class ValueNode(AdvancedDjangoObjectType):
 
     @classmethod
     def get_queryset(cls, queryset, info):
-        """Non-staff users cannot see private Values."""
+        """Staff or users with view_value permission see everything; others see public only."""
         user = getattr(info.context, "user", None)
-        if user is None or not user.is_staff:
-            return queryset.filter(is_private=False)
-        return queryset
+        if user and (user.is_staff or user.has_perm("recipes.view_value")):
+            return queryset
+        return queryset.filter(is_private=False)
 
 
 class Query:
