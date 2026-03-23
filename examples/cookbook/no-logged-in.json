@@ -1,0 +1,248 @@
+{
+  "data": {
+    "allObjects": {
+      "edges": [
+        {
+          "node": {
+            "name": "address_0063b81e",
+            "id": "T2JqZWN0Tm9kZToxMjE=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6MjU="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "address_a850309f",
+            "id": "T2JqZWN0Tm9kZToxMjI=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6MjU="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "barcode_7b0b7164",
+            "id": "T2JqZWN0Tm9kZToxMjc=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "barcode",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6Mjg="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "credit_card_8f171e0b",
+            "id": "T2JqZWN0Tm9kZToxMzM=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "credit_card",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6MzE="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "currency_b2b3084a",
+            "id": "T2JqZWN0Tm9kZToxMzY=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "currency",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6MzI="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "date_time_236dde9c",
+            "id": "T2JqZWN0Tm9kZToxMzg=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "date_time",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6MzM="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "emoji_5651e32f",
+            "id": "T2JqZWN0Tm9kZToxNDE=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "emoji",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6MzU="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "emoji_6b818712",
+            "id": "T2JqZWN0Tm9kZToxNDI=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "emoji",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6MzU="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "file_2a853c0e",
+            "id": "T2JqZWN0Tm9kZToxNDQ=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6MzY="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "internet_995d3457",
+            "id": "T2JqZWN0Tm9kZToxNDU=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6Mzc="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "internet_6f28181e",
+            "id": "T2JqZWN0Tm9kZToxNDY=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6Mzc="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "isbn_3bb6ca67",
+            "id": "T2JqZWN0Tm9kZToxNDc=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6Mzg="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "lorem_40338416",
+            "id": "T2JqZWN0Tm9kZToxNTI=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "lorem",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6NDA="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "misc_14b1c70c",
+            "id": "T2JqZWN0Tm9kZToxNTQ=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "misc",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6NDE="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "passport_7d259d64",
+            "id": "T2JqZWN0Tm9kZToxNTY=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "passport",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6NDI="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "person_520d2a4e",
+            "id": "T2JqZWN0Tm9kZToxNTg=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6NDM="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "phone_number_dd617e4b",
+            "id": "T2JqZWN0Tm9kZToxNTk=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "phone_number",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6NDQ="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "python_5b4b532b",
+            "id": "T2JqZWN0Tm9kZToxNjE=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "python",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6NDU="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "python_27377d0e",
+            "id": "T2JqZWN0Tm9kZToxNjI=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "python",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6NDU="
+            }
+          }
+        },
+        {
+          "node": {
+            "name": "ssn_d5a521be",
+            "id": "T2JqZWN0Tm9kZToxNjY=",
+            "isPrivate": false,
+            "objectType": {
+              "name": "",
+              "isPrivate": false,
+              "id": "T2JqZWN0VHlwZU5vZGU6NDc="
+            }
+          }
+        }
+      ]
+    }
+  }
+}
