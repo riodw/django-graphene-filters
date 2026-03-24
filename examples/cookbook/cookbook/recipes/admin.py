@@ -1,7 +1,67 @@
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
-from cookbook.recipes.services import delete_data, seed_data
+from cookbook.recipes.services import create_users, delete_data, delete_users, seed_data
 from django.contrib import admin, messages
+from django.contrib.auth import get_user_model
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.shortcuts import redirect
+
+User = get_user_model()
+
+
+# --- Custom UserAdmin with create_users / delete_users via query params ---
+admin.site.unregister(User)
+
+
+@admin.register(User)
+class UserAdmin(BaseUserAdmin):
+    list_display = ("id", "username", "first_name", "last_name", "is_staff", "is_superuser")
+    list_display_links = ("id", "username")
+    list_filter = ("is_staff", "is_superuser", "is_active", "user_permissions")
+
+    def changelist_view(self, request, extra_context=None):
+        # --- create_users ---
+        create_count = request.GET.get("create_users")
+        if create_count:
+            try:
+                count = int(create_count)
+                if count > 0:
+                    result = create_users(count)
+                    self.message_user(
+                        request,
+                        f"Created {result['users']} test users.",
+                        messages.SUCCESS,
+                    )
+                new_get = request.GET.copy()
+                new_get.pop("create_users")
+                return redirect(f"{request.path}?{new_get.urlencode()}")
+            except (ValueError, TypeError):
+                self.message_user(
+                    request,
+                    "Invalid value for create_users. Must be an integer.",
+                    messages.ERROR,
+                )
+
+        # --- delete_users ---
+        delete_target = request.GET.get("delete_users")
+        if delete_target:
+            try:
+                result = delete_users(delete_target)
+                self.message_user(
+                    request,
+                    f"Deleted {result['users']} users." if result["users"] else "Nothing to delete.",
+                    messages.SUCCESS if result["users"] else messages.WARNING,
+                )
+                new_get = request.GET.copy()
+                new_get.pop("delete_users")
+                return redirect(f"{request.path}?{new_get.urlencode()}")
+            except (ValueError, TypeError):
+                self.message_user(
+                    request,
+                    'Invalid value for delete_users. Use an integer or "all".',
+                    messages.ERROR,
+                )
+
+        return super().changelist_view(request, extra_context=extra_context)
 
 
 class ObjectInline(admin.TabularInline):

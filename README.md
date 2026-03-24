@@ -71,6 +71,27 @@ uv run python examples/cookbook/manage.py delete_data all
 uv run python examples/cookbook/manage.py delete_data everything
 ```
 
+### Test users
+
+Create test users with individual Django `view_*` permissions for exercising
+`get_queryset` permission branches. Each set creates 6 users: 1 staff,
+1 regular (no perms), and 4 per-model permission users. All share password
+`testpass123`. Superusers are never deleted.
+
+```shell
+# Create 1 set of test users (6 users)
+uv run python examples/cookbook/manage.py create_users
+
+# Create 3 sets (18 users)
+uv run python examples/cookbook/manage.py create_users 3
+
+# Delete all non-superusers
+uv run python examples/cookbook/manage.py delete_users all
+
+# Delete the first 5 non-superusers
+uv run python examples/cookbook/manage.py delete_users 5
+```
+
 ## Testing
 
 ```shell

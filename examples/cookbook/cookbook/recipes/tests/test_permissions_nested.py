@@ -133,3 +133,34 @@ class ObjectPermissionTests(GraphQLTestCase):
                     f"Unauthenticated user received private ObjectType: {attr['objectType']['name']} "
                     f"on Attribute: {attr['name']}",
                 )
+
+    def test_view_object_user_object_type_id_consistency(self):
+        """A view_object user sees public Objects with sentinels for hidden FKs.
+
+        Every Object's top-level objectType and every nested
+        attribute.objectType refer to the same ObjectType.  The sentinel
+        preserves real FK IDs, so the ID must always match — even when
+        the intermediate Attribute is a sentinel.
+        """
+        self.client.login(username="view_object_1", password=TEST_USER_PASSWORD)
+
+        response = self.query(ALL_OBJECTS_QUERY)
+        self.assertResponseNoErrors(response)
+        content = json.loads(response.content)
+        edges = content["data"]["allObjects"]["edges"]
+
+        for edge in edges:
+            node = edge["node"]
+            root_object_type_id = node["objectType"]["id"]
+
+            for value_edge in node["values"]["edges"]:
+                attr = value_edge["node"]["attribute"]
+                nested_object_type_id = attr["objectType"]["id"]
+
+                self.assertEqual(
+                    root_object_type_id,
+                    nested_object_type_id,
+                    f"ObjectType ID mismatch on Object '{node['name']}': "
+                    f"root objectType={root_object_type_id}, "
+                    f"attribute '{attr['name']}' objectType={nested_object_type_id}",
+                )

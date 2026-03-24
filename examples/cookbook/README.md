@@ -86,8 +86,41 @@ You can also delete through `/admin`
 - http://127.0.0.1:8000/admin/recipes/object/?delete_data=all
 - http://127.0.0.1:8000/admin/recipes/object/?delete_data=everything
 
+Test Users
+----------
+
+Create test users with individual Django `view_*` permissions for exercising
+`get_queryset` permission branches. Each set creates 6 users:
+
+- `staff_N` — `is_staff=True`
+- `regular_N` — no permissions, not staff
+- `view_objecttype_N` — has `recipes.view_objecttype`
+- `view_object_N` — has `recipes.view_object`
+- `view_attribute_N` — has `recipes.view_attribute`
+- `view_value_N` — has `recipes.view_value`
+
+All share the password `testpass123`. Superusers are never deleted.
+
+```bash
+# Create 1 set of test users (6 users, default)
+uv run python manage.py create_users
+
+# Create 3 sets (18 users)
+uv run python manage.py create_users 3
+
+# Delete all non-superusers
+uv run python manage.py delete_users all
+
+# Delete the first 5 non-superusers
+uv run python manage.py delete_users 5
+```
+
+You can also manage test users through `/admin`:
+- http://127.0.0.1:8000/admin/auth/user/?create_users=1
+- http://127.0.0.1:8000/admin/auth/user/?delete_users=all
+
 Now head on over to
-[http://127.0.0.1:8000/graphql](http://127.0.0.1:8000/graphql)
+[http://*********:8000/graphql](http://*********:8000/graphql)
 and run some queries!
 (See the [Graphene-Django Tutorial](http://docs.graphene-python.org/projects/django/en/latest/tutorial-relay/#testing-our-graphql-schema)
 for some example queries)

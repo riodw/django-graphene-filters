@@ -230,7 +230,7 @@ VIEW_PERMISSIONS = [
 ]
 
 # Shared password for all test users — makes manual login easy.
-TEST_USER_PASSWORD = "testpass123"
+TEST_USER_PASSWORD = "admin"
 
 
 def create_users(count: int = 1) -> dict[str, int]:
@@ -257,7 +257,11 @@ def create_users(count: int = 1) -> dict[str, int]:
     User = get_user_model()
     created = 0
 
+    fake = Faker()
+
     for n in range(1, count + 1):
+        last_name = fake.last_name()
+
         # --- Staff user ---
         username = f"staff_{n}"
         if not User.objects.filter(username=username).exists():
@@ -266,7 +270,7 @@ def create_users(count: int = 1) -> dict[str, int]:
                 password=TEST_USER_PASSWORD,
                 is_staff=True,
                 first_name="Staff",
-                last_name=f"User {n}",
+                last_name=last_name,
             )
             created += 1
 
@@ -278,7 +282,7 @@ def create_users(count: int = 1) -> dict[str, int]:
                 password=TEST_USER_PASSWORD,
                 is_staff=False,
                 first_name="Regular",
-                last_name=f"User {n}",
+                last_name=last_name,
             )
             created += 1
 
@@ -286,12 +290,14 @@ def create_users(count: int = 1) -> dict[str, int]:
         for perm_codename in VIEW_PERMISSIONS:
             username = f"{perm_codename}_{n}"
             if not User.objects.filter(username=username).exists():
+                # e.g. "view_object" -> "View Object"
+                first_name = perm_codename.replace("_", " ").title()
                 user = User.objects.create_user(
                     username=username,
                     password=TEST_USER_PASSWORD,
                     is_staff=False,
-                    first_name=perm_codename.replace("_", " ").title(),
-                    last_name=f"User {n}",
+                    first_name=first_name,
+                    last_name=last_name,
                 )
                 perm = Permission.objects.get(
                     codename=perm_codename,
