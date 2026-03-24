@@ -13,12 +13,8 @@ Three user types are tested per model (4 models × 3 tests = 12 tests):
 import json
 
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
-from cookbook.recipes.services import seed_data
-from django.contrib.auth import get_user_model
-from django.contrib.auth.models import Permission
+from cookbook.recipes.services import TEST_USER_PASSWORD, create_users, seed_data
 from graphene_django.utils import GraphQLTestCase
-
-User = get_user_model()
 
 COUNT = 4
 
@@ -104,14 +100,6 @@ def _paginate_all(test_case, query, root_field):
     return all_edges
 
 
-def _grant_perm(user, codename):
-    """Add a single permission to a user and return a fresh copy (clears perm cache)."""
-    permission = Permission.objects.get(codename=codename)
-    user.user_permissions.add(permission)
-    # Re-fetch to clear Django's in-process permission cache
-    return User.objects.get(pk=user.pk)
-
-
 class ObjectTypeDjangoPermissionTests(GraphQLTestCase):
     GRAPHQL_URL = "/graphql/"
 
@@ -123,13 +111,13 @@ class ObjectTypeDjangoPermissionTests(GraphQLTestCase):
         ObjectType.objects.all().delete()
 
         seed_data(COUNT)
+        create_users()
 
         self.total = ObjectType.objects.count()
         self.private_count = ObjectType.objects.filter(is_private=True).count()
 
     def test_staff_sees_all_object_types(self):
-        User.objects.create_user(username="staff", password="testpass", is_staff=True)
-        self.client.login(username="staff", password="testpass")
+        self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECT_TYPES_QUERY)
         self.assertResponseNoErrors(response)
@@ -137,8 +125,7 @@ class ObjectTypeDjangoPermissionTests(GraphQLTestCase):
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_no_perms_sees_public_only(self):
-        User.objects.create_user(username="regular", password="testpass", is_staff=False)
-        self.client.login(username="regular", password="testpass")
+        self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECT_TYPES_QUERY)
         self.assertResponseNoErrors(response)
@@ -146,9 +133,7 @@ class ObjectTypeDjangoPermissionTests(GraphQLTestCase):
         self.assertEqual(len(edges), self.total - self.private_count)
 
     def test_non_staff_with_view_perm_sees_all(self):
-        user = User.objects.create_user(username="granted", password="testpass", is_staff=False)
-        user = _grant_perm(user, "view_objecttype")
-        self.client.login(username="granted", password="testpass")
+        self.client.login(username="view_objecttype_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECT_TYPES_QUERY)
         self.assertResponseNoErrors(response)
@@ -167,13 +152,13 @@ class ObjectDjangoPermissionTests(GraphQLTestCase):
         ObjectType.objects.all().delete()
 
         seed_data(COUNT)
+        create_users()
 
         self.total = Object.objects.count()
         self.private_count = Object.objects.filter(is_private=True).count()
 
     def test_staff_sees_all_objects(self):
-        User.objects.create_user(username="staff", password="testpass", is_staff=True)
-        self.client.login(username="staff", password="testpass")
+        self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECTS_QUERY)
         self.assertResponseNoErrors(response)
@@ -181,8 +166,7 @@ class ObjectDjangoPermissionTests(GraphQLTestCase):
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_no_perms_sees_public_only(self):
-        User.objects.create_user(username="regular", password="testpass", is_staff=False)
-        self.client.login(username="regular", password="testpass")
+        self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECTS_QUERY)
         self.assertResponseNoErrors(response)
@@ -190,9 +174,7 @@ class ObjectDjangoPermissionTests(GraphQLTestCase):
         self.assertEqual(len(edges), self.total - self.private_count)
 
     def test_non_staff_with_view_perm_sees_all(self):
-        user = User.objects.create_user(username="granted", password="testpass", is_staff=False)
-        user = _grant_perm(user, "view_object")
-        self.client.login(username="granted", password="testpass")
+        self.client.login(username="view_object_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECTS_QUERY)
         self.assertResponseNoErrors(response)
@@ -211,28 +193,25 @@ class AttributeDjangoPermissionTests(GraphQLTestCase):
         ObjectType.objects.all().delete()
 
         seed_data(COUNT)
+        create_users()
 
         self.total = Attribute.objects.count()
         self.private_count = Attribute.objects.filter(is_private=True).count()
 
     def test_staff_sees_all_attributes(self):
-        User.objects.create_user(username="staff", password="testpass", is_staff=True)
-        self.client.login(username="staff", password="testpass")
+        self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_ATTRIBUTES_QUERY, "allAttributes")
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_no_perms_sees_public_only(self):
-        User.objects.create_user(username="regular", password="testpass", is_staff=False)
-        self.client.login(username="regular", password="testpass")
+        self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_ATTRIBUTES_QUERY, "allAttributes")
         self.assertEqual(len(edges), self.total - self.private_count)
 
     def test_non_staff_with_view_perm_sees_all(self):
-        user = User.objects.create_user(username="granted", password="testpass", is_staff=False)
-        user = _grant_perm(user, "view_attribute")
-        self.client.login(username="granted", password="testpass")
+        self.client.login(username="view_attribute_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_ATTRIBUTES_QUERY, "allAttributes")
         self.assertEqual(len(edges), self.total)
@@ -249,28 +228,25 @@ class ValueDjangoPermissionTests(GraphQLTestCase):
         ObjectType.objects.all().delete()
 
         seed_data(COUNT)
+        create_users()
 
         self.total = Value.objects.count()
         self.private_count = Value.objects.filter(is_private=True).count()
 
     def test_staff_sees_all_values(self):
-        User.objects.create_user(username="staff", password="testpass", is_staff=True)
-        self.client.login(username="staff", password="testpass")
+        self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_VALUES_QUERY, "allValues")
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_no_perms_sees_public_only(self):
-        User.objects.create_user(username="regular", password="testpass", is_staff=False)
-        self.client.login(username="regular", password="testpass")
+        self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_VALUES_QUERY, "allValues")
         self.assertEqual(len(edges), self.total - self.private_count)
 
     def test_non_staff_with_view_perm_sees_all(self):
-        user = User.objects.create_user(username="granted", password="testpass", is_staff=False)
-        user = _grant_perm(user, "view_value")
-        self.client.login(username="granted", password="testpass")
+        self.client.login(username="view_value_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_VALUES_QUERY, "allValues")
         self.assertEqual(len(edges), self.total)

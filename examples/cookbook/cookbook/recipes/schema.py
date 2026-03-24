@@ -1,6 +1,10 @@
 from graphene import Node
 
-from django_graphene_filters import AdvancedDjangoFilterConnectionField, AdvancedDjangoObjectType
+from django_graphene_filters import (
+    AdvancedDjangoFilterConnectionField,
+    AdvancedDjangoObjectType,
+    apply_cascade_permissions,
+)
 
 from . import models
 from .filters import (
@@ -60,9 +64,11 @@ class ObjectNode(AdvancedDjangoObjectType):
     def get_queryset(cls, queryset, info):
         """Staff or users with view_object permission see everything; others see public only."""
         user = getattr(info.context, "user", None)
-        if user and (user.is_staff or user.has_perm("recipes.view_object")):
+        if user and user.is_staff:
             return queryset
-        return queryset.filter(is_private=False)
+        elif user and user.has_perm("recipes.view_object"):
+            return queryset.filter(is_private=False)
+        return apply_cascade_permissions(cls, queryset.filter(is_private=False), info)
 
 
 class AttributeNode(AdvancedDjangoObjectType):
@@ -83,9 +89,11 @@ class AttributeNode(AdvancedDjangoObjectType):
     def get_queryset(cls, queryset, info):
         """Staff or users with view_attribute permission see everything; others see public only."""
         user = getattr(info.context, "user", None)
-        if user and (user.is_staff or user.has_perm("recipes.view_attribute")):
+        if user and user.is_staff:
             return queryset
-        return queryset.filter(is_private=False)
+        elif user and user.has_perm("recipes.view_attribute"):
+            return queryset.filter(is_private=False)
+        return apply_cascade_permissions(cls, queryset.filter(is_private=False), info)
 
 
 class ValueNode(AdvancedDjangoObjectType):
@@ -106,9 +114,11 @@ class ValueNode(AdvancedDjangoObjectType):
     def get_queryset(cls, queryset, info):
         """Staff or users with view_value permission see everything; others see public only."""
         user = getattr(info.context, "user", None)
-        if user and (user.is_staff or user.has_perm("recipes.view_value")):
+        if user and user.is_staff:
             return queryset
-        return queryset.filter(is_private=False)
+        elif user and user.has_perm("recipes.view_value"):
+            return queryset.filter(is_private=False)
+        return apply_cascade_permissions(cls, queryset.filter(is_private=False), info)
 
 
 class Query:

@@ -1,11 +1,8 @@
 import json
 
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
-from cookbook.recipes.services import seed_data
-from django.contrib.auth import get_user_model
+from cookbook.recipes.services import TEST_USER_PASSWORD, create_users, seed_data
 from graphene_django.utils import GraphQLTestCase
-
-User = get_user_model()
 
 COUNT = 4
 
@@ -102,13 +99,13 @@ class ObjectTypePermissionTests(GraphQLTestCase):
         ObjectType.objects.all().delete()
 
         seed_data(COUNT)
+        create_users()
 
         self.total = ObjectType.objects.count()
         self.private_count = ObjectType.objects.filter(is_private=True).count()
 
     def test_staff_sees_all_object_types(self):
-        User.objects.create_user(username="staff", password="testpass", is_staff=True)
-        self.client.login(username="staff", password="testpass")
+        self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECT_TYPES_QUERY)
         self.assertResponseNoErrors(response)
@@ -117,8 +114,7 @@ class ObjectTypePermissionTests(GraphQLTestCase):
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_cannot_see_private_object_types(self):
-        User.objects.create_user(username="regular", password="testpass", is_staff=False)
-        self.client.login(username="regular", password="testpass")
+        self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECT_TYPES_QUERY)
         self.assertResponseNoErrors(response)
@@ -138,13 +134,13 @@ class ObjectPermissionTests(GraphQLTestCase):
         ObjectType.objects.all().delete()
 
         seed_data(COUNT)
+        create_users()
 
         self.total = Object.objects.count()
         self.private_count = Object.objects.filter(is_private=True).count()
 
     def test_staff_sees_all_objects(self):
-        User.objects.create_user(username="staff", password="testpass", is_staff=True)
-        self.client.login(username="staff", password="testpass")
+        self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECTS_QUERY)
         self.assertResponseNoErrors(response)
@@ -153,8 +149,7 @@ class ObjectPermissionTests(GraphQLTestCase):
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_cannot_see_private_objects(self):
-        User.objects.create_user(username="regular", password="testpass", is_staff=False)
-        self.client.login(username="regular", password="testpass")
+        self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECTS_QUERY)
         self.assertResponseNoErrors(response)
@@ -174,20 +169,19 @@ class AttributePermissionTests(GraphQLTestCase):
         ObjectType.objects.all().delete()
 
         seed_data(COUNT)
+        create_users()
 
         self.total = Attribute.objects.count()
         self.private_count = Attribute.objects.filter(is_private=True).count()
 
     def test_staff_sees_all_attributes(self):
-        User.objects.create_user(username="staff", password="testpass", is_staff=True)
-        self.client.login(username="staff", password="testpass")
+        self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_ATTRIBUTES_QUERY, "allAttributes")
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_cannot_see_private_attributes(self):
-        User.objects.create_user(username="regular", password="testpass", is_staff=False)
-        self.client.login(username="regular", password="testpass")
+        self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_ATTRIBUTES_QUERY, "allAttributes")
         self.assertEqual(len(edges), self.total - self.private_count)
@@ -204,20 +198,19 @@ class ValuePermissionTests(GraphQLTestCase):
         ObjectType.objects.all().delete()
 
         seed_data(COUNT)
+        create_users()
 
         self.total = Value.objects.count()
         self.private_count = Value.objects.filter(is_private=True).count()
 
     def test_staff_sees_all_values(self):
-        User.objects.create_user(username="staff", password="testpass", is_staff=True)
-        self.client.login(username="staff", password="testpass")
+        self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_VALUES_QUERY, "allValues")
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_cannot_see_private_values(self):
-        User.objects.create_user(username="regular", password="testpass", is_staff=False)
-        self.client.login(username="regular", password="testpass")
+        self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_VALUES_QUERY, "allValues")
         self.assertEqual(len(edges), self.total - self.private_count)

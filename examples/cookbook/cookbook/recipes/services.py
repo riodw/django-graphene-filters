@@ -217,6 +217,124 @@ def seed_data(count: int) -> dict[str, int]:
     }
 
 
+# --------------------------------------------------------------------------- #
+# User seeding
+# --------------------------------------------------------------------------- #
+
+# The four model-level view permissions used by schema.py get_queryset branches.
+VIEW_PERMISSIONS = [
+    "view_objecttype",
+    "view_object",
+    "view_attribute",
+    "view_value",
+]
+
+# Shared password for all test users — makes manual login easy.
+TEST_USER_PASSWORD = "testpass123"
+
+
+def create_users(count: int = 1) -> dict[str, int]:
+    """Create test users with individual model-view permissions.
+
+    For each unit in ``count``, creates one user per view permission
+    (4 users per unit).  Each user receives **only** the single
+    permission matching their role so the schema's ``get_queryset``
+    branches can be exercised independently.
+
+    Naming: ``<permission>_<n>`` (e.g. ``view_object_1``,
+    ``view_attribute_2``).  All users share the password
+    ``TEST_USER_PASSWORD`` and are **not** staff.
+
+    Also creates one ``staff_<n>`` superuser per unit for convenience.
+
+    The function is idempotent — existing usernames are skipped.
+
+    Returns a summary dict with the number of newly created users.
+    """
+    from django.contrib.auth import get_user_model
+    from django.contrib.auth.models import Permission
+
+    User = get_user_model()
+    created = 0
+
+    for n in range(1, count + 1):
+        # --- Staff user ---
+        username = f"staff_{n}"
+        if not User.objects.filter(username=username).exists():
+            User.objects.create_user(
+                username=username,
+                password=TEST_USER_PASSWORD,
+                is_staff=True,
+                first_name="Staff",
+                last_name=f"User {n}",
+            )
+            created += 1
+
+        # --- Regular user (no permissions, not staff) ---
+        username = f"regular_{n}"
+        if not User.objects.filter(username=username).exists():
+            User.objects.create_user(
+                username=username,
+                password=TEST_USER_PASSWORD,
+                is_staff=False,
+                first_name="Regular",
+                last_name=f"User {n}",
+            )
+            created += 1
+
+        # --- Per-permission users ---
+        for perm_codename in VIEW_PERMISSIONS:
+            username = f"{perm_codename}_{n}"
+            if not User.objects.filter(username=username).exists():
+                user = User.objects.create_user(
+                    username=username,
+                    password=TEST_USER_PASSWORD,
+                    is_staff=False,
+                    first_name=perm_codename.replace("_", " ").title(),
+                    last_name=f"User {n}",
+                )
+                perm = Permission.objects.get(
+                    codename=perm_codename,
+                    content_type__app_label="recipes",
+                )
+                user.user_permissions.add(perm)
+                created += 1
+
+    return {"users": created}
+
+
+def delete_users(target: int | str) -> dict[str, int]:
+    """Delete test users created by ``create_users``.
+
+    Superusers (``is_superuser=True``) are **never** deleted.
+
+    Modes:
+      - ``target`` is an **int**: delete the first *target* non-superusers
+        (by primary key order).
+      - ``target == "all"``: delete every non-superuser.
+
+    Returns a summary dict with counts of deleted users.
+    """
+    from django.contrib.auth import get_user_model
+
+    User = get_user_model()
+    result: dict[str, int] = {"users": 0}
+
+    if target == "all":
+        qs = User.objects.exclude(is_superuser=True)
+        result["users"] = qs.count()
+        qs.delete()
+    else:
+        count = int(target)
+        qs = User.objects.exclude(is_superuser=True).order_by("pk")
+        pks = list(qs.values_list("pk", flat=True)[:count])
+        if pks:
+            result["users"] = len(pks)
+            User.objects.filter(pk__in=pks).delete()
+
+    return result
+
+
 def delete_data(target: int | str) -> dict[str, int]:
     """Delete data from the database.
 
