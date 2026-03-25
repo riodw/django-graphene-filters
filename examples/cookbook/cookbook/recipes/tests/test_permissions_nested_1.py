@@ -41,6 +41,11 @@ class ObjectPermissionTests(GraphQLTestCase):
 
         self.total = Object.objects.count()
         self.private_count = Object.objects.filter(is_private=True).count()
+        # Cascade-aware count: public Objects whose ObjectType is also public
+        visible_ot_ids = ObjectType.objects.filter(is_private=False).values_list("id", flat=True)
+        self.cascade_public_count = Object.objects.filter(
+            is_private=False, object_type_id__in=visible_ot_ids
+        ).count()
 
     def test_staff_sees_all_objects(self):
         self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
@@ -52,13 +57,14 @@ class ObjectPermissionTests(GraphQLTestCase):
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_cannot_see_private_objects(self):
+        """Regular users see only public Objects whose ObjectType is also public (cascade)."""
         self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECTS_QUERY)
         self.assertResponseNoErrors(response)
         content = json.loads(response.content)
         edges = content["data"]["allObjects"]["edges"]
-        self.assertEqual(len(edges), self.total - self.private_count)
+        self.assertEqual(len(edges), self.cascade_public_count)
 
         # Every returned object must have isPrivate=False
         for edge in edges:

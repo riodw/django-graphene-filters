@@ -17,7 +17,7 @@ from .filterset import AdvancedFilterSet
 from .object_type import AdvancedDjangoObjectType
 from .orders import BaseRelatedOrder, RelatedOrder
 from .orderset import AdvancedOrderSet
-from .permissions import AllowAny, BasePermission, IsAuthenticated, apply_cascade_permissions
+from .permissions import apply_cascade_permissions
 
 __version__ = "0.3.1"
 
@@ -36,8 +36,5 @@ __all__ = [
     "BaseRelatedOrder",
     "RelatedOrder",
     "AdvancedOrderSet",
-    "BasePermission",
-    "AllowAny",
-    "IsAuthenticated",
     "apply_cascade_permissions",
 ]

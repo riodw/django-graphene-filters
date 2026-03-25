@@ -138,6 +138,11 @@ class ObjectPermissionTests(GraphQLTestCase):
 
         self.total = Object.objects.count()
         self.private_count = Object.objects.filter(is_private=True).count()
+        # Cascade-aware count: public Objects whose ObjectType is also public
+        visible_ot_ids = ObjectType.objects.filter(is_private=False).values_list("id", flat=True)
+        self.cascade_public_count = Object.objects.filter(
+            is_private=False, object_type_id__in=visible_ot_ids
+        ).count()
 
     def test_staff_sees_all_objects(self):
         self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
@@ -149,13 +154,14 @@ class ObjectPermissionTests(GraphQLTestCase):
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_cannot_see_private_objects(self):
+        """Regular users see only public Objects whose ObjectType is also public (cascade)."""
         self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         response = self.query(ALL_OBJECTS_QUERY)
         self.assertResponseNoErrors(response)
         content = json.loads(response.content)
         edges = content["data"]["allObjects"]["edges"]
-        self.assertEqual(len(edges), self.total - self.private_count)
+        self.assertEqual(len(edges), self.cascade_public_count)
 
 
 class AttributePermissionTests(GraphQLTestCase):
@@ -173,6 +179,11 @@ class AttributePermissionTests(GraphQLTestCase):
 
         self.total = Attribute.objects.count()
         self.private_count = Attribute.objects.filter(is_private=True).count()
+        # Cascade-aware count: public Attributes whose ObjectType is also public
+        visible_ot_ids = ObjectType.objects.filter(is_private=False).values_list("id", flat=True)
+        self.cascade_public_count = Attribute.objects.filter(
+            is_private=False, object_type_id__in=visible_ot_ids
+        ).count()
 
     def test_staff_sees_all_attributes(self):
         self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
@@ -181,10 +192,11 @@ class AttributePermissionTests(GraphQLTestCase):
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_cannot_see_private_attributes(self):
+        """Regular users see only public Attributes whose ObjectType is also public (cascade)."""
         self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_ATTRIBUTES_QUERY, "allAttributes")
-        self.assertEqual(len(edges), self.total - self.private_count)
+        self.assertEqual(len(edges), self.cascade_public_count)
 
 
 class ValuePermissionTests(GraphQLTestCase):
@@ -202,6 +214,19 @@ class ValuePermissionTests(GraphQLTestCase):
 
         self.total = Value.objects.count()
         self.private_count = Value.objects.filter(is_private=True).count()
+        # Cascade-aware count: public Values whose Attribute AND Object are also visible
+        visible_ot_ids = ObjectType.objects.filter(is_private=False).values_list("id", flat=True)
+        visible_attr_ids = Attribute.objects.filter(
+            is_private=False, object_type_id__in=visible_ot_ids
+        ).values_list("id", flat=True)
+        visible_obj_ids = Object.objects.filter(
+            is_private=False, object_type_id__in=visible_ot_ids
+        ).values_list("id", flat=True)
+        self.cascade_public_count = Value.objects.filter(
+            is_private=False,
+            attribute_id__in=visible_attr_ids,
+            object_id__in=visible_obj_ids,
+        ).count()
 
     def test_staff_sees_all_values(self):
         self.client.login(username="staff_1", password=TEST_USER_PASSWORD)
@@ -210,7 +235,8 @@ class ValuePermissionTests(GraphQLTestCase):
         self.assertEqual(len(edges), self.total)
 
     def test_non_staff_cannot_see_private_values(self):
+        """Regular users see only public Values whose Attribute and Object are also visible (cascade)."""
         self.client.login(username="regular_1", password=TEST_USER_PASSWORD)
 
         edges = _paginate_all(self, ALL_VALUES_QUERY, "allValues")
-        self.assertEqual(len(edges), self.total - self.private_count)
+        self.assertEqual(len(edges), self.cascade_public_count)

@@ -1,61 +1,18 @@
 """Permission utilities for django-graphene-filters.
 
-Provides base permission classes and a utility function for cascading
-FK-based permission filtering in GraphQL node types.
+Provides a utility function for cascading FK-based permission filtering
+in GraphQL node types.
 """
 
-import threading
+from contextvars import ContextVar
 from typing import Any
 
 from django.db import models
 from graphene_django import DjangoObjectType
 
-
-class BasePermission:
-    """Queryset-level permission for filtering visible rows.
-
-    Subclass and override ``filter_queryset`` to implement custom
-    visibility logic.
-    """
-
-    def filter_queryset(self, queryset: models.QuerySet, info: Any) -> models.QuerySet:
-        """Return a filtered queryset containing only visible rows.
-
-        Args:
-            queryset: The base queryset to filter.
-            info: The GraphQL ResolveInfo object.
-
-        Returns:
-            A filtered queryset.
-        """
-        return queryset
-
-
-class AllowAny(BasePermission):
-    """No-op permission. All rows are visible."""
-
-
-class IsAuthenticated(BasePermission):
-    """Only authenticated users see rows; anonymous users see nothing."""
-
-    def filter_queryset(self, queryset: models.QuerySet, info: Any) -> models.QuerySet:
-        """Return the queryset if the user is authenticated, otherwise empty.
-
-        Args:
-            queryset: The base queryset to filter.
-            info: The GraphQL ResolveInfo object.
-
-        Returns:
-            The original queryset or an empty queryset.
-        """
-        user = getattr(info.context, "user", None)
-        if user and user.is_authenticated:
-            return queryset
-        return queryset.none()
-
-
-# Thread-local storage for cycle detection in apply_cascade_permissions
-_cascade_context = threading.local()
+# Context-var for cycle detection in apply_cascade_permissions.
+# Works correctly for both sync (WSGI) and async (ASGI) Django.
+_cascade_seen: ContextVar[set | None] = ContextVar("_cascade_seen", default=None)
 
 
 def apply_cascade_permissions(
@@ -93,12 +50,12 @@ def apply_cascade_permissions(
     """
     from graphene_django.registry import get_global_registry
 
-    # Cycle detection via thread-local seen set
-    if not hasattr(_cascade_context, "seen"):
-        _cascade_context.seen = set()
-
-    seen = _cascade_context.seen
-    is_root_call = len(seen) == 0
+    # Cycle detection via context-var seen set
+    seen = _cascade_seen.get()
+    is_root_call = seen is None
+    if is_root_call:
+        seen = set()
+        _cascade_seen.set(seen)
 
     if node_class in seen:
         return queryset  # break cycle
@@ -110,7 +67,7 @@ def apply_cascade_permissions(
 
         for field in model._meta.get_fields():
             # Only concrete FK fields (have a column in the DB)
-            if not hasattr(field, "related_model") or not hasattr(field, "column"):
+            if getattr(field, "related_model", None) is None or not hasattr(field, "column"):
                 continue
 
             # If specific fields requested, skip others
@@ -132,4 +89,4 @@ def apply_cascade_permissions(
     finally:
         seen.discard(node_class)
         if is_root_call:
-            _cascade_context.seen = set()
+            _cascade_seen.set(None)

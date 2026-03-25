@@ -69,7 +69,7 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         fk_fields = [
             f
             for f in cls._meta.model._meta.get_fields()
-            if hasattr(f, "attname") and hasattr(f, "related_model")
+            if hasattr(f, "attname") and getattr(f, "related_model", None) is not None
         ]
         if source_pk is not None and fk_fields:
             # Copy real FK IDs so visible downstream targets resolve normally.
