@@ -92,13 +92,6 @@ class SearchQueryFilter(AnnotatedFilter):
     postfix = "search_query"
     available_lookups = ("exact",)
 
-    def filter(self, qs: models.QuerySet, value: Value) -> models.QuerySet:
-        """Apply full-text search filtering on the QuerySet.
-
-        Uses the `SearchVector` and `SearchQuery` object.
-        """
-        return super().filter(qs, value)
-
 
 class SearchRankFilter(AnnotatedFilter):
     """A specialized `AnnotatedFilter` for ranking search results.
@@ -112,10 +105,6 @@ class SearchRankFilter(AnnotatedFilter):
 
     postfix = "search_rank"
     available_lookups = ("exact", "gt", "gte", "lt", "lte")
-
-    def filter(self, qs: models.QuerySet, value: Value) -> models.QuerySet:
-        """Apply search ranking filtering on the QuerySet using the `SearchRank` object."""
-        return super().filter(qs, value)
 
 
 class TrigramFilter(AnnotatedFilter):
@@ -131,13 +120,6 @@ class TrigramFilter(AnnotatedFilter):
 
     postfix = "trigram"
     available_lookups = ("exact", "gt", "gte", "lt", "lte")
-
-    def filter(self, qs: models.QuerySet, value: Value) -> models.QuerySet:
-        """Apply the filter based on trigram similarity or distance on the QuerySet.
-
-        Uses similarity or distance of trigram to perform the filtering.
-        """
-        return super().filter(qs, value)
 
 
 class BaseRelatedFilter(LazyRelatedClassMixin):
