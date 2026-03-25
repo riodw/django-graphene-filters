@@ -1,24 +1,18 @@
-"""Utilities Module for Custom Django Filters.
-
-This module provides utility functions designed to extend the capabilities of
-the native Django-filter library, with specialized functions for handling field
-lookups and transformations.
+"""Utilities for field lookup and transform discovery.
 
 Functions
 ---------
-- `lookups_for_field`: Determines the set of valid lookup expressions for a given model field.
-- `lookups_for_transform`: Gets valid lookups for a given transform.
+- ``lookups_for_field``: All valid lookup expressions for a model field.
+- ``lookups_for_transform``: Subsequent lookups for a given transform.
 
 Usage
 -----
 ```python
-from .utils import lookups_for_field, lookups_for_transform
+from .utils import lookups_for_field
 
-# Fetch valid lookup expressions for a CharField
-lookups = lookups_for_field(models.CharField(), support_negation=True)
-
-# Fetch valid lookup expressions for a given transform
-transform_lookups = lookups_for_transform(models.Transform())
+# e.g. ['exact', 'icontains', 'gt', ...]
+lookups = lookups_for_field(MyModel._meta.get_field("name"))
+```
 """
 
 from django.db.models.constants import LOOKUP_SEP
