@@ -13,7 +13,7 @@ import graphene
 from graphene_django import DjangoObjectType
 from graphene_django.types import DjangoObjectTypeOptions
 
-logger = logging.getLogger("django_graphene_filters.permissions")
+logger = logging.getLogger(__name__)
 
 
 class AdvancedDjangoObjectType(DjangoObjectType):
