@@ -12,7 +12,6 @@ from collections.abc import Callable, Iterator
 from functools import reduce
 from typing import (
     Any,
-    Optional,
     cast,
 )
 
@@ -148,10 +147,7 @@ def is_regular_lookup_expr(lookup_expr: str) -> bool:
     Returns:
         bool: True if it should be processed normally, False otherwise.
     """
-    # Add any other special lookup expressions to this list as the need arises.
-    return not any(
-        [is_full_text_search_lookup_expr(lookup_expr)],
-    )
+    return not is_full_text_search_lookup_expr(lookup_expr)
 
 
 class FilterSetMetaclass(filterset.FilterSetMetaclass):
@@ -235,12 +231,9 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
         if not target_filterset:
             return expanded
 
-        # Get filters from the target
-        # We trigger get_filters() on the target to ensure it is also expanded
+        # Get filters from the target (triggers expansion on the target too)
         target_filters = target_filterset.get_filters()
 
-        # 2. Get filters from the target
-        # We trigger get_filters() on the target to ensure it is also expanded
         for name, field in target_filters.items():
             # Skip full text search generated filters to avoid noise/recursion issues if needed
             # or include them if desired. For now, we include everything.
@@ -495,7 +488,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
             self,
             and_forms: list["AdvancedFilterSet.TreeFormMixin"] | None = None,
             or_forms: list["AdvancedFilterSet.TreeFormMixin"] | None = None,
-            not_form: Optional["AdvancedFilterSet.TreeFormMixin"] = None,
+            not_form: "AdvancedFilterSet.TreeFormMixin | None" = None,
             *args,
             **kwargs,
         ) -> None:
@@ -513,7 +506,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
                 for i, form in enumerate(getattr(self, f"{key}_forms")):
                     if form.errors:
                         errors[f"{key}_{i}"] = form.errors
-                if len(errors):
+                if errors:
                     self_errors.update({key: errors})
             if self.not_form and self.not_form.errors:
                 self_errors.update({"not": self.not_form.errors})
@@ -690,7 +683,7 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         """Create available full text search filters."""
         new_filters = OrderedDict()
         full_text_search_fields = cls.get_full_text_search_fields()
-        if not len(full_text_search_fields):
+        if not full_text_search_fields:
             return new_filters
         if not settings.IS_POSTGRESQL:
             warnings.warn(
@@ -700,25 +693,16 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
             return new_filters
         from .filters import SearchQueryFilter, SearchRankFilter, TrigramFilter
 
-        new_filters = OrderedDict(
-            [
-                *new_filters.items(),
-                *cls.create_special_filters(base_filters, SearchQueryFilter).items(),
-                *cls.create_special_filters(base_filters, SearchRankFilter).items(),
-            ]
-        )
+        new_filters.update(cls.create_special_filters(base_filters, SearchQueryFilter))
+        new_filters.update(cls.create_special_filters(base_filters, SearchRankFilter))
+
         if not settings.HAS_TRIGRAM_EXTENSION:
             warnings.warn(
                 "Trigram search is not available because the `pg_trgm` extension is not installed.",
             )
             return new_filters
         for field_name in full_text_search_fields:
-            new_filters = OrderedDict(
-                [
-                    *new_filters.items(),
-                    *cls.create_special_filters(base_filters, TrigramFilter, field_name).items(),
-                ]
-            )
+            new_filters.update(cls.create_special_filters(base_filters, TrigramFilter, field_name))
         return new_filters
 
     @classmethod
@@ -801,6 +785,6 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
                     fields.append((k, []))
             else:
                 regular_field = [lookup_expr for lookup_expr in v if predicate(lookup_expr)]
-                if len(regular_field):
+                if regular_field:
                     fields.append((k, regular_field))
         return OrderedDict(fields)
