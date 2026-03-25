@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [0.4.0] - 2026-03-25
+
+### Added
+
+- **Cascade permissions** — `apply_cascade_permissions()` utility filters out
+  rows whose FK targets are hidden by the target node's `get_queryset`. Use
+  inside a node's `get_queryset` to enforce cascading visibility across
+  relationships. Supports an optional `fields` parameter to limit which FKs
+  are cascaded.
+- **Sentinel nodes** — `AdvancedDjangoObjectType.get_node()` now returns a
+  redacted sentinel instance (`pk=0`) instead of `None` when `get_queryset`
+  hides a row. This prevents `"Cannot return null for non-nullable field"`
+  GraphQL errors on non-nullable FK fields. Sentinels preserve real FK IDs
+  so visible downstream targets resolve normally.
+- **`isRedacted` field** — every `AdvancedDjangoObjectType` exposes an
+  `isRedacted: Boolean!` computed field. Returns `true` for sentinel nodes
+  (`pk=0`), `false` for real rows. Clients can query it to detect redacted
+  FK targets without decoding Relay global IDs.
+- **Relay Node interface warning** — `AdvancedDjangoObjectType` emits a
+  `UserWarning` at class creation if the subclass does not implement the
+  Relay `Node` interface, since sentinel and cascade behaviour requires
+  `get_node` for FK resolution.
+- **Async-safe cycle detection** — cascade permission cycle detection uses
+  `contextvars.ContextVar` instead of `threading.local`, ensuring correct
+  isolation under both WSGI (sync) and ASGI (async) Django.
+- **Permission combination test** — `test_permissions_combos.py` exercises
+  all 16 combinations of the 4 model-level view permissions (2^4) with a
+  recursive response-shape validator that adapts to any query depth.
+- **Async isolation test** — `test_permissions_async.py` verifies that
+  concurrent coroutines on the same thread get isolated cycle-detection
+  sets.
+
+### Fixed
+
+- **`_make_sentinel` FK detection** — used `hasattr(f, "related_model")`
+  which returns `True` for ALL fields in Django 6.0.3+ (the attribute
+  exists but is `None` on non-FK fields). This caused the sentinel to copy
+  ALL columns from the hidden row, defeating redaction. Fixed to
+  `getattr(f, "related_model", None) is not None`.
+- **`apply_cascade_permissions` FK detection** — same `related_model` fix.
+- **`check_pg_trigram_extension`** — queried `pg_available_extensions`
+  (available but not necessarily installed) instead of `pg_extension`
+  (actually installed).
+- **`get_fixed_settings` crash** — database access at import time could
+  crash during `collectstatic` or `makemigrations`. Now catches exceptions
+  and falls back to safe defaults with a logged warning.
+
+### Changed
+
+- **`AnnotatedFilter`** — replaced mutable instance-level `filter_counter`
+  with a module-level `itertools.count()` counter. Removed the `__init__`
+  override and `annotation_name` property.
+- **Postgres imports guarded** — `filters.py` and `input_data_factories.py`
+  wrap `django.contrib.postgres.search` imports in `try/except ImportError`
+  for forward-compatibility with non-Postgres environments.
+- **Code cleanup across all modules** — removed unused imports, stale
+  comments, dead enums, verbose docstrings, redundant branches, and
+  `len()` checks on collections. Replaced `OrderedDict` spread-rebuilds
+  with `.update()`, `rstrip` with `removesuffix`, `Optional` with
+  `| None`, and `any([single_item])` with direct expressions.
+
+### Removed
+
+- **`BasePermission`, `AllowAny`, `IsAuthenticated`** — permission classes
+  that were exported but never integrated into the framework. Cascade
+  permissions are handled by `apply_cascade_permissions()` instead.
+- **`RelatedOrder.queryset` parameter** — accepted but never read.
+  Ordering determines sort direction, not row visibility.
+- **`SearchQueryType` enum** — defined but never wired into the schema.
+  Documented as a TODO for future `search_type` support.
+- **`docs/design-permission-classes.md`** — superseded RFC for declarative
+  permission classes.
+
 ## [0.3.1] - 2026-03-18
 
 ### Fixed
@@ -142,6 +215,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline** — GitHub Actions testing across Python 3.10–3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
+[0.4.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.4.0
 [0.3.1]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.3.1
 [0.3.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.3.0
 [0.2.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.2.0
