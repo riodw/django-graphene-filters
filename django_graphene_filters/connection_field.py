@@ -74,8 +74,7 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
 
         if self.provided_orderset_class:
             return f"{node_type_name}{self.provided_orderset_class.__name__}"
-        else:
-            return node_type_name
+        return node_type_name
 
     @property
     def orderset_class(self) -> Any | None:
@@ -140,8 +139,7 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
 
         if self.provided_filterset_class:
             return f"{node_type_name}{self.provided_filterset_class.__name__}"
-        else:
-            return node_type_name
+        return node_type_name
 
     @property
     def filterset_class(self) -> type[AdvancedFilterSet]:
@@ -198,13 +196,9 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         for name, f in full_filters.items():
             # Check if this filter is an "expanded" child of a RelatedFilter.
             # E.g. "values__value" is a child of "values".
-            is_expanded_child = False
-            for rel_name in related_filters:
-                # We assume expanded filters start with "rel_name" + "__"
-                prefix = f"{rel_name}{LOOKUP_SEP}"
-                if name.startswith(prefix):
-                    is_expanded_child = True
-                    break
+            is_expanded_child = any(
+                name.startswith(f"{rel_name}{LOOKUP_SEP}") for rel_name in related_filters
+            )
 
             # Keep the filter if it's not an expanded child and NOT a RelatedFilter itself
             # We check both isinstance and class name for robustness
