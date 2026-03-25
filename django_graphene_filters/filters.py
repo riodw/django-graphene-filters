@@ -1,7 +1,6 @@
 """Additional filters for special lookups."""
 
 import itertools
-from collections.abc import Callable
 from typing import Any, NamedTuple
 
 try:
@@ -121,8 +120,7 @@ class BaseRelatedFilter(LazyRelatedClassMixin):
     ) -> None:
         self._has_explicit_queryset = kwargs.get("queryset") is not None
         super().__init__(*args, **kwargs)
-        # using private member to avoid collision with property method
-        self._filterset = filterset  # Changed from self.filterset to self._filterset
+        self._filterset = filterset
         self.lookups = lookups or []
 
     def bind_filterset(self, filterset: type["BaseFilterSet"]) -> None:
