@@ -3,13 +3,20 @@
 from typing import Any
 
 # Django imports
-from django.contrib.postgres.search import (
-    SearchQuery,
-    SearchRank,
-    SearchVector,
-    TrigramDistance,
-    TrigramSimilarity,
-)
+try:
+    from django.contrib.postgres.search import (
+        SearchQuery,
+        SearchRank,
+        SearchVector,
+        TrigramDistance,
+        TrigramSimilarity,
+    )
+except ImportError:  # pragma: no cover — psycopg2 / postgres not installed
+    SearchQuery = None
+    SearchRank = None
+    SearchVector = None
+    TrigramDistance = None
+    TrigramSimilarity = None
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.constants import LOOKUP_SEP

@@ -4,13 +4,20 @@ import itertools
 from collections.abc import Callable
 from typing import Any, NamedTuple
 
-from django.contrib.postgres.search import (
-    SearchQuery,
-    SearchRank,
-    SearchVector,
-    TrigramDistance,
-    TrigramSimilarity,
-)
+try:
+    from django.contrib.postgres.search import (
+        SearchQuery,
+        SearchRank,
+        SearchVector,
+        TrigramDistance,
+        TrigramSimilarity,
+    )
+except ImportError:  # pragma: no cover — psycopg2 / postgres not installed
+    SearchQuery = None
+    SearchRank = None
+    SearchVector = None
+    TrigramDistance = None
+    TrigramSimilarity = None
 from django.db import models
 from django.db.models import QuerySet
 from django.db.models.constants import LOOKUP_SEP
