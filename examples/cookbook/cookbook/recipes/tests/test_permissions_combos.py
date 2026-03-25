@@ -1,17 +1,16 @@
 """Dynamic permission combination tests.
 
-Tests all 16 combinations of the 4 model-level view permissions
-(2^4 = 16). Each combination creates a unique user, fires the same
-deeply-nested allObjects query, and validates:
+Fires 17 queries total: 1 unauthenticated + all 16 combinations of the
+4 model-level view permissions (2^4 = 16). Each query uses the same
+deeply-nested allObjects query and validates:
 
 1. Root Object count matches the expected cascade/non-cascade count.
 2. No private data (isPrivate=True) appears at any depth — root Objects,
    objectType, values, attributes, or attribute.objectType.
+3. No unexpected sentinels where cascade guarantees visibility.
 
 Excluded user types (tested elsewhere):
 - is_staff=True
-- is_authenticated=False
-- regular user (no permissions — covered here as combo index 0)
 """
 
 import itertools
@@ -213,38 +212,47 @@ class PermissionCombinationTests(GraphQLTestCase):
     # Test
     # ------------------------------------------------------------------
 
+    def _run_query_and_validate(self, perms, label):
+        """Execute the query and validate counts + response shape for a permission set."""
+        response = self.query(ALL_OBJECTS_QUERY)
+        self.assertResponseNoErrors(response)
+        content = json.loads(response.content)
+        edges = content["data"]["allObjects"]["edges"]
+
+        # 1. Root Object count
+        expected = self._expected_object_count(perms)
+        self.assertEqual(
+            len(edges),
+            expected,
+            f"[{label}] Root Object count: expected {expected}, got {len(edges)}",
+        )
+
+        # 2. Recursive shape check — no private data, no
+        #    unexpected sentinels at any depth.
+        for j, edge in enumerate(edges):
+            self._walk_node(
+                edge["node"],
+                "view_object",
+                True,
+                perms,
+                label,
+                f"Object[{j}]",
+            )
+
     def test_all_permission_combinations(self):
-        """Fire 16 queries (one per combo) and validate counts + no private data."""
+        """Fire 17 queries: 1 unauthenticated + 16 permission combos."""
         self.assertEqual(len(self.perm_combos), 16)
 
+        # Query 1: unauthenticated user (not logged in, no session)
+        self.client.logout()
+        with self.subTest(permissions="unauthenticated"):
+            self._run_query_and_validate([], "unauthenticated")
+
+        # Queries 2–17: authenticated users with each permission combo
         for i, perms in enumerate(self.perm_combos):
             label = ", ".join(perms) if perms else "no perms"
 
             with self.subTest(permissions=label):
                 username = self._create_user(perms, i)
                 self.client.login(username=username, password=TEST_USER_PASSWORD)
-
-                response = self.query(ALL_OBJECTS_QUERY)
-                self.assertResponseNoErrors(response)
-                content = json.loads(response.content)
-                edges = content["data"]["allObjects"]["edges"]
-
-                # 1. Root Object count
-                expected = self._expected_object_count(perms)
-                self.assertEqual(
-                    len(edges),
-                    expected,
-                    f"[{label}] Root Object count: expected {expected}, got {len(edges)}",
-                )
-
-                # 2. Recursive shape check — no private data, no
-                #    unexpected sentinels at any depth.
-                for j, edge in enumerate(edges):
-                    self._walk_node(
-                        edge["node"],
-                        "view_object",
-                        True,
-                        perms,
-                        label,
-                        f"Object[{j}]",
-                    )
+                self._run_query_and_validate(perms, label)
