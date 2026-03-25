@@ -40,6 +40,7 @@ uv add django-graphene-filters
 git clone https://github.com/riodw/django-graphene-filters.git
 cd django-graphene-filters
 uv sync
+uv sync --upgrade
 ```
 
 ## Running
