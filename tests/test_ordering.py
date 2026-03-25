@@ -43,11 +43,7 @@ class ChildOrderSet(AdvancedOrderSet):
 
 
 class ParentOrderSet(AdvancedOrderSet):
-    related = RelatedOrder(
-        ChildOrderSet,
-        field_name="order_model",
-        queryset=RelatedModel.objects.none(),
-    )
+    related = RelatedOrder(ChildOrderSet, field_name="order_model")
 
     class Meta:
         model = OrderModel
@@ -221,11 +217,7 @@ class TestOrderSetInit:
                 fields = ["title"]
 
         class ParentPerm(AdvancedOrderSet):
-            child_rel = RelatedOrder(
-                ChildPerm,
-                field_name="order_model",
-                queryset=RelatedModel.objects.none(),
-            )
+            child_rel = RelatedOrder(ChildPerm, field_name="order_model")
 
             class Meta:
                 model = OrderModel
@@ -249,11 +241,7 @@ class TestOrderSetInit:
                 fields = ["title"]
 
         class StrictParent(AdvancedOrderSet):
-            child_rel = RelatedOrder(
-                StrictChild,
-                field_name="order_model",
-                queryset=RelatedModel.objects.none(),
-            )
+            child_rel = RelatedOrder(StrictChild, field_name="order_model")
 
             class Meta:
                 model = OrderModel
@@ -276,11 +264,7 @@ class TestOrderSetInit:
                 fields = ["title"]
 
         class QuietParent(AdvancedOrderSet):
-            child_rel = RelatedOrder(
-                NoisyChild,
-                field_name="order_model",
-                queryset=RelatedModel.objects.none(),
-            )
+            child_rel = RelatedOrder(NoisyChild, field_name="order_model")
 
             class Meta:
                 model = OrderModel
@@ -338,11 +322,9 @@ class TestBaseRelatedOrder:
 
 
 class TestRelatedOrder:
-    def test_field_name_and_queryset(self):
-        qs = RelatedModel.objects.none()
-        order = RelatedOrder(orderset=ChildOrderSet, field_name="my_field", queryset=qs)
+    def test_field_name_stored(self):
+        order = RelatedOrder(orderset=ChildOrderSet, field_name="my_field")
         assert order.field_name == "my_field"
-        assert order.queryset is qs
 
     def test_inherits_orderset_property(self):
         order = RelatedOrder(orderset=ChildOrderSet, field_name="f")

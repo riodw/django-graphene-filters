@@ -2,8 +2,6 @@
 
 from typing import Any
 
-from django.db.models import QuerySet
-
 from .mixins import LazyRelatedClassMixin
 
 
@@ -37,9 +35,6 @@ class RelatedOrder(BaseRelatedOrder):
     class defined for the related model.
     """
 
-    def __init__(
-        self, orderset: str | type, field_name: str, queryset: QuerySet | None = None, **kwargs
-    ) -> None:
+    def __init__(self, orderset: str | type, field_name: str, **kwargs) -> None:
         super().__init__(orderset, **kwargs)
         self.field_name = field_name
-        self.queryset = queryset
