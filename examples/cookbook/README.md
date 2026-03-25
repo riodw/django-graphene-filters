@@ -99,7 +99,7 @@ Create test users with individual Django `view_*` permissions for exercising
 - `view_attribute_N` — has `recipes.view_attribute`
 - `view_value_N` — has `recipes.view_value`
 
-All share the password `testpass123`. Superusers are never deleted.
+All share the password `admin`.
 
 ```bash
 # Create 1 set of test users (6 users, default)

@@ -76,7 +76,7 @@ uv run python examples/cookbook/manage.py delete_data everything
 Create test users with individual Django `view_*` permissions for exercising
 `get_queryset` permission branches. Each set creates 6 users: 1 staff,
 1 regular (no perms), and 4 per-model permission users. All share password
-`testpass123`. Superusers are never deleted.
+`admin`. Superusers are never deleted.
 
 ```shell
 # Create 1 set of test users (6 users)
@@ -122,9 +122,9 @@ uv build
 
 ### Updating Version:
 
-- pyproject.toml:4
-- django_graphene_filters/**init**.py:21
-- tests/test_django_graphene_filters.py:8
+- `pyproject.toml:4`
+- `django_graphene_filters/__init__.py:22`
+- `tests/test_django_graphene_filters.py:8`
 
 ## Publish
 
@@ -163,9 +163,34 @@ Then run:
 uv sync
 ```
 
-## Notes:
+## Permissions & Cascade Visibility
 
-Files to do:
+When a node's `get_queryset` hides rows (e.g. `is_private=False` for non-staff),
+FK fields pointing to hidden targets would normally cause
+`"Cannot return null for non-nullable field"` errors.
 
-- filterset.py `AdvancedFilterSet`
-- input_data_factories.py
+`AdvancedDjangoObjectType` solves this with **sentinel nodes** — redacted
+instances (`pk=0`) returned by `get_node` when the real row is hidden.
+Every node exposes an `isRedacted: Boolean!` field so clients can detect them.
+
+Use `apply_cascade_permissions` inside `get_queryset` to proactively exclude
+rows whose FK targets are hidden:
+
+```python
+from django_graphene_filters import AdvancedDjangoObjectType, apply_cascade_permissions
+
+class ObjectNode(AdvancedDjangoObjectType):
+    class Meta:
+        model = Object
+        interfaces = (Node,)
+        fields = "__all__"
+
+    @classmethod
+    def get_queryset(cls, queryset, info):
+        user = getattr(info.context, "user", None)
+        if user and user.is_staff:
+            return queryset
+        return apply_cascade_permissions(cls, queryset.filter(is_private=False), info)
+```
+
+See the [CHANGELOG](CHANGELOG.md) for full details on the 0.4.0 permissions system.
