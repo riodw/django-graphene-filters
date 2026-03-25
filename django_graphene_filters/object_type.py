@@ -9,6 +9,7 @@ import warnings
 from collections.abc import Sequence
 from typing import Any
 
+import graphene
 from graphene_django import DjangoObjectType
 from graphene_django.types import DjangoObjectTypeOptions
 
@@ -33,10 +34,23 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         use case.
     """
 
+    is_redacted = graphene.Boolean(
+        required=True,
+        description=(
+            "True when this node is a redacted sentinel (pk=0). "
+            "The real row exists but is hidden by get_queryset permissions."
+        ),
+    )
+
     class Meta:
         """Mark this type as abstract so it is not registered as a concrete node."""
 
         abstract = True
+
+    @staticmethod
+    def resolve_is_redacted(root: Any, info: Any) -> bool:
+        """Return True when the instance is a sentinel (pk=0)."""
+        return root.pk == 0
 
     @classmethod
     def __init_subclass_with_meta__(

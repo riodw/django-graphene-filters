@@ -42,6 +42,15 @@ class TestMakeSentinelFallback:
         assert sentinel.pk == 0
         assert sentinel.object_type_id == ot.pk
 
+    def test_is_redacted_field(self):
+        """resolve_is_redacted returns True for sentinels, False for real instances."""
+        ot = ObjectType.objects.create(name="real_ot")
+        obj = Object.objects.create(name="real_obj", object_type=ot)
+        sentinel = ObjectNode._make_sentinel()
+
+        assert ObjectNode.resolve_is_redacted(sentinel, None) is True
+        assert ObjectNode.resolve_is_redacted(obj, None) is False
+
 
 @pytest.mark.django_db
 class TestGetNodeEdgeCases:
