@@ -161,7 +161,7 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
 
         fields: dict[str, graphene.InputField] = {}
 
-        # Cache the fully expanded filters once
+        # get_filters() returns the class-level cached expansion — no repeated work.
         all_filters = self.filterset_class.get_filters()
 
         for child in root.children:
@@ -199,7 +199,7 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
         form_field = filter_obj.field
 
         # Handle special case when the filter_obj filter type is not 'isnull' and the name is not declared
-        if filter_type != "isnull" and name not in getattr(self.filterset_class, "declared_filters"):
+        if filter_type != "isnull" and name not in self.filterset_class.declared_filters:
             model_field = get_model_field(model, filter_obj.field_name)
             if hasattr(model_field, "formfield"):
                 form_field = model_field.formfield(required=filter_obj.extra.get("required", False))
