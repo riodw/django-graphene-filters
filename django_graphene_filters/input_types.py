@@ -12,7 +12,7 @@ class SearchConfigInputType(graphene.InputObjectType):
 
     value = graphene.String(
         required=True,
-        description="The configuration value for  `SearchVector` or `SearchQuery`",
+        description="The configuration value for `SearchVector` or `SearchQuery`",
     )
     is_field = graphene.Boolean(
         default_value=False,
@@ -41,15 +41,6 @@ class SearchVectorInputType(graphene.InputObjectType):
     weight = graphene.InputField(SearchVectorWeight, description="The weight to be applied to the vector")
 
 
-class SearchQueryType(graphene.Enum):
-    """Enum to represent the type of a SearchQuery object."""
-
-    PLAIN = "plain"
-    PHRASE = "phrase"
-    RAW = "raw"
-    WEBSEARCH = "websearch"
-
-
 def create_search_query_input_type() -> type[graphene.InputObjectType]:
     """Create and return an InputObjectType for a SearchQuery object.
 
@@ -64,21 +55,15 @@ def create_search_query_input_type() -> type[graphene.InputObjectType]:
             SearchConfigInputType, description="Configuration settings for the query"
         ),
         settings.AND_KEY: graphene.InputField(
-            graphene.List(
-                graphene.NonNull(lambda: SearchQueryInputType)
-            ),  # Type will be set after initialization
+            graphene.List(graphene.NonNull(lambda: SearchQueryInputType)),
             description="AND logical operator field",
         ),
         settings.OR_KEY: graphene.InputField(
-            graphene.List(
-                graphene.NonNull(lambda: SearchQueryInputType)
-            ),  # Type will be set after initialization
+            graphene.List(graphene.NonNull(lambda: SearchQueryInputType)),
             description="OR logical operator field",
         ),
         settings.NOT_KEY: graphene.InputField(
-            graphene.List(
-                graphene.NonNull(lambda: SearchQueryInputType)
-            ),  # Type will be set after initialization
+            graphene.List(graphene.NonNull(lambda: SearchQueryInputType)),
             description="NOT logical operator field",
         ),
     }
