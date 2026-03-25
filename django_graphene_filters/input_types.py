@@ -46,8 +46,24 @@ def create_search_query_input_type() -> type[graphene.InputObjectType]:
 
     Returns:
         The InputObjectType class for the SearchQuery object.
+
+    .. note::
+
+        Django's ``SearchQuery`` supports a ``search_type`` parameter
+        (``"plain"``, ``"phrase"``, ``"raw"``, ``"websearch"``) that
+        controls how the query string is parsed.  Currently this is not
+        exposed in the GraphQL schema — all queries default to
+        ``"plain"``.  To support it, add a ``search_type`` field here
+        (using a ``graphene.Enum``) and pass it through in
+        ``input_data_factories.create_search_query()``.
     """
-    # Define the attributes of the new class dynamically.
+    # TODO: Expose Django's SearchQuery.search_type parameter
+    # (plain / phrase / raw / websearch) as an optional field.
+    # Requires adding a graphene.Enum, wiring it into attrs below,
+    # and passing it through in create_search_query().
+
+    # The type is built dynamically because the AND/OR/NOT fields
+    # reference the type itself (self-referential via lambdas).
     attrs = {
         "__doc__": "Input type for creating a SearchQuery object.",
         "value": graphene.String(description="The search query value"),
