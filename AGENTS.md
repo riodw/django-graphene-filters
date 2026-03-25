@@ -4,7 +4,7 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ## Project Overview
 
-`django-graphene-filters` is a Python library providing advanced auto-related filters for graphene-django. It extends `django-filter` and `graphene-django` with nested/tree-structured filtering (AND/OR/NOT), related model traversal via `RelatedFilter`, ordering via `AdvancedOrderSet`, full-text search (PostgreSQL SearchVector/SearchRank/Trigram), and per-field permission checks.
+`django-graphene-filters` is a Python library providing advanced auto-related filters for graphene-django. It extends `django-filter` and `graphene-django` with nested/tree-structured filtering (AND/OR/NOT), related model traversal via `RelatedFilter`, ordering via `AdvancedOrderSet`, full-text search (PostgreSQL SearchVector/SearchRank/Trigram), per-field permission checks, and cascade FK visibility via `apply_cascade_permissions`.
 
 ## Development Commands
 
@@ -96,12 +96,20 @@ Parallel to filtering, ordering uses its own class hierarchy:
 
 ### Django Settings Integration
 
-`conf.py` exposes a `settings` singleton configurable via `DJANGO_GRAPHENE_FILTERS` in Django's `settings.py`. Keys: `FILTER_KEY` (default `"filter"`), `AND_KEY`, `OR_KEY`, `NOT_KEY`. Fixed settings `IS_POSTGRESQL` and `HAS_TRIGRAM_EXTENSION` are auto-detected at startup.
+`conf.py` exposes a `settings` singleton configurable via `DJANGO_GRAPHENE_FILTERS` in Django's `settings.py`. Keys: `FILTER_KEY` (default `"filter"`), `AND_KEY`, `OR_KEY`, `NOT_KEY`. Fixed settings `IS_POSTGRESQL` and `HAS_TRIGRAM_EXTENSION` are auto-detected at startup (with graceful fallback if the DB is unreachable).
 
 ### Test Configuration
 
 Tests use `pytest-django` with `DJANGO_SETTINGS_MODULE = examples.cookbook.cookbook.settings` (defined in `pytest.ini`). The cookbook app uses SQLite, so PostgreSQL-specific features (full-text search, trigram) are tested with mocks/patches where needed.
 
+### Permissions & Cascade Visibility
+
+- **`apply_cascade_permissions`** (`permissions.py`) — Utility function for use inside `get_queryset`. Filters out rows whose FK targets are hidden by the target node's `get_queryset`. Uses `contextvars.ContextVar` for async-safe cycle detection. Accepts an optional `fields` parameter to limit which FKs are cascaded.
+- **Sentinel nodes** — `AdvancedDjangoObjectType.get_node()` returns a redacted sentinel instance (`pk=0`) instead of `None` when `get_queryset()` hides a row. Sentinels copy real FK IDs from the hidden row so visible downstream targets resolve normally; hidden targets produce their own sentinels recursively.
+- **`isRedacted: Boolean!`** — Computed field on every `AdvancedDjangoObjectType`. Returns `true` for sentinel nodes, `false` for real rows. Clients query this to detect redacted FK targets.
+- **Relay Node warning** — `AdvancedDjangoObjectType` emits a `UserWarning` if a subclass lacks the Relay `Node` interface, since sentinels and cascade permissions require `get_node` for FK resolution.
+- **Per-field permission checks** — Convention-based `check_{field}_permission(request)` methods on `AdvancedFilterSet` and `AdvancedOrderSet`. Auto-invoked during `__init__` for every field in the incoming data. Delegated through `RelatedFilter`/`RelatedOrder` chains.
+
 ### `AdvancedDjangoObjectType` (`object_type.py`)
 
-Extends `DjangoObjectType` to support `orderset_class` and `search_fields` in Meta. Overrides `get_node()` to return a redacted sentinel (pk=0) instead of `None` when `get_queryset()` hides a row, preventing "Cannot return null for non-nullable field" GraphQL errors.
+Extends `DjangoObjectType` to support `orderset_class`, `search_fields`, and `isRedacted` in Meta. Overrides `get_node()` with sentinel behaviour. Warns if Relay `Node` interface is missing.
