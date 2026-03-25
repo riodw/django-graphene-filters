@@ -143,8 +143,9 @@ class BaseRelatedFilter(LazyRelatedClassMixin):
         if queryset is None:
             # Auto-derive from the target filterset's model
             target = self.filterset
-            if target and hasattr(target, "_meta") and hasattr(target._meta, "model") and target._meta.model:
-                return target._meta.model.objects.all()
+            model = getattr(getattr(target, "_meta", None), "model", None)
+            if model:
+                return model.objects.all()
         assert queryset is not None, (
             f"Expected .get_queryset() on related filter '{self.parent.__class__.__name__}.{self.field_name}'"
             " to return a `QuerySet`, but got `None`."
