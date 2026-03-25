@@ -5,6 +5,7 @@ an `orderset_class` or `search_fields` in the Meta of your node type.
 """
 
 import logging
+import warnings
 from collections.abc import Sequence
 from typing import Any
 
@@ -51,6 +52,22 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         _meta.orderset_class = orderset_class
         _meta.search_fields = search_fields
         super().__init_subclass_with_meta__(_meta=_meta, **options)
+
+        # Sentinel / cascade permissions require Relay's get_node for FK
+        # resolution.  Without the Node interface, FK fields resolve via
+        # direct ORM attribute access, bypassing get_queryset entirely.
+        interfaces = getattr(_meta, "interfaces", ()) or ()
+        from graphene.relay import Node
+
+        if not any(issubclass(i, Node) for i in interfaces):
+            warnings.warn(
+                f"{cls.__name__} does not implement the Relay Node interface. "
+                "Sentinel and cascade permission behaviour for FK fields will "
+                "not work — FK targets will resolve directly from the ORM, "
+                "bypassing get_queryset. Add `interfaces = (graphene.relay.Node,)` "
+                "to the Meta class to enable full permission support.",
+                stacklevel=2,
+            )
 
     @classmethod
     def _make_sentinel(cls, source_pk: Any = None) -> Any:
