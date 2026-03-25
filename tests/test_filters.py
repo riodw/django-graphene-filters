@@ -20,8 +20,16 @@ class FilterTestModel(models.Model):
 
 
 def test_annotated_filter_name():
-    f = AnnotatedFilter(field_name="test")
-    assert "test_annotated" in f.annotation_name
+    """Annotation names are generated per-call via module-level counter."""
+    f = AnnotatedFilter(field_name="test", lookup_expr="exact")
+    qs = FilterTestModel.objects.none()
+    value = AnnotatedFilter.Value(annotation_value="val", search_value="val")
+    with patch.object(models.QuerySet, "annotate", return_value=qs) as mock_annotate:
+        with patch.object(models.QuerySet, "filter", return_value=qs):
+            f.filter(qs, value)
+    # The annotation kwarg key should start with "test_annotated_"
+    kwarg_key = list(mock_annotate.call_args.kwargs.keys())[0]
+    assert kwarg_key.startswith("test_annotated_")
 
 
 def test_annotated_filter_logic():

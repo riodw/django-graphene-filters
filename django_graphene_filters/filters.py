@@ -1,5 +1,6 @@
 """Additional filters for special lookups."""
 
+import itertools
 from collections.abc import Callable
 from typing import Any, NamedTuple
 
@@ -21,6 +22,10 @@ from django_filters.rest_framework.filters import ModelChoiceFilter
 
 from .mixins import LazyRelatedClassMixin
 
+# Module-level counter for generating unique annotation names.
+# Avoids mutable state on shared filter instances.
+_annotation_counter = itertools.count()
+
 
 class AnnotatedFilter(Filter):
     """A filter class that adds QuerySet annotations for advanced filtering.
@@ -36,33 +41,6 @@ class AnnotatedFilter(Filter):
     # Postfix for generating unique annotation names
     postfix = "annotated"
 
-    def __init__(
-        self,
-        field_name: str | None = None,
-        lookup_expr: str | None = None,
-        *,
-        label: str | None = None,
-        method: str | Callable | None = None,
-        distinct: bool = False,
-        exclude: bool = False,
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            field_name,
-            lookup_expr,
-            label=label,
-            method=method,
-            distinct=distinct,
-            exclude=exclude,
-            **kwargs,
-        )
-        self.filter_counter = 0
-
-    @property
-    def annotation_name(self) -> str:
-        """Return a unique name used for the annotation."""
-        return f"{self.field_name}_{self.postfix}_{self.creation_counter}_{self.filter_counter}"
-
     def filter(self, qs: models.QuerySet, value: Value) -> models.QuerySet:
         """Apply the filter to the QuerySet using annotation.
 
@@ -72,8 +50,7 @@ class AnnotatedFilter(Filter):
             return qs
         if self.distinct:
             qs = qs.distinct()
-        annotation_name = self.annotation_name
-        self.filter_counter += 1
+        annotation_name = f"{self.field_name}_{self.postfix}_{next(_annotation_counter)}"
         qs = qs.annotate(**{annotation_name: value.annotation_value})
         lookup = f"{annotation_name}{LOOKUP_SEP}{self.lookup_expr}"
         return self.get_method(qs)(**{lookup: value.search_value})
