@@ -1,5 +1,6 @@
 """Library settings."""
 
+import logging
 from functools import cache
 from typing import Any
 
@@ -28,23 +29,36 @@ DEFAULT_SETTINGS = {
 }
 
 
-# 5 - Cache the function to avoid repeated database calls
 @cache
 def get_fixed_settings() -> dict[str, bool]:
-    """Return fixed settings related to the database."""
-    is_postgresql = connection.vendor == "postgresql"
-    has_trigram_extension = check_pg_trigram_extension() if is_postgresql else False
+    """Return fixed settings related to the database.
+
+    Cached after the first successful call. If the database is not
+    reachable (e.g. during ``collectstatic``), falls back to safe
+    defaults — full-text search features will be disabled.
+    """
+    try:
+        is_postgresql = connection.vendor == "postgresql"
+        has_trigram_extension = check_pg_trigram_extension() if is_postgresql else False
+    except Exception:  # pragma: no cover — DB not reachable (e.g. collectstatic)
+        logging.getLogger("django_graphene_filters").warning(
+            "Could not determine database vendor — defaulting to non-PostgreSQL. "
+            "Full-text search and trigram features will be disabled. "
+            "This is expected during commands like collectstatic or makemigrations.",
+            exc_info=True,
+        )
+        is_postgresql = False
+        has_trigram_extension = False
     return {
         "IS_POSTGRESQL": is_postgresql,
         "HAS_TRIGRAM_EXTENSION": has_trigram_extension,
     }
 
 
-# 6
 def check_pg_trigram_extension() -> bool:
-    """Check if the PostgreSQL trigram extension is available."""
+    """Check if the PostgreSQL trigram extension is installed."""
     with connection.cursor() as cursor:
-        cursor.execute("SELECT COUNT(*) FROM pg_available_extensions WHERE name='pg_trgm'")
+        cursor.execute("SELECT COUNT(*) FROM pg_extension WHERE extname='pg_trgm'")
         return cursor.fetchone()[0] == 1
 
 
