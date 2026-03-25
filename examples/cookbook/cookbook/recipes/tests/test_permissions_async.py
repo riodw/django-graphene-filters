@@ -6,15 +6,14 @@ cycle-detection ``seen`` sets.
 """
 
 import asyncio
-
-from django.test import TestCase
+from unittest.mock import MagicMock
 
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
 from cookbook.recipes.schema import AttributeNode, ObjectNode
 from cookbook.recipes.services import seed_data
-from django_graphene_filters.permissions import _cascade_seen, apply_cascade_permissions
-from unittest.mock import MagicMock
+from django.test import TestCase
 
+from django_graphene_filters.permissions import _cascade_seen, apply_cascade_permissions
 
 COUNT = 2
 

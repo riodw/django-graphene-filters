@@ -89,16 +89,16 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
                     related_orders = getattr(cls, "related_orders", {})
 
                     if snake_key in related_orders:
-                        # Fetch correct model field_name incase it diverges from GraphQL alias
+                        # Fetch correct model field_name in case it diverges from GraphQL alias
                         real_field_name = related_orders[snake_key].field_name
-                        current_prefix = f"{prefix}{real_field_name}__" if prefix else f"{real_field_name}__"
+                        current_prefix = f"{prefix}{real_field_name}__"
 
                         target_orderset = related_orders[snake_key].orderset
                         if isinstance(value, Mapping) and target_orderset:
                             # Recurse with prefix (e.g., 'category__')
                             flat_orders.extend(target_orderset.get_flat_orders([value], current_prefix))
                     else:
-                        current_prefix = f"{prefix}{snake_key}__" if prefix else f"{snake_key}__"
+                        current_prefix = f"{prefix}{snake_key}__"
 
                         if isinstance(value, Mapping):
                             # Native field recurse if any, although leaf nodes generally shouldn't be objects
@@ -107,7 +107,7 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
                             # Reached the leaf node -> direction is attached here
                             direction_str = value.value if isinstance(value, enum.Enum) else str(value)
                             direction = "-" if direction_str.lower() == "desc" else ""
-                            field_path = current_prefix.rstrip("__")
+                            field_path = current_prefix.removesuffix("__")
                             flat_orders.append(f"{direction}{field_path}")
         return flat_orders
 
@@ -123,10 +123,8 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
                 if model:
                     for name in get_concrete_field_names(model):
                         fields[name] = None
-            elif isinstance(meta_fields, dict):
-                for k in meta_fields:
-                    fields[k] = None
             else:
+                # Works for both dict (iterates keys) and list/tuple (iterates values)
                 for k in meta_fields:
                     fields[k] = None
 
