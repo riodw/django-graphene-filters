@@ -15,28 +15,29 @@ Quick check — print the number of detected providers and methods:
     print(f'{len(p)} providers, {sum(len(m) for m in p.values())} methods')
     "
 
-Expected output (Faker 37.1.0): 24 providers, 171 methods
+Expected output (Faker 37.1.0): 25 providers, 175 methods
 
 Estimating created rows for a given count (X):
 
-    ObjectType  = 24              (one per provider)
-    Attribute   = 171             (one per method)
-    Object      = 24 * X         (X objects per provider)
-    Value       = 171 * X        (one value per attribute per object)
+    ObjectType  = 25              (one per provider)
+    Attribute   = 175             (one per method)
+    Object      = 25 * X         (X objects per provider)
+    Value       = 175 * X        (one value per attribute per object)
     ---
-    Total rows  = 24 + 171 + (24 * X) + (171 * X)
-                = 195 + 195X
+    Total rows  = 25 + 175 + (25 * X) + (175 * X)
+                = 200 + 200X
 
     Examples:
-        X=1   ->   390 rows
-        X=5   ->  1170 rows
-        X=50  -> 9945 rows
+        X=1   ->   400 rows
+        X=5   ->  1200 rows
+        X=50  -> 10200 rows
 """
 
 import inspect
 import pkgutil
 import random
 from collections.abc import Callable
+from decimal import Decimal
 
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
 from faker import Faker
@@ -55,7 +56,7 @@ def _is_safe_generator(fake: Faker, method_name: str) -> bool:
         return False
 
     # Only accept simple scalar types that can be meaningfully stored as text
-    return isinstance(result, (str, int, float, bool))
+    return isinstance(result, (str, int, float, bool, Decimal))
 
 
 def discover_providers(fake: Faker) -> dict[str, list[str]]:

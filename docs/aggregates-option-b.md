@@ -764,17 +764,150 @@ The permission check convention:
 - **Complexity:** Medium — the aggregate class is simpler than filtersets (no tree structure or AND/OR/NOT logic). The main work is the metaclass validation, factory schema generation, and Relay connection type extension.
 - **Estimated time:** 1-2 weeks
 
-### Implementation Order
+### Implementation Plan
 
-1. `aggregate_types.py` — `UniqueValueType`, `STAT_TYPES`, `FIELD_CATEGORIES`, `VALID_STATS`
-2. `aggregateset.py` — `STAT_REGISTRY`, `AggregateSetMetaclass`, `AdvancedAggregateSet`, helper functions
-3. `aggregate_arguments_factory.py` — `AggregateArgumentsFactory`
-4. `object_type.py` — add `aggregate_class` to `__init_subclass_with_meta__`
-5. `conf.py` — add `AGGREGATE_MAX_VALUES`, `AGGREGATE_MAX_UNIQUES`
-6. `connection_field.py` — integrate aggregate resolution + connection type override
-7. `__init__.py` — export `AdvancedAggregateSet`
-8. Cookbook example — `aggregates.py`, update `schema.py`
-9. Tests
+#### Step 1: `mixins.py` — Add `ObjectTypeFactoryMixin`
+
+The existing `InputObjectTypeFactoryMixin` creates `graphene.InputObjectType` subclasses (for filter/order inputs). Aggregate types are **output** types (`graphene.ObjectType`), so we need a parallel mixin. Add `ObjectTypeFactoryMixin` to `mixins.py`:
+
+```python
+class ObjectTypeFactoryMixin:
+    """Mixin for dynamically creating and caching Graphene ObjectTypes (output types)."""
+
+    object_types: dict[str, type[graphene.ObjectType]] = {}
+
+    @classmethod
+    def create_object_type(
+        cls,
+        name: str,
+        fields: dict[str, Any],
+    ) -> type[graphene.ObjectType]:
+        if name in cls.object_types:
+            return cls.object_types[name]
+        cls.object_types[name] = cast(
+            type[graphene.ObjectType],
+            type(name, (graphene.ObjectType,), fields),
+        )
+        return cls.object_types[name]
+```
+
+The `AggregateArgumentsFactory` will use this instead of `InputObjectTypeFactoryMixin`.
+
+#### Step 2: `aggregate_types.py` — Type registry and constants
+
+New file: `django_graphene_filters/aggregate_types.py`
+
+Contains:
+- `UniqueValueType(graphene.ObjectType)` — `value: String`, `count: Int`
+- `FIELD_CATEGORIES` — maps Django field class names → category strings
+- `STAT_TYPES` — maps category → {stat_name: graphene_type}
+- `VALID_STATS` — derived set per category for validation
+
+#### Step 3: `aggregateset.py` — Core aggregate class
+
+New file: `django_graphene_filters/aggregateset.py`
+
+Contains:
+- `STAT_REGISTRY` — maps stat names → computation lambdas
+- `_fetch_values()`, `_py_median()`, `_py_mode()`, `_py_stdev()`, `_py_variance()`, `_uniques()` helper functions
+- `AggregateSetMetaclass` — validates `Meta.fields` against model, stores `_aggregate_config` and `_custom_stats`
+- `AdvancedAggregateSet` — base class with `compute()`, `_check_field_permission()`, `_check_stat_permission()`, `_parse_selection_set()`
+
+#### Step 4: `aggregate_arguments_factory.py` — Schema generation
+
+New file: `django_graphene_filters/aggregate_arguments_factory.py`
+
+Contains:
+- `AggregateArgumentsFactory(ObjectTypeFactoryMixin)` — uses the **new** `ObjectTypeFactoryMixin` (not `InputObjectTypeFactoryMixin`) since aggregate types are output types
+- `build_aggregate_type()` — generates root + per-field `ObjectType` classes from `_aggregate_config`
+
+#### Step 5: `conf.py` — Safety limit settings
+
+Add to `DEFAULT_SETTINGS`:
+- `AGGREGATE_MAX_VALUES` key constant + default `10000`
+- `AGGREGATE_MAX_UNIQUES` key constant + default `1000`
+
+#### Step 6: `object_type.py` — Accept `aggregate_class` in Meta
+
+Add `aggregate_class=None` parameter to `__init_subclass_with_meta__`, store on `_meta`.
+
+#### Step 7: `connection_field.py` — The integration point
+
+This is the most complex step. The connection field needs to:
+
+**a) Override the connection type** — The connection class comes from `node_type._meta.connection` (set by graphene-django when the node type is created). We dynamically subclass it to add an `aggregates` field:
+
+```python
+# Dynamically create:
+#   class ObjectNodeConnectionWithAggregates(ObjectNodeConnection):
+#       aggregates = graphene.Field(ObjectAggregateType)
+#
+# Then override the `type` property to return this extended class.
+```
+
+The `type` property on `DjangoConnectionField` (line 94-111 of graphene_django/fields.py) returns `_type._meta.connection`. We override this to inject the aggregate field.
+
+**b) Compute aggregates in `resolve_connection`** — After `connection_from_array_slice` creates the connection instance (line 175-187 of graphene_django/fields.py), it sets `connection.iterable = iterable`. We override `resolve_connection` to also compute and attach aggregate results:
+
+```python
+@classmethod
+def resolve_connection(cls, connection, args, iterable, max_limit=None):
+    result = super().resolve_connection(connection, args, iterable, max_limit)
+    # iterable is the filtered queryset (attached by parent as result.iterable)
+    aggregate_class = getattr(connection._meta.node._meta, "aggregate_class", None)
+    if aggregate_class and hasattr(iterable, '_aggregate_results'):
+        result.aggregates = iterable._aggregate_results
+    return result
+```
+
+**c) Add `resolve_aggregates`** — The dynamically created connection class needs a resolver:
+
+```python
+def resolve_aggregates(root, info):
+    return getattr(root, 'aggregates', None)
+```
+
+**d) Accept `aggregate_class` parameter** — In `__init__`, alongside `orderset_class`, `filter_input_type_prefix`, etc.
+
+#### Step 8: `__init__.py` — Export `AdvancedAggregateSet`
+
+Add to imports and `__all__`.
+
+#### Step 9: Cookbook example
+
+- New file: `examples/cookbook/cookbook/recipes/aggregates.py` — Define aggregate classes for all 4 models
+- Modified: `examples/cookbook/cookbook/recipes/schema.py` — Add `aggregate_class` to each node's Meta
+
+#### Step 10: Tests
+
+- `tests/test_aggregateset.py` — Unit tests for `AdvancedAggregateSet` (metaclass validation, compute, permissions)
+- `tests/test_aggregate_arguments_factory.py` — Schema generation tests
+- `examples/cookbook/cookbook/recipes/tests/test_aggregates.py` — Integration tests via live GraphQL queries
+
+### File Summary
+
+**New files (library):**
+- `django_graphene_filters/aggregate_types.py`
+- `django_graphene_filters/aggregateset.py`
+- `django_graphene_filters/aggregate_arguments_factory.py`
+
+**Modified files (library):**
+- `django_graphene_filters/mixins.py` — add `ObjectTypeFactoryMixin`
+- `django_graphene_filters/conf.py` — add `AGGREGATE_MAX_VALUES`, `AGGREGATE_MAX_UNIQUES`
+- `django_graphene_filters/object_type.py` — add `aggregate_class` param
+- `django_graphene_filters/connection_field.py` — connection type override + aggregate resolution
+- `django_graphene_filters/__init__.py` — export `AdvancedAggregateSet`
+
+**New files (example):**
+- `examples/cookbook/cookbook/recipes/aggregates.py`
+
+**Modified files (example):**
+- `examples/cookbook/cookbook/recipes/schema.py`
+
+**Test files:**
+- `tests/test_aggregateset.py`
+- `tests/test_aggregate_arguments_factory.py`
+- `examples/cookbook/cookbook/recipes/tests/test_aggregates.py` (already created)
 
 ### Risks
 
