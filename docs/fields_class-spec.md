@@ -355,21 +355,39 @@ This is the core module. It contains:
 **`FieldSetMetaclass`** — validates configuration at class creation time:
 
 ```python
+from .mixins import get_concrete_field_names
+
 class FieldSetMetaclass(type):
     def __new__(cls, name, bases, attrs):
         new_class = super().__new__(cls, name, bases, attrs)
         meta = getattr(new_class, "Meta", None)
         if meta and getattr(meta, "model", None):
             model = meta.model
-            # 1. Discover check_<field>_permission AND resolve_<field> methods
-            # 2. Validate each field exists on the model
-            #    (resolve_<field> may target computed fields not on the model
-            #     — skip validation for those; they must be declared on the
-            #     ObjectType as graphene fields)
-            # 3. Store validated config as:
-            #    new_class._field_permissions = {"email", "description", ...}
-            #    new_class._field_resolvers = {"display_name", "age", ...}
-            #    new_class._managed_fields = union of both sets
+            # Use get_concrete_field_names from mixins.py for validation
+            model_field_names = set(get_concrete_field_names(model))
+
+            # 1. Discover check_<field>_permission methods
+            field_permissions = set()
+            for attr_name in dir(new_class):
+                if attr_name.startswith("check_") and attr_name.endswith("_permission"):
+                    field_name = attr_name[6:-11]  # strip check_ and _permission
+                    if field_name in model_field_names:
+                        field_permissions.add(field_name)
+
+            # 2. Discover resolve_<field> methods
+            field_resolvers = set()
+            for attr_name in dir(new_class):
+                if attr_name.startswith("resolve_"):
+                    field_name = attr_name[8:]  # strip resolve_
+                    field_resolvers.add(field_name)
+                    # resolve_ may target computed fields not on the model
+                    # — skip model validation for those; they must be
+                    # declared on the ObjectType as graphene fields
+
+            # 3. Store validated config
+            new_class._field_permissions = field_permissions
+            new_class._field_resolvers = field_resolvers
+            new_class._managed_fields = field_permissions | field_resolvers
         return new_class
 ```
 
@@ -459,22 +477,39 @@ def __init_subclass_with_meta__(
 **b) Resolver wrapping function:**
 
 ```python
-def _wrap_field_resolvers(node_cls, fields_class):
-    """Wrap resolvers for fields that have permission checks on the FieldSet.
+from graphene.utils.str_converters import to_camel_case
 
-    For each check_<field>_permission method on the fields_class,
-    find the corresponding field on the node type and wrap its resolver.
-    The wrapper checks permission before resolving; if denied, returns None.
+def _wrap_field_resolvers(node_cls, fields_class):
+    """Wrap resolvers for fields managed by the FieldSet.
+
+    For each field in _managed_fields, find the corresponding graphene
+    field on the node type and wrap its resolver with the cascade:
+    check → resolve → default.
     """
     for field_name in fields_class._managed_fields:
-        # Convert model field name to GraphQL field name
-        # (graphene converts snake_case → camelCase)
+        # Graphene may store the field under camelCase or snake_case
+        # depending on version — check both to be safe.
         graphql_name = to_camel_case(field_name)
-
-        if graphql_name not in node_cls._meta.fields:
+        if graphql_name in node_cls._meta.fields:
+            graphene_field = node_cls._meta.fields[graphql_name]
+        elif field_name in node_cls._meta.fields:
+            graphene_field = node_cls._meta.fields[field_name]
+        else:
+            # Field not in the node's schema — log a warning and skip.
+            # This can happen when fields=["name", ...] excludes this field,
+            # or when a FieldSet is shared across multiple nodes.
+            logger.warning(
+                "%s references field '%s' but it is not in %s's fields. "
+                "The permission/resolve method will have no effect.",
+                fields_class.__name__,
+                field_name,
+                node_cls.__name__,
+            )
             continue
 
-        graphene_field = node_cls._meta.fields[graphql_name]
+        # Capture the original resolver — this preserves graphene-django's
+        # custom FK resolvers (which go through get_node for
+        # AdvancedDjangoObjectType) and the sentinel system.
         original_resolver = graphene_field.resolver
 
         def make_wrapper(fname, orig):
@@ -490,6 +525,7 @@ def _wrap_field_resolvers(node_cls, fields_class):
                     return fieldset.resolve_field(fname, root, info)
 
                 # Step 3: Default resolver (no custom resolve defined)
+                # This preserves graphene-django's FK/sentinel resolvers.
                 if orig:
                     return orig(root, info, **kwargs)
                 return getattr(root, fname, None)
@@ -503,6 +539,9 @@ This approach:
 - Only wraps fields that have permission checks — **zero overhead** on unrestricted fields
 - Instantiates the `AdvancedFieldSet` per-resolution — gives access to `info` (request context)
 - Returns `None` for denied fields (consumers can subclass to raise instead)
+- Checks both camelCase and snake_case keys for graphene version safety
+- Preserves the original resolver (including graphene-django's FK/sentinel chain) in step 3
+- Logs a warning for FieldSet fields not present in the node's schema
 
 #### `__init__.py` — Export new public API
 
@@ -746,12 +785,19 @@ This is intentional: if a field is non-nullable in the schema and a user can't s
 
 ---
 
+## Reuse of Existing Modules
+
+- **`mixins.py`** — `get_concrete_field_names(model)` is used by `FieldSetMetaclass` to validate that `check_<field>_permission` methods reference real model fields. This is the same utility used by `AdvancedOrderSet` for `fields = "__all__"` resolution.
+- **`utils.py`** — not used. It provides filter lookup/transform discovery which is not relevant to field-level permissions.
+
+---
+
 ## Risks
 
 - **Non-nullable field errors** — if a developer restricts a non-nullable field, users get a GraphQL error instead of `null`. This is the correct behavior but may surprise developers. Mitigated by clear documentation and a startup warning.
-- **Resolver chain interactions** — wrapping resolvers must play nicely with graphene-django's custom FK resolvers (which go through `get_node`) and the sentinel system. Needs careful testing with FK fields.
+- **FK/sentinel resolver chain** — wrapping resolvers must preserve graphene-django's custom FK resolvers (which go through `get_node`) and the sentinel system. The wrapper captures the original resolver and delegates to it in step 3 of the cascade. Needs explicit tests for FK fields (e.g. `check_object_type_permission` on `ObjectFieldSet`).
 - **Performance on large result sets** — the permission check runs per-field-per-row. For a query returning 1000 rows with 3 restricted fields, that's 3000 permission checks. Each check is a simple method call (no DB access), so this should be negligible — but it's worth benchmarking.
-- **camelCase ↔ snake_case mapping** — graphene converts `field_name` → `fieldName` in the schema. The resolver wrapping must correctly map between the two. `graphene.utils.str_converters.to_camel_case` handles this.
+- **camelCase ↔ snake_case mapping** — graphene may store fields under either `to_camel_case(name)` or the original `snake_case` name depending on version. `_wrap_field_resolvers` checks both keys to be safe.
 
 ---
 
