@@ -70,3 +70,36 @@ class InputObjectTypeFactoryMixin:
             ),
         )
         return cls.input_object_types[name]
+
+
+class ObjectTypeFactoryMixin:
+    """Mixin for dynamically creating and caching Graphene ObjectTypes (output types).
+
+    Unlike ``InputObjectTypeFactoryMixin`` which creates input types for filters/orders,
+    this creates output types suitable for aggregate result schemas.
+    """
+
+    object_types: dict[str, type[graphene.ObjectType]] = {}
+
+    @classmethod
+    def create_object_type(
+        cls,
+        name: str,
+        fields: dict[str, Any],
+    ) -> type[graphene.ObjectType]:
+        """Create a new GraphQL output type inheriting from `graphene.ObjectType`.
+
+        Uses a shared cache to avoid duplicating types with the same name.
+        """
+        if name in cls.object_types:
+            return cls.object_types[name]
+
+        cls.object_types[name] = cast(
+            type[graphene.ObjectType],
+            type(
+                name,
+                (graphene.ObjectType,),
+                fields,
+            ),
+        )
+        return cls.object_types[name]

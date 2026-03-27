@@ -3,6 +3,7 @@
 This package provides advanced filtering capabilities for Django with Graphene.
 """
 
+from .aggregateset import AdvancedAggregateSet, RelatedAggregate
 from .connection_field import AdvancedDjangoFilterConnectionField
 from .filters import (
     # Explicitly import the classes and methods
@@ -24,6 +25,8 @@ __version__ = "0.4.0"
 # All classes, methods, part of the public API
 # easier to manage and understand the package
 __all__ = [
+    "AdvancedAggregateSet",
+    "RelatedAggregate",
     "AnnotatedFilter",
     "SearchQueryFilter",
     "SearchRankFilter",

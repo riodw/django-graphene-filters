@@ -41,6 +41,7 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         filter_input_type_prefix: str | None = None,
         orderset_class: Any | None = None,
         order_input_type_prefix: str | None = None,
+        aggregate_class: Any | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> None:
@@ -48,6 +49,9 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         self._order_input_type_prefix = order_input_type_prefix
         self._orderset_class = None
         self._ordering_args = None
+        self._provided_aggregate_class = aggregate_class
+        self._aggregate_class = None
+        self._aggregate_type = None
 
         super().__init__(type, fields, order_by, extra_filter_meta, filterset_class, *args, **kwargs)
 
@@ -58,6 +62,66 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         ), "Use the `AdvancedFilterSet` class with `AdvancedDjangoFilterConnectionField`"
 
         self._filter_input_type_prefix = filter_input_type_prefix
+
+    # -----------------------------------------------------------------
+    # Aggregate support
+    # -----------------------------------------------------------------
+
+    @property
+    def provided_aggregate_class(self) -> Any | None:
+        """Return the provided AdvancedAggregateSet class, if any."""
+        return self._provided_aggregate_class or getattr(self.node_type._meta, "aggregate_class", None)
+
+    @property
+    def aggregate_class(self) -> Any | None:
+        """Return the AdvancedAggregateSet class to use for aggregation."""
+        if not self._aggregate_class:
+            self._aggregate_class = self.provided_aggregate_class
+        return self._aggregate_class
+
+    @property
+    def aggregate_type(self) -> type[graphene.ObjectType] | None:
+        """Build (and cache) the aggregate ObjectType for this field."""
+        if not self._aggregate_type and self.aggregate_class:
+            from .aggregate_arguments_factory import AggregateArgumentsFactory
+
+            node_type_name = self.node_type.__name__.replace("Type", "")
+            if self.aggregate_class:
+                prefix = f"{node_type_name}{self.aggregate_class.__name__}"
+            else:
+                prefix = node_type_name
+            factory = AggregateArgumentsFactory(self.aggregate_class, prefix)
+            self._aggregate_type = factory.build_aggregate_type()
+        return self._aggregate_type
+
+    def _ensure_aggregate_field_on_connection(self) -> None:
+        """Inject an ``aggregates`` field onto the connection type if not already present.
+
+        Modifies the connection class in-place rather than subclassing, which avoids
+        the Relay Connection metaclass requiring a ``node`` in Meta.
+        """
+        if not self.aggregate_class:
+            return
+
+        connection_type = self.connection_type
+        if hasattr(connection_type, "_aggregate_field_injected"):
+            return
+
+        agg_type = self.aggregate_type
+        # Add the field to the connection class's _meta.fields
+        connection_type._meta.fields["aggregates"] = graphene.Field(
+            agg_type,
+            description="Aggregate statistics",
+        )
+        # Add a resolver
+        connection_type.resolve_aggregates = staticmethod(
+            lambda root, info: getattr(root, "aggregates", None)
+        )
+        connection_type._aggregate_field_injected = True
+
+    # -----------------------------------------------------------------
+    # Orderset support (existing)
+    # -----------------------------------------------------------------
 
     @property
     def provided_orderset_class(self) -> Any | None:
@@ -161,6 +225,9 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         1. Standard Graphene arguments (flat, e.g., 'department_Name')
         2. Advanced arguments (nested, e.g., 'filter')
         """
+        # Inject the aggregates field on the connection type (once, during schema build)
+        self._ensure_aggregate_field_on_connection()
+
         if not self._filtering_args:
             # 1. Get Standard Arguments (Flat style derived from filter_fields)
             # We use a trimmed version of the class to HIDE the expanded RelatedFilters
@@ -291,9 +358,48 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
                 orderset = orderset_class(data=order_arg, queryset=qs, request=info.context)
                 qs = orderset.qs
 
+            # Compute aggregates from the filtered queryset (only if requested)
+            aggregate_class = getattr(connection._meta.node._meta, "aggregate_class", None)
+            agg_selection = cls._extract_aggregate_selection(info) if aggregate_class else None
+            if aggregate_class and agg_selection is not None:
+                agg_set = aggregate_class(queryset=qs, request=info.context)
+                qs._aggregate_results = agg_set.compute(selection_set=agg_selection)
+
             return qs
 
         raise ValidationError(filterset.form.errors.as_json())
+
+    @classmethod
+    def resolve_connection(
+        cls,
+        connection: object,
+        args: dict[str, Any],
+        iterable: Any,
+        max_limit: int | None = None,
+    ) -> Any:
+        """Override to attach aggregate results to the connection instance."""
+        result = super().resolve_connection(connection, args, iterable, max_limit)
+        # If aggregates were computed during resolve_queryset, attach them
+        if hasattr(iterable, "_aggregate_results"):
+            result.aggregates = iterable._aggregate_results
+        return result
+
+    @staticmethod
+    def _extract_aggregate_selection(info: graphene.ResolveInfo) -> Any:
+        """Extract the ``aggregates`` sub-selection from the GraphQL query info.
+
+        Returns the selection set of the ``aggregates`` field, or ``None``
+        if aggregates were not requested.
+        """
+        try:
+            for field_node in info.field_nodes:
+                if field_node.selection_set:
+                    for selection in field_node.selection_set.selections:
+                        if selection.name.value == "aggregates":
+                            return selection.selection_set
+        except (AttributeError, TypeError):
+            pass
+        return None
 
     @staticmethod
     def map_arguments_to_filters(

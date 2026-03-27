@@ -7,6 +7,12 @@ from django_graphene_filters import (
 )
 
 from . import models
+from .aggregates import (
+    AttributeAggregate,
+    ObjectAggregate,
+    ObjectTypeAggregate,
+    ValueAggregate,
+)
 from .filters import (
     AttributeFilter,
     ObjectFilter,
@@ -32,6 +38,7 @@ class ObjectTypeNode(AdvancedDjangoObjectType):
         fields = "__all__"
         filterset_class = ObjectTypeFilter
         orderset_class = ObjectTypeOrder
+        aggregate_class = ObjectTypeAggregate
         search_fields = (
             "name",
             "description",
@@ -55,6 +62,7 @@ class ObjectNode(AdvancedDjangoObjectType):
         fields = "__all__"
         filterset_class = ObjectFilter
         orderset_class = ObjectOrder
+        aggregate_class = ObjectAggregate
         search_fields = (
             "name",
             "description",
@@ -80,6 +88,7 @@ class AttributeNode(AdvancedDjangoObjectType):
         fields = "__all__"
         filterset_class = AttributeFilter
         orderset_class = AttributeOrder
+        aggregate_class = AttributeAggregate
         search_fields = (
             "name",
             "description",
@@ -105,6 +114,7 @@ class ValueNode(AdvancedDjangoObjectType):
         fields = "__all__"
         filterset_class = ValueFilter
         orderset_class = ValueOrder
+        aggregate_class = ValueAggregate
         search_fields = (
             "value",
             "description",

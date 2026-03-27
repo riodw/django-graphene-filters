@@ -57,14 +57,16 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         cls,
         orderset_class: type | None = None,
         search_fields: Sequence[str] | None = None,
+        aggregate_class: type | None = None,
         _meta: DjangoObjectTypeOptions | None = None,
         **options,
     ) -> None:
-        """Capture ``orderset_class`` and ``search_fields`` from Meta and attach them to ``_meta``."""
+        """Capture ``orderset_class``, ``search_fields``, and ``aggregate_class`` from Meta."""
         if not _meta:
             _meta = DjangoObjectTypeOptions(cls)
         _meta.orderset_class = orderset_class
         _meta.search_fields = search_fields
+        _meta.aggregate_class = aggregate_class
         super().__init_subclass_with_meta__(_meta=_meta, **options)
 
         # Sentinel / cascade permissions require Relay's get_node for FK
