@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [0.5.0] - 2026-03-27
+
+### Added
+
+- **Aggregate system** — new `AdvancedAggregateSet` base class for declarative
+  aggregate statistics on filtered querysets, following the same pattern as
+  `AdvancedFilterSet` / `AdvancedOrderSet`.
+  - Declare fields and stats in `Meta.fields` (e.g.
+    `{"name": ["count", "min", "max", "mode", "uniques"]}`).
+  - **10 built-in stats**: `count`, `min`, `max`, `sum`, `mean`, `median`,
+    `mode`, `stdev`, `variance`, `uniques`. DB-level stats use Django ORM
+    `.aggregate()`; Python-level stats use the `statistics` module.
+  - **Boolean stats**: `true_count`, `false_count`.
+  - **Custom stats** — register arbitrary stat names via `Meta.custom_stats`
+    with a GraphQL return type mapping, then implement
+    `compute_<field>_<stat>(self, queryset)`. Supports external libraries
+    (numpy, scipy, pyomo) without the package knowing about them.
+  - **`AggregateSetMetaclass`** — validates configuration at class creation:
+    field existence, category detection (text/numeric/datetime/boolean), and
+    stat compatibility. Invalid combos raise `ValueError` at startup.
+  - **`AggregateArgumentsFactory`** — generates typed GraphQL `ObjectType`
+    classes from an `AdvancedAggregateSet`, with per-field sub-types.
+  - **Selection set optimization** — `.compute()` inspects the GraphQL
+    selection set and only computes stats actually requested in the query.
+  - **Permission hooks** — `check_<field>_permission(request)` blocks all
+    stats for a field; `check_<field>_<stat>_permission(request)` blocks a
+    specific stat. Follows the existing filterset/orderset convention.
+  - **Safety limits** — `AGGREGATE_MAX_VALUES` (default 10,000) caps values
+    fetched for Python-level stats; `AGGREGATE_MAX_UNIQUES` (default 1,000)
+    caps the uniques list. Both configurable via `DJANGO_GRAPHENE_FILTERS`
+    Django settings.
+- **`RelatedAggregate`** — relationship traversal for nested aggregates,
+  analogous to `RelatedFilter` / `RelatedOrder`. Supports lazy string
+  references for circular dependencies.
+  - **Circular reference protection** — `AggregateArgumentsFactory` tracks
+    which classes are currently being built and skips circular references
+    at schema generation time.
+  - **`get_child_queryset()` hook** — override on `AdvancedAggregateSet` to
+    apply custom visibility rules (e.g. `is_private` filtering) when
+    traversing relationships.
+- **`ObjectTypeFactoryMixin`** — new mixin in `mixins.py` for dynamically
+  creating and caching Graphene output `ObjectType` classes (parallel to
+  `InputObjectTypeFactoryMixin` which handles input types).
+- **`aggregate_class` on `AdvancedDjangoObjectType`** — new Meta parameter
+  to declare the aggregate class for a node type. Also accepted directly
+  on `AdvancedDjangoFilterConnectionField`.
+- **Connection-level aggregates** — the `aggregates` field is injected onto
+  the Relay connection type as a sibling to `edges` and `pageInfo`.
+  Computed from the same filtered queryset, only when the query requests it.
+- **Cookbook example** — `aggregates.py` with aggregate classes for all 4
+  models, including `RelatedAggregate` wiring and a custom `centroid` stat
+  on `ValueAggregate` that computes mean latitude/longitude.
+- **Aggregate permission tests** — `test_aggregates_permissions.py` fires
+  18 queries (staff + unauthenticated + 16 permission combos) validating
+  that aggregate counts respect row-level visibility.
+- **Aggregate stats tests** — `test_aggregates_stats.py` verifies actual
+  stat values (min, max, count, mode, uniques, centroid) against
+  independently computed expected values from the DB.
+
+### Fixed
+
+- **`Decimal` support in seed data** — `_is_safe_generator` now accepts
+  `Decimal` return values, bringing in the `geo` provider (coordinate,
+  latitude, longitude) and `python.pydecimal`.
+- **Deterministic `is_private` for seeded data** — ObjectTypes and
+  Attributes now alternate `is_private` by sorted index (even=public,
+  odd=private) instead of random assignment. Objects and Values remain
+  random. This gives a stable ~50/50 split across runs.
+- **Landing page** — `http://localhost:8000/` now shows a dev links page
+  with clickable URLs for GraphiQL, admin, seed/delete data, and
+  create/delete users.
+
 ## [0.4.0] - 2026-03-25
 
 ### Added
@@ -215,6 +287,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline** — GitHub Actions testing across Python 3.10–3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
+[0.5.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.0
 [0.4.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.4.0
 [0.3.1]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.3.1
 [0.3.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.3.0
