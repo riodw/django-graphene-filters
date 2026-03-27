@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [0.5.1] - 2026-03-27
+
+### Added
+
+- **Nested connection aggregates** — aggregates are now available on nested
+  connections inside edges, not just root-level connections. For example,
+  `allObjects { edges { node { values { aggregates { count } } } } }` returns
+  per-Object Value aggregates scoped to that Object's values.
+  - Aggregate field injection moved from `AdvancedDjangoFilterConnectionField`
+    to `AdvancedDjangoObjectType.__init_subclass_with_meta__`, so every
+    connection using a node type with `aggregate_class` gets the field.
+  - Lazy resolver: nested connections compute aggregates on-the-fly from
+    `root.iterable` (the scoped queryset). Root-level connections still use
+    pre-computed results from `resolve_queryset` for performance.
+  - `compute(local_only=True)` parameter skips `RelatedAggregate` traversal
+    for nested connections (nesting is handled by the GraphQL query structure).
+- **`test_nested_connection_aggregates`** — verifies per-Object Value
+  aggregates match independently computed expected values.
+
+### Changed
+
+- Removed `_ensure_aggregate_field_on_connection` from
+  `AdvancedDjangoFilterConnectionField` — superseded by node-level injection
+  in `AdvancedDjangoObjectType`.
+
 ## [0.5.0] - 2026-03-27
 
 ### Added
@@ -287,6 +312,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline** — GitHub Actions testing across Python 3.10–3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
+[0.5.1]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.1
 [0.5.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.0
 [0.4.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.4.0
 [0.3.1]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.3.1

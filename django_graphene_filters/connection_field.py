@@ -94,31 +94,6 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             self._aggregate_type = factory.build_aggregate_type()
         return self._aggregate_type
 
-    def _ensure_aggregate_field_on_connection(self) -> None:
-        """Inject an ``aggregates`` field onto the connection type if not already present.
-
-        Modifies the connection class in-place rather than subclassing, which avoids
-        the Relay Connection metaclass requiring a ``node`` in Meta.
-        """
-        if not self.aggregate_class:
-            return
-
-        connection_type = self.connection_type
-        if hasattr(connection_type, "_aggregate_field_injected"):
-            return
-
-        agg_type = self.aggregate_type
-        # Add the field to the connection class's _meta.fields
-        connection_type._meta.fields["aggregates"] = graphene.Field(
-            agg_type,
-            description="Aggregate statistics",
-        )
-        # Add a resolver
-        connection_type.resolve_aggregates = staticmethod(
-            lambda root, info: getattr(root, "aggregates", None)
-        )
-        connection_type._aggregate_field_injected = True
-
     # -----------------------------------------------------------------
     # Orderset support (existing)
     # -----------------------------------------------------------------
@@ -225,9 +200,6 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         1. Standard Graphene arguments (flat, e.g., 'department_Name')
         2. Advanced arguments (nested, e.g., 'filter')
         """
-        # Inject the aggregates field on the connection type (once, during schema build)
-        self._ensure_aggregate_field_on_connection()
-
         if not self._filtering_args:
             # 1. Get Standard Arguments (Flat style derived from filter_fields)
             # We use a trimmed version of the class to HIDE the expanded RelatedFilters

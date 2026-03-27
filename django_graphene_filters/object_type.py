@@ -16,6 +16,56 @@ from graphene_django.types import DjangoObjectTypeOptions
 logger = logging.getLogger(__name__)
 
 
+def _inject_aggregates_on_connection(
+    node_cls: type,
+    aggregate_class: type,
+    connection_type: type,
+) -> None:
+    """Inject an ``aggregates`` field onto a connection type.
+
+    Called during ``__init_subclass_with_meta__`` so that every connection
+    using this node type — root-level or nested — gets the aggregates field.
+
+    The resolver computes lazily from ``root.iterable`` (the queryset that
+    graphene-django attaches to every connection instance).  For root-level
+    connections where ``AdvancedDjangoFilterConnectionField`` pre-computes
+    aggregates, the pre-computed result is used instead.
+    """
+    if hasattr(connection_type, "_aggregate_field_injected"):
+        return
+
+    from .aggregate_arguments_factory import AggregateArgumentsFactory
+
+    node_type_name = node_cls.__name__.replace("Type", "")
+    prefix = f"{node_type_name}{aggregate_class.__name__}"
+    factory = AggregateArgumentsFactory(aggregate_class, prefix)
+    agg_type = factory.build_aggregate_type()
+
+    # Add the field to the connection class's _meta.fields
+    connection_type._meta.fields["aggregates"] = graphene.Field(
+        agg_type,
+        description="Aggregate statistics",
+    )
+
+    # Lazy resolver: uses pre-computed results if available (root-level),
+    # otherwise computes on-the-fly from root.iterable (nested connections).
+    def resolve_aggregates(root: Any, info: Any) -> Any:
+        # Path 1: pre-computed by AdvancedDjangoFilterConnectionField
+        if hasattr(root, "aggregates"):
+            return root.aggregates
+        # Path 2: lazy computation for nested connections.
+        # Use local_only=True to skip RelatedAggregate traversal —
+        # nesting is already handled by the GraphQL query structure.
+        iterable = getattr(root, "iterable", None)
+        if iterable is not None:
+            agg_set = aggregate_class(queryset=iterable, request=info.context)
+            return agg_set.compute(local_only=True)
+        return None
+
+    connection_type.resolve_aggregates = staticmethod(resolve_aggregates)
+    connection_type._aggregate_field_injected = True
+
+
 class AdvancedDjangoObjectType(DjangoObjectType):
     """A DjangoObjectType subclass that supports `orderset_class` and `search_fields` in Meta.
 
@@ -68,6 +118,11 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         _meta.search_fields = search_fields
         _meta.aggregate_class = aggregate_class
         super().__init_subclass_with_meta__(_meta=_meta, **options)
+
+        # Inject aggregates field onto the connection type so it's available
+        # on both root-level and nested connections (e.g. object.values.aggregates).
+        if aggregate_class and hasattr(_meta, "connection") and _meta.connection:
+            _inject_aggregates_on_connection(cls, aggregate_class, _meta.connection)
 
         # Sentinel / cascade permissions require Relay's get_node for FK
         # resolution.  Without the Node interface, FK fields resolve via

@@ -301,12 +301,15 @@ class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
         self.queryset = queryset
         self.request = request
 
-    def compute(self, selection_set: Any = None) -> dict[str, Any]:
+    def compute(self, selection_set: Any = None, local_only: bool = False) -> dict[str, Any]:
         """Compute aggregate statistics.
 
         Args:
             selection_set: Optional GraphQL selection set from ``info``.
                 If provided, only stats actually requested are computed.
+            local_only: If True, skip ``RelatedAggregate`` traversal.
+                Used by nested connection resolvers where nesting is
+                handled by the GraphQL query structure itself.
 
         Returns:
             A dict like ``{"count": 42, "name": {"min": "A", "max": "Z"}, ...}``.
@@ -346,6 +349,8 @@ class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
             result[field_name] = field_result
 
         # Compute related aggregates (relationship traversal)
+        if local_only:
+            return result
         for rel_name, rel_agg in self.__class__.related_aggregates.items():
             if requested is not None and rel_name not in requested:
                 continue
