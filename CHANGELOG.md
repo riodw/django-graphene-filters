@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [0.5.2] - 2026-03-27
+
+### Added
+
+- **Sub-edge advanced filtering** — reverse-relation connection fields (e.g.
+  `values` on an `ObjectNode`) now use `AdvancedDjangoFilterConnectionField`
+  instead of the default `DjangoFilterConnectionField` when the target type is
+  an `AdvancedDjangoObjectType`. This gives sub-edges the same tree-structured
+  `filter`, `orderBy`, and `search` arguments that root-level queries have.
+  - Example: `allObjects { edges { node { values(filter: { attribute: { name: { exact: "Email" } } }) { edges { node { value } } } } } }`
+  - Implemented via a `singledispatch` converter override in `object_type.py`
+    for `ManyToOneRel`, `ManyToManyField`, and `ManyToManyRel`. Non-Advanced
+    target types fall back to the original graphene-django behaviour.
+  - Flat-style arguments (e.g. `attribute_Name_Icontains`) continue to work
+    for backwards compatibility.
+- **Sub-edge filter/order/search tests** — `SubEdgeFilterTests` in the cookbook
+  example verifying tree filter, icontains, orderBy, and search on nested
+  connections.
+- **Converter coverage tests** — unit tests for all fallback branches in the
+  converter override (unregistered type, M2M description, non-Advanced type,
+  connection without filter_fields, non-connection type).
+
 ## [0.5.1] - 2026-03-27
 
 ### Added
@@ -312,6 +334,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline** — GitHub Actions testing across Python 3.10–3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
+[0.5.2]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.2
 [0.5.1]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.1
 [0.5.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.0
 [0.4.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.4.0

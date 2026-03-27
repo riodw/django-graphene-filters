@@ -589,3 +589,30 @@ def test_extract_aggregate_selection_field_node_no_selection_set():
     info.field_nodes = [field_node]
     result = AdvancedDjangoFilterConnectionField._extract_aggregate_selection(info)
     assert result is None
+
+
+@pytest.mark.django_db
+def test_compute_local_only_skips_related_aggregates():
+    """Cover aggregateset.py line 353: local_only=True early return skips related traversal."""
+
+    class ChildAgg(AdvancedAggregateSet):
+        class Meta:
+            model = Object
+            fields = {"name": ["count"]}
+
+    class ParentAgg(AdvancedAggregateSet):
+        objects = RelatedAggregate(ChildAgg, field_name="object_type")
+
+        class Meta:
+            model = ObjectType
+            fields = {"name": ["count"]}
+
+    ot = ObjectType.objects.create(name="local_only_test")
+    Object.objects.create(name="child", object_type=ot)
+
+    agg = ParentAgg(queryset=ObjectType.objects.all())
+
+    # local_only=True should return own fields but skip 'objects' related aggregate
+    result = agg.compute(local_only=True)
+    assert "name" in result
+    assert "objects" not in result
