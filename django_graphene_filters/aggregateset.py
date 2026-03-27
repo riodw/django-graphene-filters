@@ -373,6 +373,9 @@ class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
         """Derive the child queryset for a related aggregate traversal.
 
         By default, follows the relationship and returns all matching rows.
+        Automatically applies ``.distinct()`` when the relationship is
+        ManyToMany to prevent inflated counts from join duplicates.
+
         Override this to apply visibility rules (e.g. ``is_private`` filtering)
         on the child model.
 
@@ -384,7 +387,32 @@ class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
             A queryset of the target model scoped to the parent queryset.
         """
         target_model = rel_agg.aggregate_class.Meta.model
-        return target_model.objects.filter(**{f"{rel_agg.field_name}__in": self.queryset})
+        qs = target_model.objects.filter(**{f"{rel_agg.field_name}__in": self.queryset})
+
+        # Detect M2M: if the lookup path traverses a ManyToManyField or
+        # ManyToManyRel, the join produces duplicate rows.  Apply .distinct()
+        # to give consumers the expected deduplicated counts.
+        if self._is_m2m_lookup(target_model, rel_agg.field_name):
+            qs = qs.distinct()
+
+        return qs
+
+    @staticmethod
+    def _is_m2m_lookup(target_model: type, field_name: str) -> bool:
+        """Check if ``field_name`` on the target model traverses a M2M relationship.
+
+        The ``field_name`` is the lookup path used in
+        ``target_model.objects.filter(field_name__in=...)``.  If that path
+        goes through a ``ManyToManyField`` or ``ManyToManyRel``, the join
+        will produce duplicate rows.
+        """
+        from django.db.models import ManyToManyField, ManyToManyRel
+
+        try:
+            field = target_model._meta.get_field(field_name)
+            return isinstance(field, (ManyToManyField, ManyToManyRel))
+        except Exception:
+            return False
 
     def _check_field_permission(self, field_name: str) -> None:
         """Call ``check_<field>_permission(request)`` if it exists."""
@@ -424,7 +452,10 @@ class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
             else:
                 requested[field_name] = set()
 
-        return requested if requested else None
+        # Return the dict even if empty — an empty dict means "selection set
+        # was provided but only count was requested, skip all field/related stats".
+        # Returning None means "no selection set at all, compute everything".
+        return requested
 
     @staticmethod
     def _get_child_selection(selection_set: Any, field_name: str) -> Any:
