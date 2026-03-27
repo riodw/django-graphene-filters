@@ -145,7 +145,10 @@ def seed_data(count: int) -> dict[str, int]:
       - Ensures ``count`` ``Object`` instances exist (creates only the shortfall)
       - Each new ``Object`` gets one ``Value`` per ``Attribute``
 
-    ``is_private`` is randomly set on every created model instance (~50/50).
+    ``is_private`` for ObjectTypes and Attributes alternates by sorted index
+    (even index → public, odd index → private) giving an exact 50/50 split
+    that is deterministic across runs.  Objects and Values still use random
+    assignment since their names vary per run.
 
     Returns a summary dict with counts of newly created rows.
     """
@@ -157,34 +160,34 @@ def seed_data(count: int) -> dict[str, int]:
     total_objects = 0
     total_values = 0
 
-    for provider_name, method_names in sorted(providers.items()):
-        # --- ObjectType ---
+    for ot_index, (provider_name, method_names) in enumerate(sorted(providers.items())):
+        # --- ObjectType (alternating: even=public, odd=private) ---
         obj_type, created = ObjectType.objects.get_or_create(
             name=provider_name,
             defaults={
                 "description": f"Auto-generated from Faker's {provider_name} provider",
-                "is_private": random.choice([True, False]),
+                "is_private": ot_index % 2 == 1,
             },
         )
         if created:
             total_object_types += 1
 
-        # --- Attributes (one per method) ---
+        # --- Attributes (alternating within each provider) ---
         attrs: list[Attribute] = []
-        for method_name in method_names:
+        for attr_index, method_name in enumerate(method_names):
             attr, created = Attribute.objects.get_or_create(
                 name=method_name,
                 object_type=obj_type,
                 defaults={
                     "description": f"{provider_name}.{method_name}",
-                    "is_private": random.choice([True, False]),
+                    "is_private": attr_index % 2 == 1,
                 },
             )
             attrs.append(attr)
             if created:
                 total_attributes += 1
 
-        # --- Objects + Values (only create the shortfall) ---
+        # --- Objects + Values (random is_private — names vary per run) ---
         existing_count = Object.objects.filter(object_type=obj_type).count()
         needed = max(0, count - existing_count)
 

@@ -110,74 +110,6 @@ FULL_AGGREGATE_QUERY = """
     }
 """
 
-# Staff query: includes ALL stats including objects.name.uniques (staff-only)
-STAFF_AGGREGATE_QUERY = """
-    query StaffFullAggregates {
-      allObjectTypes(filter: { name: { exact: "geo" } }) {
-        aggregates {
-          count
-
-          name {
-            count
-            min
-            max
-            mode
-            uniques { value count }
-          }
-
-          description {
-            count
-            min
-            max
-          }
-
-          objects {
-            count
-
-            name {
-              count
-              min
-              max
-              mode
-              uniques { value count }
-            }
-
-            description {
-              count
-              min
-              max
-            }
-
-            values {
-              count
-
-              value {
-                count
-                min
-                max
-                mode
-                uniques { value count }
-                centroid
-              }
-            }
-          }
-
-          attributes {
-            count
-
-            name {
-              count
-              min
-              max
-              mode
-              uniques { value count }
-            }
-          }
-        }
-      }
-    }
-"""
-
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -206,8 +138,8 @@ class AggregatePermissionTests(GraphQLTestCase):
 
         seed_data(COUNT)
 
-        # Pre-compute visible IDs for cascade calculations.
-        self.public_ot_ids = set(ObjectType.objects.filter(is_private=False).values_list("id", flat=True))
+        # geo ObjectType is deterministically is_private=False (even index in sorted providers).
+        self.geo_ot = ObjectType.objects.filter(name="geo").first()
 
         # Generate all 16 permission combinations (powerset of VIEW_PERMISSIONS).
         self.perm_combos = []
@@ -219,38 +151,27 @@ class AggregatePermissionTests(GraphQLTestCase):
     # Expected counts per model given a permission set
     # ------------------------------------------------------------------
 
-    def _expected_ot_count(self, perms):
-        """ObjectType count: non-staff always sees public only (no cascade FKs on ObjectType)."""
-        return ObjectType.objects.filter(is_private=False, description__icontains="geo").count()
+    def _expected_ot_count(self):
+        """ObjectType count: geo is always public, so always 1."""
+        return 1 if self.geo_ot else 0
 
-    def _expected_obj_count(self, perms):
-        """Object count: RelatedAggregate traverses from the visible ObjectType QS.
-
-        The parent QS is already scoped to public geo ObjectTypes.
-        get_child_queryset adds is_private=False on the child Objects.
-        """
-        geo_ot = ObjectType.objects.filter(description__icontains="geo", is_private=False).first()
-        if not geo_ot:
+    def _expected_obj_count(self):
+        """Object count: get_child_queryset filters is_private=False on Objects."""
+        if not self.geo_ot:
             return 0
-        return Object.objects.filter(is_private=False, object_type=geo_ot).count()
+        return Object.objects.filter(is_private=False, object_type=self.geo_ot).count()
 
-    def _expected_attr_count(self, perms):
-        """Attribute count: same traversal logic as objects."""
-        geo_ot = ObjectType.objects.filter(description__icontains="geo", is_private=False).first()
-        if not geo_ot:
+    def _expected_attr_count(self):
+        """Attribute count: get_child_queryset filters is_private=False on Attributes."""
+        if not self.geo_ot:
             return 0
-        return Attribute.objects.filter(is_private=False, object_type=geo_ot).count()
+        return Attribute.objects.filter(is_private=False, object_type=self.geo_ot).count()
 
-    def _expected_val_count(self, perms):
-        """Value count: traverses from visible Objects of the geo ObjectType.
-
-        Parent QS = public Objects of geo OT (from _expected_obj_count logic).
-        get_child_queryset adds is_private=False on Values.
-        """
-        geo_ot = ObjectType.objects.filter(description__icontains="geo", is_private=False).first()
-        if not geo_ot:
+    def _expected_val_count(self):
+        """Value count: traverses from public Objects of the geo ObjectType."""
+        if not self.geo_ot:
             return 0
-        visible_obj_ids = Object.objects.filter(is_private=False, object_type=geo_ot).values_list(
+        visible_obj_ids = Object.objects.filter(is_private=False, object_type=self.geo_ot).values_list(
             "id", flat=True
         )
         return Value.objects.filter(is_private=False, object_id__in=visible_obj_ids).count()
@@ -275,7 +196,7 @@ class AggregatePermissionTests(GraphQLTestCase):
             user.user_permissions.add(perm)
         return username
 
-    def _run_query_and_validate(self, perms, label):
+    def _run_query_and_validate(self, label):
         """Execute FULL_AGGREGATE_QUERY and validate aggregate counts."""
         response = self.query(FULL_AGGREGATE_QUERY)
         self.assertResponseNoErrors(response)
@@ -286,7 +207,7 @@ class AggregatePermissionTests(GraphQLTestCase):
             return
 
         # 1. Root ObjectType count
-        expected_ot = self._expected_ot_count(perms)
+        expected_ot = self._expected_ot_count()
         self.assertEqual(
             agg["count"],
             expected_ot,
@@ -303,7 +224,7 @@ class AggregatePermissionTests(GraphQLTestCase):
 
         # 3. Nested objects (Object) count
         if "objects" in agg:
-            expected_obj = self._expected_obj_count(perms)
+            expected_obj = self._expected_obj_count()
             self.assertEqual(
                 agg["objects"]["count"],
                 expected_obj,
@@ -324,7 +245,7 @@ class AggregatePermissionTests(GraphQLTestCase):
 
             # 4. Nested objects > values (Value) count
             if "values" in agg["objects"]:
-                expected_val = self._expected_val_count(perms)
+                expected_val = self._expected_val_count()
                 self.assertEqual(
                     agg["objects"]["values"]["count"],
                     expected_val,
@@ -342,7 +263,7 @@ class AggregatePermissionTests(GraphQLTestCase):
 
         # 5. Nested attributes (Attribute) count
         if "attributes" in agg:
-            expected_attr = self._expected_attr_count(perms)
+            expected_attr = self._expected_attr_count()
             self.assertEqual(
                 agg["attributes"]["count"],
                 expected_attr,
@@ -363,57 +284,26 @@ class AggregatePermissionTests(GraphQLTestCase):
     # Tests
     # ------------------------------------------------------------------
 
-    def test_staff_sees_all_aggregates(self):
-        """Staff user should see full counts across all models — no is_private filtering.
-
-        Uses STAFF_AGGREGATE_QUERY which includes all stats (including staff-only
-        objects.name.uniques and name filter).
-        """
-        User.objects.create_user(username="staff_agg", password="testpass", is_staff=True)
-        self.client.login(username="staff_agg", password="testpass")
-
-        response = self.query(STAFF_AGGREGATE_QUERY)
-        self.assertResponseNoErrors(response)
-        content = json.loads(response.content)
-        agg = content["data"]["allObjectTypes"]["aggregates"]
-
-        geo_ot = ObjectType.objects.filter(name="geo").first()
-        self.assertIsNotNone(geo_ot, "geo ObjectType must exist (run seed_data first)")
-
-        # Staff sees everything — but RelatedAggregate still applies is_private=False
-        # via get_child_queryset override in the cookbook aggregate classes.
-        self.assertEqual(agg["count"], 1)  # one "geo" ObjectType
-        self.assertEqual(
-            agg["objects"]["count"],
-            Object.objects.filter(object_type=geo_ot, is_private=False).count(),
-        )
-        self.assertEqual(
-            agg["attributes"]["count"],
-            Attribute.objects.filter(object_type=geo_ot, is_private=False).count(),
-        )
-        geo_obj_ids = Object.objects.filter(object_type=geo_ot, is_private=False).values_list("id", flat=True)
-        self.assertEqual(
-            agg["objects"]["values"]["count"],
-            Value.objects.filter(object_id__in=geo_obj_ids, is_private=False).count(),
-        )
-
-        # Verify centroid is present (geo has latitude/longitude attributes)
-        self.assertIn("centroid", agg["objects"]["values"]["value"])
-
     def test_all_permission_combinations(self):
-        """Fire 17 queries: 1 unauthenticated + 16 permission combos."""
+        """Fire 18 queries: 1 staff + 1 unauthenticated + 16 permission combos."""
         self.assertEqual(len(self.perm_combos), 16)
 
-        # Query 1: unauthenticated user
+        # Query 1: staff user
+        User.objects.create_user(username="staff_agg", password=TEST_USER_PASSWORD, is_staff=True)
+        self.client.login(username="staff_agg", password=TEST_USER_PASSWORD)
+        with self.subTest(permissions="staff"):
+            self._run_query_and_validate("staff")
+
+        # Query 2: unauthenticated user
         self.client.logout()
         with self.subTest(permissions="unauthenticated"):
-            self._run_query_and_validate([], "unauthenticated")
+            self._run_query_and_validate("unauthenticated")
 
-        # Queries 2-17: authenticated users with each permission combo
+        # Queries 3-18: authenticated users with each permission combo
         for i, perms in enumerate(self.perm_combos):
             label = ", ".join(perms) if perms else "no perms"
 
             with self.subTest(permissions=label):
                 username = self._create_user(perms, i)
                 self.client.login(username=username, password=TEST_USER_PASSWORD)
-                self._run_query_and_validate(perms, label)
+                self._run_query_and_validate(label)
