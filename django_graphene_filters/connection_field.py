@@ -86,10 +86,7 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             from .aggregate_arguments_factory import AggregateArgumentsFactory
 
             node_type_name = self.node_type.__name__.replace("Type", "")
-            if self.aggregate_class:
-                prefix = f"{node_type_name}{self.aggregate_class.__name__}"
-            else:
-                prefix = node_type_name
+            prefix = f"{node_type_name}{self.aggregate_class.__name__}"
             factory = AggregateArgumentsFactory(self.aggregate_class, prefix)
             self._aggregate_type = factory.build_aggregate_type()
         return self._aggregate_type
