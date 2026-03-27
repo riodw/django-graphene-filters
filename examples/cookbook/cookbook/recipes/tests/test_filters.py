@@ -319,3 +319,169 @@ class ExplicitQuerysetFilterTests(GraphQLTestCase):
         edges = content["data"]["allValues"]["edges"]
         values = [e["node"]["value"] for e in edges]
         self.assertEqual(values, ["Red"])
+
+
+class SubEdgeFilterTests(GraphQLTestCase):
+    """Tests that tree-structured filter/orderBy/search arguments work on
+    sub-edge connections (e.g. values on an Object), not just root-level queries.
+    """
+
+    GRAPHQL_URL = "/graphql/"
+
+    def setUp(self):
+        super().setUp()
+        self.staff_user = User.objects.create_user(username="staff", password="testpass", is_staff=True)
+        self.client.login(username="staff", password="testpass")
+
+        Value.objects.all().delete()
+        Object.objects.all().delete()
+        Attribute.objects.all().delete()
+        ObjectType.objects.all().delete()
+
+        self.people_type = ObjectType.objects.create(name="People")
+        self.email_attr = Attribute.objects.create(
+            name="Email", description="Electronic mail", object_type=self.people_type
+        )
+        self.city_attr = Attribute.objects.create(
+            name="City", description="Home city", object_type=self.people_type
+        )
+        self.phone_attr = Attribute.objects.create(
+            name="Phone", description="Phone number", object_type=self.people_type
+        )
+
+        self.alice = Object.objects.create(name="Alice", description="Engineer", object_type=self.people_type)
+        Value.objects.create(value="alice@example.com", attribute=self.email_attr, object=self.alice)
+        Value.objects.create(value="Denver", attribute=self.city_attr, object=self.alice)
+        Value.objects.create(value="555-0001", attribute=self.phone_attr, object=self.alice)
+
+    def test_sub_edge_tree_filter(self):
+        """Tree-structured filter on a sub-edge connection should work."""
+        response = self.query("""
+            query {
+              allObjects(filter: { name: { exact: "Alice" } }) {
+                edges {
+                  node {
+                    name
+                    values(filter: { attribute: { name: { exact: "Email" } } }) {
+                      edges {
+                        node {
+                          value
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """)
+        self.assertResponseNoErrors(response)
+        content = json.loads(response.content)
+        edges = content["data"]["allObjects"]["edges"]
+        self.assertEqual(len(edges), 1)
+        values = [e["node"]["value"] for e in edges[0]["node"]["values"]["edges"]]
+        self.assertEqual(values, ["alice@example.com"])
+
+    def test_sub_edge_tree_filter_icontains(self):
+        """icontains lookup via tree filter on a sub-edge."""
+        response = self.query("""
+            query {
+              allObjects(filter: { name: { exact: "Alice" } }) {
+                edges {
+                  node {
+                    values(filter: { value: { icontains: "example" } }) {
+                      edges {
+                        node {
+                          value
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """)
+        self.assertResponseNoErrors(response)
+        content = json.loads(response.content)
+        values = [
+            e["node"]["value"] for e in content["data"]["allObjects"]["edges"][0]["node"]["values"]["edges"]
+        ]
+        self.assertEqual(values, ["alice@example.com"])
+
+    def test_sub_edge_order_by(self):
+        """orderBy on a sub-edge connection should work."""
+        response = self.query("""
+            query {
+              allObjects(filter: { name: { exact: "Alice" } }) {
+                edges {
+                  node {
+                    values(orderBy: [{ value: DESC }]) {
+                      edges {
+                        node {
+                          value
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """)
+        self.assertResponseNoErrors(response)
+        content = json.loads(response.content)
+        values = [
+            e["node"]["value"] for e in content["data"]["allObjects"]["edges"][0]["node"]["values"]["edges"]
+        ]
+        # value field is in ValueOrder.Meta.fields, so ordering should apply
+        self.assertEqual(values, sorted(values, reverse=True))
+
+    def test_sub_edge_search(self):
+        """search on a sub-edge connection should work."""
+        response = self.query("""
+            query {
+              allObjects(filter: { name: { exact: "Alice" } }) {
+                edges {
+                  node {
+                    values(search: "Denver") {
+                      edges {
+                        node {
+                          value
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """)
+        self.assertResponseNoErrors(response)
+        content = json.loads(response.content)
+        values = [
+            e["node"]["value"] for e in content["data"]["allObjects"]["edges"][0]["node"]["values"]["edges"]
+        ]
+        self.assertEqual(values, ["Denver"])
+
+    def test_sub_edge_unfiltered_returns_all(self):
+        """Without filter on sub-edge, all related values should return."""
+        response = self.query("""
+            query {
+              allObjects(filter: { name: { exact: "Alice" } }) {
+                edges {
+                  node {
+                    values {
+                      edges {
+                        node {
+                          value
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            """)
+        self.assertResponseNoErrors(response)
+        content = json.loads(response.content)
+        values = [
+            e["node"]["value"] for e in content["data"]["allObjects"]["edges"][0]["node"]["values"]["edges"]
+        ]
+        self.assertEqual(len(values), 3)

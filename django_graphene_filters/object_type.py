@@ -10,7 +10,11 @@ from collections.abc import Sequence
 from typing import Any
 
 import graphene
+from django.db import models
+from graphene import Dynamic
 from graphene_django import DjangoObjectType
+from graphene_django.converter import convert_django_field, get_django_field_description
+from graphene_django.fields import DjangoConnectionField, DjangoListField
 from graphene_django.types import DjangoObjectTypeOptions
 
 logger = logging.getLogger(__name__)
@@ -219,3 +223,52 @@ class AdvancedDjangoObjectType(DjangoObjectType):
                 )
                 return cls._make_sentinel(source_pk=id)
             return None
+
+
+# ---------------------------------------------------------------------------
+# Converter override: upgrade sub-edge connection fields
+# ---------------------------------------------------------------------------
+# graphene-django's default converter creates DjangoFilterConnectionField for
+# reverse relations (ManyToOneRel, ManyToManyField, ManyToManyRel).  We
+# re-register the singledispatch converter so that when the *target* type is
+# an AdvancedDjangoObjectType the connection field is an
+# AdvancedDjangoFilterConnectionField instead — giving sub-edges the same
+# tree-structured ``filter``, ``orderBy`` and ``search`` arguments that
+# root-level queries enjoy.
+
+
+@convert_django_field.register(models.ManyToManyField)
+@convert_django_field.register(models.ManyToManyRel)
+@convert_django_field.register(models.ManyToOneRel)
+def _convert_field_to_list_or_connection(field: Any, registry: Any = None) -> Dynamic:
+    model = field.related_model
+
+    def dynamic_type() -> Any:
+        _type = registry.get_type_for_model(model)
+        if not _type:
+            return
+
+        if isinstance(field, models.ManyToManyField):
+            description = get_django_field_description(field)
+        else:
+            description = get_django_field_description(field.field)
+
+        if _type._meta.connection:
+            if _type._meta.filter_fields or _type._meta.filterset_class:
+                # Use AdvancedDjangoFilterConnectionField when the target is
+                # an AdvancedDjangoObjectType; fall back to the standard
+                # DjangoFilterConnectionField otherwise.
+                if isinstance(_type, type) and issubclass(_type, AdvancedDjangoObjectType):
+                    from .connection_field import AdvancedDjangoFilterConnectionField
+
+                    return AdvancedDjangoFilterConnectionField(_type, required=True, description=description)
+
+                from graphene_django.filter.fields import DjangoFilterConnectionField
+
+                return DjangoFilterConnectionField(_type, required=True, description=description)
+
+            return DjangoConnectionField(_type, required=True, description=description)
+
+        return DjangoListField(_type, required=True, description=description)
+
+    return Dynamic(dynamic_type)

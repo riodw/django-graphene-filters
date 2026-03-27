@@ -332,3 +332,150 @@ def test_orderset_get_fields_all_no_model():
 
     fields = OSNoModel.get_fields()
     assert len(fields) == 0
+
+
+# ---------------------------------------------------------------------------
+# object_type.py — converter override fallback branches
+# ---------------------------------------------------------------------------
+
+
+def test_converter_type_not_registered():
+    """object_type.py line 249: early return when _type is None."""
+    from django_graphene_filters.object_type import _convert_field_to_list_or_connection
+
+    field = MagicMock(spec=models.ManyToOneRel)
+    field.related_model = FinalUniqueCoverageModel
+
+    registry = MagicMock()
+    registry.get_type_for_model.return_value = None
+
+    dynamic = _convert_field_to_list_or_connection(field, registry)
+    assert dynamic.get_type() is None
+
+
+def test_converter_m2m_field_description_branch():
+    """object_type.py line 252: ManyToManyField takes description from field.help_text."""
+    from django_graphene_filters.object_type import _convert_field_to_list_or_connection
+
+    field = MagicMock(spec=models.ManyToManyField)
+    field.related_model = FinalUniqueCoverageModel
+    field.help_text = "M2M help"
+
+    _type = MagicMock()
+    _type._meta.connection = True
+    _type._meta.filter_fields = None
+    _type._meta.filterset_class = None
+
+    registry = MagicMock()
+    registry.get_type_for_model.return_value = _type
+
+    dynamic = _convert_field_to_list_or_connection(field, registry)
+    with patch("django_graphene_filters.object_type.DjangoConnectionField") as mock_cls:
+        mock_cls.return_value = sentinel = MagicMock()
+        result = dynamic.get_type()
+        assert result is sentinel
+        mock_cls.assert_called_once_with(_type, required=True, description="M2M help")
+
+
+def _make_reverse_rel_field():
+    """Create a mock that behaves like a ManyToOneRel for the converter."""
+    field = MagicMock()
+    field.related_model = FinalUniqueCoverageModel
+    # ManyToOneRel gets description via field.field.help_text
+    field.field.help_text = ""
+    return field
+
+
+def test_converter_non_advanced_type_falls_back_to_django_filter_connection():
+    """object_type.py lines 266-268: non-AdvancedDjangoObjectType with filter_fields."""
+    from django_graphene_filters.object_type import _convert_field_to_list_or_connection
+
+    field = _make_reverse_rel_field()
+
+    # MagicMock is not a type, so isinstance(_type, type) is False — hits the fallback.
+    _type = MagicMock()
+    _type._meta.connection = True
+    _type._meta.filter_fields = {"name": ["exact"]}
+    _type._meta.filterset_class = None
+
+    registry = MagicMock()
+    registry.get_type_for_model.return_value = _type
+
+    dynamic = _convert_field_to_list_or_connection(field, registry)
+    with patch("graphene_django.filter.fields.DjangoFilterConnectionField") as mock_cls:
+        mock_cls.return_value = sentinel = MagicMock()
+        result = dynamic.get_type()
+        assert result is sentinel
+        mock_cls.assert_called_once_with(_type, required=True, description=None)
+
+
+def test_converter_connection_without_filter_fields():
+    """object_type.py line 270: connection type without filter_fields → DjangoConnectionField."""
+    from django_graphene_filters.object_type import _convert_field_to_list_or_connection
+
+    field = _make_reverse_rel_field()
+
+    _type = MagicMock()
+    _type._meta.connection = True
+    _type._meta.filter_fields = None
+    _type._meta.filterset_class = None
+
+    registry = MagicMock()
+    registry.get_type_for_model.return_value = _type
+
+    dynamic = _convert_field_to_list_or_connection(field, registry)
+    with patch("django_graphene_filters.object_type.DjangoConnectionField") as mock_cls:
+        mock_cls.return_value = sentinel = MagicMock()
+        result = dynamic.get_type()
+        assert result is sentinel
+        mock_cls.assert_called_once_with(_type, required=True, description=None)
+
+
+def test_converter_non_connection_type():
+    """object_type.py line 272: non-connection type → DjangoListField."""
+    from django_graphene_filters.object_type import _convert_field_to_list_or_connection
+
+    field = _make_reverse_rel_field()
+
+    _type = MagicMock()
+    _type._meta.connection = None
+
+    registry = MagicMock()
+    registry.get_type_for_model.return_value = _type
+
+    dynamic = _convert_field_to_list_or_connection(field, registry)
+    with patch("django_graphene_filters.object_type.DjangoListField") as mock_cls:
+        mock_cls.return_value = sentinel = MagicMock()
+        result = dynamic.get_type()
+        assert result is sentinel
+        mock_cls.assert_called_once_with(_type, required=True, description=None)
+
+
+def test_resolve_aggregates_lazy_computation():
+    """object_type.py lines 65-66: lazy computation for nested connections."""
+    from django_graphene_filters.object_type import _inject_aggregates_on_connection
+
+    agg_class = MagicMock()
+    agg_class.__name__ = "TestAgg"
+    agg_instance = MagicMock()
+    agg_class.return_value = agg_instance
+    agg_instance.compute.return_value = {"count": 5}
+
+    node_cls = MagicMock()
+    node_cls.__name__ = "TestNode"
+
+    class TestConn:
+        _meta = MagicMock()
+        _meta.fields = {}
+
+    _inject_aggregates_on_connection(node_cls, agg_class, TestConn)
+
+    # root has iterable but no aggregates attr
+    root = MagicMock(spec=["iterable"])
+    root.iterable = MagicMock()
+    info = MagicMock()
+
+    result = TestConn.resolve_aggregates(root, info)
+    assert result == {"count": 5}
+    agg_class.assert_called_once_with(queryset=root.iterable, request=info.context)
+    agg_instance.compute.assert_called_once_with(local_only=True)
