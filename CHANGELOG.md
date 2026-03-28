@@ -44,6 +44,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Field permission unit tests** — `test_fieldset.py` covering metaclass
   discovery, check/resolve cascade, camelCase mapping, snake_case
   fallback, missing field warnings, original resolver preservation.
+- **Computed fields** — `AdvancedFieldSet` can declare graphene type attributes
+  (e.g. `display_name = graphene.String()`) that are automatically injected
+  into the node type's schema via `_wrap_field_resolvers`.
+
+### Changed
+
+- **`_get_deny_value` caching** — deny values for field-level permission gates
+  are now cached in a module-level dict by `(model, field_name)`. Epoch
+  fallback constants (`_EPOCH_DATETIME`, `_EPOCH_DATE`) moved to module-level
+  statics. Nullable fields short-circuit to `None` before default computation.
 
 ## [0.5.2] - 2026-03-27
 

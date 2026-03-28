@@ -279,7 +279,7 @@ def test_wrap_cascade_check_denies_no_resolve():
     info = MagicMock()
 
     result = wrapper(root, info)
-    assert result is None
+    assert result == ""  # denied — CharField default
 
 
 def test_wrap_cascade_check_denies_with_resolve_does_not_run():
@@ -312,17 +312,16 @@ def test_wrap_cascade_check_denies_with_resolve_does_not_run():
     info = MagicMock()
 
     result = wrapper(root, info)
-    # Gate denied → deny_value (None for nullable), resolve_ never called
-    assert result is None
+    # Gate denied → deny_value (CharField default), resolve_ never called
+    assert result == ""
 
 
 def test_wrap_non_nullable_field_denied_returns_default():
     """Non-nullable field denied by gate returns type-appropriate default, not None."""
-    from types import SimpleNamespace
+    from django_graphene_filters.object_type import _deny_value_cache, _get_deny_value, _wrap_field_resolvers
 
-    import graphene as g
-
-    from django_graphene_filters.object_type import _get_deny_value, _wrap_field_resolvers
+    # Clear cache so previous test runs don't interfere
+    _deny_value_cache.clear()
 
     class TestFS(AdvancedFieldSet):
         class Meta:
@@ -331,10 +330,8 @@ def test_wrap_non_nullable_field_denied_returns_default():
         def check_name_permission(self, info):
             raise GraphQLError("No")
 
-    # Use SimpleNamespace so .type is a real attribute, not MagicMock magic
     graphene_field = MagicMock()
     graphene_field.resolver = None
-    graphene_field.type = g.NonNull(g.String)
 
     node_cls = MagicMock()
     node_cls._meta.fields = {"name": graphene_field}
@@ -344,35 +341,53 @@ def test_wrap_non_nullable_field_denied_returns_default():
 
     wrapper = graphene_field.resolver
     result = wrapper(MagicMock(), MagicMock())
-    assert result == ""  # Non-nullable String default
+    assert result == ""  # CharField default
 
-    # Verify _get_deny_value directly with SimpleNamespace for clean .type access
-    assert _get_deny_value(SimpleNamespace(type=g.NonNull(g.String))) == ""
-    assert _get_deny_value(SimpleNamespace(type=g.NonNull(g.Boolean))) is False
-    assert _get_deny_value(SimpleNamespace(type=g.NonNull(g.Int))) == 0
-    assert _get_deny_value(SimpleNamespace(type=g.NonNull(g.Float))) == 0.0
+    # Verify _get_deny_value directly using Django model fields
+    # CharField → ""
+    assert _get_deny_value(FieldSetTestModel, "name") == ""
+    # TextField(default="") → ""
+    assert _get_deny_value(FieldSetTestModel, "description") == ""
 
-    dt_deny = _get_deny_value(SimpleNamespace(type=g.NonNull(g.DateTime)))
+    # Test with a model that has diverse field types
+    class DiverseModel(models.Model):
+        flag = models.BooleanField(default=False)
+        count = models.IntegerField(default=0)
+        score = models.FloatField(default=0.0)
+        created = models.DateTimeField(auto_now_add=True)
+        updated_date = models.DateField(auto_now=True)
+        birthday = models.DateField(null=True)
+        uid = models.UUIDField()
+
+        class Meta:
+            app_label = "recipes"
+
+    _deny_value_cache.clear()
+
+    assert _get_deny_value(DiverseModel, "flag") is False
+    assert _get_deny_value(DiverseModel, "count") == 0
+    assert _get_deny_value(DiverseModel, "score") == 0.0
+
+    # auto_now_add DateTimeField → epoch datetime fallback
+    dt_deny = _get_deny_value(DiverseModel, "created")
     assert dt_deny is not None
     assert dt_deny.year == 1970
 
-    date_deny = _get_deny_value(SimpleNamespace(type=g.NonNull(g.Date)))
+    # auto_now DateField → epoch date fallback
+    date_deny = _get_deny_value(DiverseModel, "updated_date")
     assert date_deny is not None
     assert date_deny.year == 1970
 
-    # Nullable field
-    assert _get_deny_value(SimpleNamespace(type=g.String)) is None
+    # Nullable field → None
+    assert _get_deny_value(DiverseModel, "birthday") is None
 
-    # Unknown non-nullable type
-    assert _get_deny_value(SimpleNamespace(type=g.NonNull(g.ID))) is None
+    # Non-nullable, non-date, no default → None (fall-through)
+    assert _get_deny_value(DiverseModel, "uid") is None
 
-    # Exception accessing .type
-    class BrokenField:
-        @property
-        def type(self):
-            raise RuntimeError("boom")
+    # Unknown field → None
+    assert _get_deny_value(DiverseModel, "nonexistent") is None
 
-    assert _get_deny_value(BrokenField()) is None
+    _deny_value_cache.clear()
 
 
 def test_wrap_cascade_check_passes_resolve_runs():
@@ -520,7 +535,7 @@ def test_wrap_camel_case_field_lookup():
     info = MagicMock()
 
     result = wrapper(root, info)
-    assert result is None  # denied
+    assert result == ""  # denied — TextField default
 
 
 def test_computed_field_injection():
@@ -603,4 +618,4 @@ def test_wrap_snake_case_fallback():
     _wrap_field_resolvers(node_cls, TestFS)
 
     wrapper = graphene_field.resolver
-    assert wrapper(MagicMock(), MagicMock()) is None  # denied
+    assert wrapper(MagicMock(), MagicMock()) == ""  # denied — CharField default

@@ -8,7 +8,6 @@ import logging
 import warnings
 from collections.abc import Sequence
 from datetime import date, datetime, timezone
-from functools import lru_cache
 from typing import Any
 
 import graphene
@@ -238,7 +237,9 @@ class AdvancedDjangoObjectType(DjangoObjectType):
             return None
 
 
-@lru_cache(maxsize=None)
+_deny_value_cache: dict[tuple[type, str], Any] = {}
+
+
 def _get_deny_value(model: type, field_name: str) -> Any:
     """Compute the value to return when a permission gate denies a field.
 
@@ -249,22 +250,36 @@ def _get_deny_value(model: type, field_name: str) -> Any:
 
     Returns ``None`` for fields that are nullable or not on the model
     (e.g. computed fields).
+
+    Results are cached by ``(model, field_name)`` — the deny value for a given
+    field never changes between users or sessions.
     """
+    key = (model, field_name)
+    if key in _deny_value_cache:
+        return _deny_value_cache[key]
+
     try:
         model_field = model._meta.get_field(field_name)
     except Exception:
+        _deny_value_cache[key] = None
         return None  # Computed field or unknown → None
+
+    # Nullable fields can safely return None — GraphQL allows it.
+    if model_field.null:
+        _deny_value_cache[key] = None
+        return None
 
     # Let Django's real default overwrite the epoch fallback.
     default = model_field.get_default()
-    # Start with epoch for date/datetime fields (covers auto_now/auto_now_add
-    # which report has_default=False but are non-nullable in the schema).
+    # Epoch fallback for non-nullable date/datetime fields (covers auto_now/
+    # auto_now_add which report has_default=False but are non-nullable).
     if default is None:
         if isinstance(model_field, models.DateTimeField):
             default = _EPOCH_DATETIME
         elif isinstance(model_field, models.DateField):
             default = _EPOCH_DATE
 
+    _deny_value_cache[key] = default
     return default
 
 
