@@ -13,6 +13,12 @@ from .aggregates import (
     ObjectTypeAggregate,
     ValueAggregate,
 )
+from .fields import (
+    AttributeFieldSet,
+    ObjectFieldSet,
+    ObjectTypeFieldSet,
+    ValueFieldSet,
+)
 from .filters import (
     AttributeFilter,
     ObjectFilter,
@@ -39,6 +45,7 @@ class ObjectTypeNode(AdvancedDjangoObjectType):
         filterset_class = ObjectTypeFilter
         orderset_class = ObjectTypeOrder
         aggregate_class = ObjectTypeAggregate
+        fields_class = ObjectTypeFieldSet
         search_fields = (
             "name",
             "description",
@@ -63,6 +70,7 @@ class ObjectNode(AdvancedDjangoObjectType):
         filterset_class = ObjectFilter
         orderset_class = ObjectOrder
         aggregate_class = ObjectAggregate
+        fields_class = ObjectFieldSet
         search_fields = (
             "name",
             "description",
@@ -89,6 +97,7 @@ class AttributeNode(AdvancedDjangoObjectType):
         filterset_class = AttributeFilter
         orderset_class = AttributeOrder
         aggregate_class = AttributeAggregate
+        fields_class = AttributeFieldSet
         search_fields = (
             "name",
             "description",
@@ -111,13 +120,22 @@ class ValueNode(AdvancedDjangoObjectType):
     class Meta:
         model = models.Value
         interfaces = (Node,)
-        fields = "__all__"
+        fields = [
+            "id",
+            "value",
+            # description - not included for permissions testing
+            "attribute",
+            "object",
+            "is_private",
+            "created_date",
+            "updated_date",
+        ]
         filterset_class = ValueFilter
         orderset_class = ValueOrder
         aggregate_class = ValueAggregate
+        fields_class = ValueFieldSet
         search_fields = (
             "value",
-            "description",
             "attribute__name",
             "object__name",
         )
