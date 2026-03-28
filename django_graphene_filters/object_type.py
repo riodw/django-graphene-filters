@@ -7,6 +7,8 @@ an `orderset_class` or `search_fields` in the Meta of your node type.
 import logging
 import warnings
 from collections.abc import Sequence
+from datetime import date, datetime, timezone
+from functools import lru_cache
 from typing import Any
 
 import graphene
@@ -19,6 +21,10 @@ from graphene_django.fields import DjangoConnectionField, DjangoListField
 from graphene_django.types import DjangoObjectTypeOptions
 
 logger = logging.getLogger(__name__)
+
+# Epoch fallbacks for auto_now / auto_now_add fields (which report no default).
+_EPOCH_DATETIME = datetime(1970, 1, 1, tzinfo=timezone.utc)
+_EPOCH_DATE = date(1970, 1, 1)
 
 
 def _inject_aggregates_on_connection(
@@ -232,6 +238,7 @@ class AdvancedDjangoObjectType(DjangoObjectType):
             return None
 
 
+@lru_cache(maxsize=None)
 def _get_deny_value(model: type, field_name: str) -> Any:
     """Compute the value to return when a permission gate denies a field.
 
@@ -243,8 +250,6 @@ def _get_deny_value(model: type, field_name: str) -> Any:
     Returns ``None`` for fields that are nullable or not on the model
     (e.g. computed fields).
     """
-    from datetime import date, datetime, timezone
-
     try:
         model_field = model._meta.get_field(field_name)
     except Exception:
@@ -256,9 +261,9 @@ def _get_deny_value(model: type, field_name: str) -> Any:
     # which report has_default=False but are non-nullable in the schema).
     if default is None:
         if isinstance(model_field, models.DateTimeField):
-            default = datetime(1970, 1, 1, tzinfo=timezone.utc)
+            default = _EPOCH_DATETIME
         elif isinstance(model_field, models.DateField):
-            default = date(1970, 1, 1)
+            default = _EPOCH_DATE
 
     return default
 
