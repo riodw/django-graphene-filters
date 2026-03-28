@@ -12,6 +12,7 @@ from typing import Any
 import graphene
 from django.db import models
 from graphene import Dynamic
+from graphene.utils.str_converters import to_camel_case
 from graphene_django import DjangoObjectType
 from graphene_django.converter import convert_django_field, get_django_field_description
 from graphene_django.fields import DjangoConnectionField, DjangoListField
@@ -112,21 +113,27 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         orderset_class: type | None = None,
         search_fields: Sequence[str] | None = None,
         aggregate_class: type | None = None,
+        fields_class: type | None = None,
         _meta: DjangoObjectTypeOptions | None = None,
         **options,
     ) -> None:
-        """Capture ``orderset_class``, ``search_fields``, and ``aggregate_class`` from Meta."""
+        """Capture ``orderset_class``, ``search_fields``, ``aggregate_class``, and ``fields_class``."""
         if not _meta:
             _meta = DjangoObjectTypeOptions(cls)
         _meta.orderset_class = orderset_class
         _meta.search_fields = search_fields
         _meta.aggregate_class = aggregate_class
+        _meta.fields_class = fields_class
         super().__init_subclass_with_meta__(_meta=_meta, **options)
 
         # Inject aggregates field onto the connection type so it's available
         # on both root-level and nested connections (e.g. object.values.aggregates).
         if aggregate_class and hasattr(_meta, "connection") and _meta.connection:
             _inject_aggregates_on_connection(cls, aggregate_class, _meta.connection)
+
+        # Wrap resolvers for fields managed by the FieldSet.
+        if fields_class:
+            _wrap_field_resolvers(cls, fields_class)
 
         # Sentinel / cascade permissions require Relay's get_node for FK
         # resolution.  Without the Node interface, FK fields resolve via
@@ -223,6 +230,118 @@ class AdvancedDjangoObjectType(DjangoObjectType):
                 )
                 return cls._make_sentinel(source_pk=id)
             return None
+
+
+def _get_deny_value(model: type, field_name: str) -> Any:
+    """Compute the value to return when a permission gate denies a field.
+
+    Uses the Django model field's ``get_default()`` to derive a type-appropriate
+    value automatically.  For ``DateTimeField`` and ``DateField`` the default is
+    always set to epoch (1970-01-01) first — if the field has a real default
+    (i.e. not ``auto_now`` / ``auto_now_add``), ``get_default()`` overwrites it.
+
+    Returns ``None`` for fields that are nullable or not on the model
+    (e.g. computed fields).
+    """
+    from datetime import date, datetime, timezone
+
+    try:
+        model_field = model._meta.get_field(field_name)
+    except Exception:
+        return None  # Computed field or unknown → None
+
+    # Let Django's real default overwrite the epoch fallback.
+    default = model_field.get_default()
+    # Start with epoch for date/datetime fields (covers auto_now/auto_now_add
+    # which report has_default=False but are non-nullable in the schema).
+    if default is None:
+        if isinstance(model_field, models.DateTimeField):
+            default = datetime(1970, 1, 1, tzinfo=timezone.utc)
+        elif isinstance(model_field, models.DateField):
+            default = date(1970, 1, 1)
+
+    return default
+
+
+def _wrap_field_resolvers(node_cls: type, fields_class: type) -> None:
+    """Wrap resolvers for fields managed by a ``FieldSet``.
+
+    For each field in ``_managed_fields``, find the corresponding graphene
+    field on the node type and wrap its resolver with the cascade:
+    check → resolve → default.
+
+    Also injects computed fields declared as graphene type attributes on
+    the FieldSet (e.g. ``display_name = graphene.String()``) into the
+    node type so they appear in the schema automatically.
+    """
+    managed = getattr(fields_class, "_managed_fields", set())
+    computed = getattr(fields_class, "_computed_fields", {})
+    if not managed and not computed:
+        return
+
+    meta_fields = getattr(node_cls._meta, "fields", {})
+
+    # Inject computed fields into the node type's schema.
+    for field_name, unmounted_type in computed.items():
+        graphql_name = to_camel_case(field_name)
+        if graphql_name not in meta_fields and field_name not in meta_fields:
+            mounted = unmounted_type.mount_as(graphene.Field)
+            meta_fields[graphql_name] = mounted
+
+    for field_name in managed:
+        # Graphene may store the field under camelCase or snake_case
+        # depending on version — check both to be safe.
+        graphql_name = to_camel_case(field_name)
+        if graphql_name in meta_fields:
+            graphene_field = meta_fields[graphql_name]
+        elif field_name in meta_fields:
+            graphene_field = meta_fields[field_name]
+        else:
+            logger.warning(
+                "%s references field '%s' but it is not in %s's fields. "
+                "The permission/resolve method will have no effect.",
+                fields_class.__name__,
+                field_name,
+                node_cls.__name__,
+            )
+            continue
+
+        # Capture the original resolver — this preserves graphene-django's
+        # custom FK resolvers (which go through get_node) and the sentinel system.
+        original_resolver = graphene_field.resolver
+
+        # Pre-compute the deny value once at schema build time.
+        model = getattr(getattr(fields_class, "Meta", None), "model", None)
+        deny_value = _get_deny_value(model, field_name) if model else None
+
+        def make_wrapper(
+            fname: str,
+            orig: Any,
+            deny_val: Any,
+        ) -> Any:
+            def permission_checking_resolver(root: Any, info: Any, **kwargs: Any) -> Any:
+                fieldset = fields_class(info)
+
+                # Step 1: Permission gate — absolute.
+                # Denied = denied.  resolve_ does NOT run.
+                # The wrapper returns a type-appropriate default for
+                # non-nullable fields (deny_val), or None for nullable.
+                if not fieldset.check_field(fname):
+                    return deny_val
+
+                # Step 2: Custom resolver (runs if defined, check already passed)
+                if fieldset.has_resolve_method(fname):
+                    return fieldset.resolve_field(fname, root, info)
+
+                # Step 3: Default resolver (no custom resolve defined)
+                # This preserves graphene-django's FK/sentinel resolvers.
+                if orig:
+                    return orig(root, info, **kwargs)
+                return getattr(root, fname, None)
+
+            return permission_checking_resolver
+
+        graphene_field.resolver = make_wrapper(field_name, original_resolver, deny_value)
 
 
 # ---------------------------------------------------------------------------

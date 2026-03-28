@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [0.6.0] - 2026-03-27
+
+### Added
+
+- **Field-level permissions** — new `AdvancedFieldSet` base class for
+  resolve-time field visibility control. Consumers declare
+  `check_<field>_permission(info)` methods to gate field access and
+  `resolve_<field>(root, info)` methods to override field content
+  (masking, computed values, role-based output).
+  - **Cascade resolution order**: `check_` (gate) → `resolve_` (content
+    override) → default resolver. All three compose naturally — define
+    whichever you need.
+  - **`FieldSetMetaclass`** — validates configuration at class creation:
+    discovers `check_<field>_permission` and `resolve_<field>` methods,
+    validates model field existence (via `get_concrete_field_names` from
+    `mixins.py`), stores `_field_permissions`, `_field_resolvers`, and
+    `_managed_fields`.
+  - **`_wrap_field_resolvers`** — in `object_type.py`, automatically wraps
+    graphene field resolvers with the cascade when `fields_class` is set.
+    Checks both camelCase and snake_case field keys for graphene version
+    safety. Logs a warning for FieldSet fields not present in the node's
+    schema.
+  - **Backwards compatible** — `fields` and `fields_class` coexist.
+    Existing nodes without `fields_class` work identically. No middleware
+    or schema-level changes required.
+- **`fields_class` on `AdvancedDjangoObjectType`** — new Meta parameter
+  to declare the field permission class for a node type.
+- **Cookbook example** — `fieldsets.py` with `resolve_` methods for all 3
+  restricted fields (`ObjectType.description`, `Object.is_private`,
+  `Value.description`), demonstrating safe fallback values for non-nullable
+  fields.
+- **Field permission integration tests** — `test_field_permissions.py`
+  verifying staff sees real values, non-staff gets safe fallbacks,
+  unrestricted fields resolve normally, anonymous user behaviour.
+- **Field permission unit tests** — `test_fieldset.py` covering metaclass
+  discovery, check/resolve cascade, camelCase mapping, snake_case
+  fallback, missing field warnings, original resolver preservation.
+
 ## [0.5.2] - 2026-03-27
 
 ### Added
@@ -334,6 +372,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline** — GitHub Actions testing across Python 3.10–3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
+[0.6.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.6.0
 [0.5.2]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.2
 [0.5.1]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.1
 [0.5.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.0

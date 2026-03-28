@@ -12,21 +12,21 @@ def _user(info):
 
 
 def _resolve_date(dt, info, perm):
-    """Tiered date visibility.
+    """Tiered date visibility via truncated datetime objects.
 
-    Staff         → full ISO datetime
-    view_<model>  → year-month-day
-    Authenticated → year-month
-    Anonymous     → year only
+    Staff         → full datetime (as-is)
+    view_<model>  → day precision (time zeroed)
+    Authenticated → month precision (day=1, time zeroed)
+    Anonymous     → year precision (month=1, day=1, time zeroed)
     """
     user = _user(info)
     if user and user.is_staff:
-        return dt.isoformat()
+        return dt
     if user and user.has_perm(perm):
-        return dt.strftime("%Y-%m-%d")
+        return dt.replace(hour=0, minute=0, second=0, microsecond=0)
     if user and user.is_authenticated:
-        return dt.strftime("%Y-%m")
-    return dt.strftime("%Y")
+        return dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    return dt.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
 # ---------------------------------------------------------------------------
@@ -64,6 +64,9 @@ class ObjectTypeFieldSet(fieldsets.AdvancedFieldSet):
             raise GraphQLError("Login required to view updated date.")
 
     def resolve_updated_date(self, root, info):
+        """Tiered updated_date. If gate denied (anonymous), this still runs
+        as fallback for non-nullable fields — returns year precision.
+        """
         return _resolve_date(root.updated_date, info, "recipes.view_objecttype")
 
 
@@ -157,11 +160,21 @@ class ValueFieldSet(fieldsets.AdvancedFieldSet):
     def resolve_created_date(self, root, info):
         return _resolve_date(root.created_date, info, "recipes.view_value")
 
-    def check_updated_date_permission(self, info):
-        """Gate: anonymous users cannot see updated_date."""
+    # def check_updated_date_permission(self, info):
+    #     """Gate: anonymous users cannot see updated_date."""
+    #     user = _user(info)
+    #     if not user or not user.is_authenticated:
+    #         raise GraphQLError("Login required to view updated date.")
+
+    def resolve_updated_date(self, root, info):
+        """Permission + content in one method (no check_ gate).
+
+        Demonstrates that resolve_ can handle denial directly:
+        anonymous → None (nullable) or raise (non-nullable).
+        Since updatedDate is non-nullable DateTime!, we use
+        _resolve_date which returns year-precision for anonymous.
+        """
         user = _user(info)
         if not user or not user.is_authenticated:
             raise GraphQLError("Login required to view updated date.")
-
-    def resolve_updated_date(self, root, info):
         return _resolve_date(root.updated_date, info, "recipes.view_value")

@@ -4,7 +4,7 @@ Each model has an auto-generated ``view_<model>`` permission created by
 ``django.contrib.auth``.  Granting that permission to a non-staff user gives
 them the same full visibility that ``is_staff=True`` provides.
 
-Three user types are tested per model (4 models × 3 tests = 12 tests):
+Three user types are tested per model (4 models x 3 tests = 12 tests):
 1. Staff (is_staff=True)              → sees ALL rows
 2. Non-staff, no permissions          → sees only is_private=False
 3. Non-staff, with view_<model> perm  → sees ALL rows
