@@ -114,18 +114,19 @@ uv run black .
 uv run ruff check --fix .
 ```
 
-## Build
-
-```shell
-uv lock
-uv build
-```
-
 ### Updating Version:
 
 - `pyproject.toml:4`
 - `django_graphene_filters/__init__.py:22`
 - `tests/test_django_graphene_filters.py:8`
+
+## Build
+
+```shell
+uv lock
+rm dist/*
+uv build
+```
 
 ## Publish
 

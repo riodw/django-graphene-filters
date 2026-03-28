@@ -6,31 +6,11 @@ from django_graphene_filters import (
     apply_cascade_permissions,
 )
 
+from . import aggregates
+from . import fields as fieldsets
+from . import filters
 from . import models
-from .aggregates import (
-    AttributeAggregate,
-    ObjectAggregate,
-    ObjectTypeAggregate,
-    ValueAggregate,
-)
-from .fields import (
-    AttributeFieldSet,
-    ObjectFieldSet,
-    ObjectTypeFieldSet,
-    ValueFieldSet,
-)
-from .filters import (
-    AttributeFilter,
-    ObjectFilter,
-    ObjectTypeFilter,
-    ValueFilter,
-)
-from .orders import (
-    AttributeOrder,
-    ObjectOrder,
-    ObjectTypeOrder,
-    ValueOrder,
-)
+from . import orders
 
 """
 Nodes
@@ -42,10 +22,10 @@ class ObjectTypeNode(AdvancedDjangoObjectType):
         model = models.ObjectType
         interfaces = (Node,)
         fields = "__all__"
-        filterset_class = ObjectTypeFilter
-        orderset_class = ObjectTypeOrder
-        aggregate_class = ObjectTypeAggregate
-        fields_class = ObjectTypeFieldSet
+        filterset_class = filters.ObjectTypeFilter
+        orderset_class = orders.ObjectTypeOrder
+        aggregate_class = aggregates.ObjectTypeAggregate
+        fields_class = fieldsets.ObjectTypeFieldSet
         search_fields = (
             "name",
             "description",
@@ -67,10 +47,10 @@ class ObjectNode(AdvancedDjangoObjectType):
         model = models.Object
         interfaces = (Node,)
         fields = "__all__"
-        filterset_class = ObjectFilter
-        orderset_class = ObjectOrder
-        aggregate_class = ObjectAggregate
-        fields_class = ObjectFieldSet
+        filterset_class = filters.ObjectFilter
+        orderset_class = orders.ObjectOrder
+        aggregate_class = aggregates.ObjectAggregate
+        fields_class = fieldsets.ObjectFieldSet
         search_fields = (
             "name",
             "description",
@@ -94,10 +74,10 @@ class AttributeNode(AdvancedDjangoObjectType):
         model = models.Attribute
         interfaces = (Node,)
         fields = "__all__"
-        filterset_class = AttributeFilter
-        orderset_class = AttributeOrder
-        aggregate_class = AttributeAggregate
-        fields_class = AttributeFieldSet
+        filterset_class = filters.AttributeFilter
+        orderset_class = orders.AttributeOrder
+        aggregate_class = aggregates.AttributeAggregate
+        fields_class = fieldsets.AttributeFieldSet
         search_fields = (
             "name",
             "description",
@@ -130,10 +110,10 @@ class ValueNode(AdvancedDjangoObjectType):
             "created_date",
             "updated_date",
         ]
-        filterset_class = ValueFilter
-        orderset_class = ValueOrder
-        aggregate_class = ValueAggregate
-        fields_class = ValueFieldSet
+        filterset_class = filters.ValueFilter
+        orderset_class = orders.ValueOrder
+        aggregate_class = aggregates.ValueAggregate
+        fields_class = fieldsets.ValueFieldSet
         search_fields = (
             "value",
             "attribute__name",
