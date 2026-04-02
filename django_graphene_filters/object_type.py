@@ -170,10 +170,13 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         through a hidden intermediate (e.g. a private Attribute).
         """
         sentinel = cls._meta.model(pk=0)
+        # Only single-column FK/O2O fields — exclude ManyToManyField which
+        # has attname and related_model but is backed by a join table and
+        # cannot be assigned via setattr.
         fk_fields = [
             f
             for f in cls._meta.model._meta.get_fields()
-            if hasattr(f, "attname") and getattr(f, "related_model", None) is not None
+            if hasattr(f, "column") and getattr(f, "related_model", None) is not None
         ]
         if source_pk is not None and fk_fields:
             # Copy real FK IDs so visible downstream targets resolve normally.
@@ -209,13 +212,14 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         ``T2JqZWN0VHlwZU5vZGU6MA==``), signalling to clients that the
         relationship exists but the target is not accessible.
         """
-        # Sentinel chain: propagate when a parent sentinel's FK ID
-        # could not be resolved (fallback value of 0).
-        if id == 0:
-            return cls._make_sentinel()
-
         if id is None:
             return None
+
+        # Sentinel chain: propagate when a parent sentinel's FK ID
+        # could not be resolved (fallback value of 0).
+        # int 0 from FK resolution, str "0" from Relay global ID decoding.
+        if id == 0 or id == "0":
+            return cls._make_sentinel()
 
         queryset = cls.get_queryset(cls._meta.model.objects, info)
         try:

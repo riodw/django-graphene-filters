@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [0.7.1] - 2026-04-02
+
+### Fixed
+
+- **`_make_sentinel` crash on M2M fields** — `_make_sentinel` in
+  `object_type.py` filtered FK fields using `hasattr(f, "attname")` which
+  also matches `ManyToManyField`. Attempting `setattr` on an M2M field
+  raises `TypeError: Direct assignment to the forward side of a
+  many-to-many set is prohibited`. Fixed by using `hasattr(f, "column")`
+  which only matches single-column relations (`ForeignKey` /
+  `OneToOneField`), consistent with `permissions.py` and
+  `mixins.get_concrete_field_names`.
+- **`get_node` sentinel chain broken for Relay global IDs** — the sentinel
+  short-circuit `if id == 0` did not match `"0"` (a string), which is what
+  Relay's global ID decoder produces. Clients refetching a sentinel by its
+  global ID would get `None` instead of a sentinel. Fixed by checking both
+  `id == 0` and `id == "0"`.
+- **Test warnings cleanup** — suppressed `InputObjectType` overwrite
+  warnings in `test_aggregates_edge_aggregates.py` caused by test-ordering
+  interactions with the global graphene type registry. Added
+  `fields = "__all__"` to `ConnNode` and `test_advanced_django_object_type`
+  to eliminate `DeprecationWarning` from graphene-django.
+
 ## [0.7.0] - 2026-04-02
 
 ### Added
@@ -431,6 +454,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline** — GitHub Actions testing across Python 3.10–3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
+[0.7.1]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.1
 [0.7.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.0
 [0.6.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.6.0
 [0.5.2]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.2

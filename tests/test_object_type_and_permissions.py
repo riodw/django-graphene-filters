@@ -75,6 +75,13 @@ class TestGetNodeEdgeCases:
         result = ObjectNode.get_node(info, 999999)
         assert result is None
 
+    def test_get_node_string_zero_returns_sentinel(self):
+        """get_node(info, "0") returns a sentinel (Relay global ID decodes to string)."""
+        info = MagicMock()
+        result = ObjectNode.get_node(info, "0")
+        assert result is not None
+        assert result.pk == 0
+
     def test_get_node_hidden_row_returns_sentinel(self):
         """get_node for a row hidden by get_queryset returns sentinel (lines 123-132)."""
         ot = ObjectType.objects.create(name="hidden_ot", is_private=False)
