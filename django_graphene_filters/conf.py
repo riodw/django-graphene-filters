@@ -66,11 +66,9 @@ def check_pg_trigram_extension() -> bool:
         return cursor.fetchone()[0] == 1
 
 
-# 4
 FIXED_SETTINGS = get_fixed_settings()
 
 
-# 3
 class Settings:
     """Library settings class.
 
@@ -86,7 +84,7 @@ class Settings:
     def user_settings(self) -> dict:
         """Retrieve user-defined settings from Django settings."""
         if self._user_settings is None:
-            self._user_settings = getattr(django_settings, DJANGO_SETTINGS_KEY, {})
+            self._user_settings = getattr(django_settings, DJANGO_SETTINGS_KEY, {}) or {}
         return self._user_settings
 
     def __getattr__(self, name: str) -> str | bool:
@@ -108,13 +106,19 @@ class Settings:
 settings = Settings(None)
 
 
-# 2
 def reload_settings(setting: str, value: Any, **kwargs) -> None:
-    """Reload settings when Django's `setting_changed` signal is fired."""
-    global settings
+    """Reload settings when Django's ``setting_changed`` signal is fired.
+
+    Also refreshes the fixed DB-detection settings (``IS_POSTGRESQL``,
+    ``HAS_TRIGRAM_EXTENSION``) so that test suites swapping ``DATABASES``
+    see correct values without a process restart.
+    """
+    global settings, FIXED_SETTINGS
     if setting == DJANGO_SETTINGS_KEY:
         settings = Settings(value)
+    # Refresh DB-detection flags on any settings change (covers DATABASES swaps).
+    get_fixed_settings.cache_clear()
+    FIXED_SETTINGS.update(get_fixed_settings())
 
 
-# 1 - Connect the reload_settings function to the setting_changed signal
 setting_changed.connect(reload_settings)

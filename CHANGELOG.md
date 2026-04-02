@@ -71,6 +71,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `target_model.objects.filter(...)` to
   `target_model._default_manager.filter(...)` for consistency with the
   same fix applied to `permissions.py` and `filters.py`.
+- **`DJANGO_GRAPHENE_FILTERS = None` crashes attribute access** — if the
+  Django setting was explicitly set to `None`, `user_settings` became
+  `None` and `if name in self.user_settings` raised `TypeError`. Fixed by
+  normalizing with `or {}`.
+- **Fixed DB flags stale after `reload_settings`** — `IS_POSTGRESQL` and
+  `HAS_TRIGRAM_EXTENSION` were cached at import time and never refreshed
+  when Django's `setting_changed` signal fired (e.g. test suites swapping
+  `DATABASES`). `reload_settings` now calls
+  `get_fixed_settings.cache_clear()` and updates `FIXED_SETTINGS`.
+- **Stray `# 4`, `# 3`, `# 2`, `# 1` comments in `conf.py`** — removed.
 
 ## [0.7.1] - 2026-04-02
 
