@@ -85,7 +85,12 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
                 description=f"Aggregate statistics for `{field_name}`",
             )
 
-        # Build nested types for RelatedAggregates (with recursion protection)
+        # Build nested types for RelatedAggregates (with recursion protection).
+        # Circular references (A → B → A) are broken by omitting the back-edge
+        # field entirely — the schema simply won't include that relation.
+        # This is intentional: lazy/stub types would add complexity for a rare
+        # edge case.  Schema build is single-threaded in all Django deployments,
+        # so the process-global _building set is safe.
         AggregateArgumentsFactory._building.add(self.aggregate_class)
         try:
             for rel_name, rel_agg in getattr(self.aggregate_class, "related_aggregates", {}).items():

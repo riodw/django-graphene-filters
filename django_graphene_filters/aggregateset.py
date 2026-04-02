@@ -258,6 +258,15 @@ class AggregateSetMetaclass(type):
 
             config[field_name] = {"category": category, "stats": list(stat_names)}
 
+        # "count" is reserved for the root total-row count in the aggregate
+        # output type.  A model field named "count" would overwrite it.
+        if "count" in config:
+            raise ValueError(
+                f"Field name 'count' in Meta.fields on '{name}' conflicts with the "
+                "reserved root-level aggregate 'count' (total number of records). "
+                "Rename the field or exclude it from Meta.fields."
+            )
+
         new_class._aggregate_config = config
         new_class._custom_stats = custom_stats
 
@@ -267,6 +276,15 @@ class AggregateSetMetaclass(type):
         )
         for f in new_class.related_aggregates.values():
             f.bind_aggregateset(new_class)
+
+        # Validate that RelatedAggregate names don't collide with Meta.fields keys.
+        overlap = set(config) & set(new_class.related_aggregates)
+        if overlap:
+            raise ValueError(
+                f"Name collision on '{name}': {sorted(overlap)} appear in both "
+                "Meta.fields and as RelatedAggregate attributes. "
+                "Rename one to avoid ambiguity in the aggregate output type."
+            )
 
         return new_class
 

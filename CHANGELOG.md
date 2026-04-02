@@ -45,6 +45,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`get_filterset_class` incorrect `**meta` type annotation** — changed
   `**meta: dict[str, Any]` to `**meta: Any` to match Python's variadic
   kwargs typing convention.
+- **Aggregate `count` field name collision** — if a model field was
+  literally named `count`, the per-field aggregate subtree overwrote the
+  root total-row `count` scalar in the generated GraphQL type. The
+  metaclass now raises `ValueError` at class creation if `"count"` appears
+  in `Meta.fields`.
+- **Aggregate field/relation name collision** — if a `Meta.fields` key
+  matched a `RelatedAggregate` attribute name (e.g. both defining `values`),
+  the relation overwrote the stat subtree. The metaclass now validates that
+  the two sets are disjoint and raises `ValueError` on overlap.
 
 ## [0.7.1] - 2026-04-02
 
