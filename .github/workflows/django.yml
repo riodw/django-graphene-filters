@@ -78,6 +78,7 @@ jobs:
           if [ "${{ matrix.python }}" == "3.14" ] && [ "${{ matrix.django }}" == "latest" ]; then
             # Run with coverage on the primary matrix node
             uv run coverage run -m pytest
+            uv run coverage report --fail-under=99
           else
             # Standard run for others
             uv run pytest

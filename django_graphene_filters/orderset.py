@@ -37,16 +37,22 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
         self.data = data or []
         self.qs = queryset
         self.request = request
+        self._distinct_fields: list[str] = []
 
         if self.data and self.qs is not None:
-            # Flatten the GraphQL nested InputObjectType array into Django __ paths
-            flat_orders = self.get_flat_orders(self.data)
+            # Flatten the GraphQL nested InputObjectType array into Django __ paths.
+            # Also collects fields marked with *_DISTINCT directions.
+            flat_orders, self._distinct_fields = self.get_flat_orders(self.data)
 
             # Hook validation (so you can reject before applying)
             self.check_permissions(self.request, flat_orders)
 
-            # Apply to QuerySet
+            # Apply ordering to QuerySet
             self.qs = self.qs.order_by(*flat_orders)
+
+            # Apply distinct-on AFTER ordering (order determines which row is kept per group)
+            if self._distinct_fields:
+                self.qs = self.apply_distinct(self.qs, self._distinct_fields, flat_orders)
 
     def check_permissions(self, request: Any, requested_orderings: list[str]) -> None:
         """Validate whether the user is allowed to order by these fields.
@@ -78,9 +84,19 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
                     break
 
     @classmethod
-    def get_flat_orders(cls, order_data: list, prefix: str = "") -> list[str]:
-        """Recursively parses nested order dictionaries downwards."""
-        flat_orders = []
+    def get_flat_orders(cls, order_data: list, prefix: str = "") -> tuple[list[str], list[str]]:
+        """Recursively parse nested order dicts into flat ORM paths.
+
+        Returns:
+            A ``(flat_orders, distinct_fields)`` tuple.
+
+            * **flat_orders** — ORM order strings, e.g. ``["-name", "object_type__name"]``
+            * **distinct_fields** — bare field paths (no ``-`` prefix) for fields
+              whose direction was ``ASC_DISTINCT`` or ``DESC_DISTINCT``
+        """
+        flat_orders: list[str] = []
+        distinct_fields: list[str] = []
+
         for order_item in order_data:
             if isinstance(order_item, Mapping):
                 # An item generally possesses exactly one key -> value representing one hop
@@ -96,20 +112,120 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
                         target_orderset = related_orders[snake_key].orderset
                         if isinstance(value, Mapping) and target_orderset:
                             # Recurse with prefix (e.g., 'category__')
-                            flat_orders.extend(target_orderset.get_flat_orders([value], current_prefix))
+                            sub_orders, sub_distinct = target_orderset.get_flat_orders(
+                                [value], current_prefix
+                            )
+                            flat_orders.extend(sub_orders)
+                            distinct_fields.extend(sub_distinct)
                     else:
                         current_prefix = f"{prefix}{snake_key}__"
 
                         if isinstance(value, Mapping):
-                            # Native field recurse if any, although leaf nodes generally shouldn't be objects
-                            flat_orders.extend(cls.get_flat_orders([value], current_prefix))
+                            # Native field recurse if any
+                            sub_orders, sub_distinct = cls.get_flat_orders([value], current_prefix)
+                            flat_orders.extend(sub_orders)
+                            distinct_fields.extend(sub_distinct)
                         else:
                             # Reached the leaf node -> direction is attached here
                             direction_str = value.value if isinstance(value, enum.Enum) else str(value)
-                            direction = "-" if direction_str.lower() == "desc" else ""
+                            is_distinct = direction_str.endswith("_distinct")
+                            clean_direction = direction_str.replace("_distinct", "")
+
+                            direction = "-" if clean_direction.lower() == "desc" else ""
                             field_path = current_prefix.removesuffix("__")
                             flat_orders.append(f"{direction}{field_path}")
-        return flat_orders
+
+                            if is_distinct:
+                                distinct_fields.append(field_path)
+
+        return flat_orders, distinct_fields
+
+    @classmethod
+    def apply_distinct(
+        cls,
+        queryset: Any,
+        distinct_fields: list[str],
+        order_fields: list[str],
+    ) -> Any:
+        """Apply ``DISTINCT ON`` to the queryset.
+
+        PostgreSQL uses native ``.distinct(*fields)``.  All other backends
+        use ``Window(RowNumber())`` to emulate the same behaviour.
+        """
+        from .conf import settings
+
+        if settings.IS_POSTGRESQL:
+            return cls._apply_distinct_postgres(queryset, distinct_fields, order_fields)
+        return cls._apply_distinct_emulated(queryset, distinct_fields, order_fields)
+
+    @staticmethod
+    def _apply_distinct_postgres(queryset: Any, distinct_fields: list[str], order_fields: list[str]) -> Any:
+        """Native PostgreSQL ``DISTINCT ON``.
+
+        PostgreSQL requires ``DISTINCT ON`` fields to be the leftmost
+        columns in ``ORDER BY``.  We deduplicate to avoid invalid SQL
+        like ``ORDER BY name DESC, name ASC`` when the same field appears
+        in both distinct and regular ordering.
+        """
+        distinct_set = set(distinct_fields)
+        # Remove order_fields that duplicate a distinct field
+        deduped_order = [f for f in order_fields if f.lstrip("-") not in distinct_set]
+
+        # Extract the distinct fields' order entries (with their direction),
+        # keeping only the FIRST occurrence per stripped path so that
+        # [{name: DESC_DISTINCT}, {name: ASC}] doesn't produce
+        # ORDER BY name DESC, name ASC.
+        distinct_order: list[str] = []
+        seen: set[str] = set()
+        for f in order_fields:
+            stripped = f.lstrip("-")
+            if stripped in distinct_set and stripped not in seen:
+                distinct_order.append(f)
+                seen.add(stripped)
+        # If a distinct field wasn't in order_fields at all, add it bare
+        for field in distinct_fields:
+            if field not in seen:
+                distinct_order.append(field)
+                seen.add(field)
+
+        full_order = distinct_order + deduped_order
+        if full_order:
+            queryset = queryset.order_by(*full_order)
+        return queryset.distinct(*distinct_fields)
+
+    @staticmethod
+    def _apply_distinct_emulated(queryset: Any, distinct_fields: list[str], order_fields: list[str]) -> Any:
+        """Emulated ``DISTINCT ON`` using Window functions.
+
+        Works on all Django-supported backends (SQLite, MySQL 8+,
+        Oracle, MariaDB 10.2+) — all set ``supports_over_clause = True``
+        as of Django 4.2+.
+
+        Django automatically wraps the window-annotated queryset in a
+        subquery when ``.filter()`` is applied to a window column.
+        """
+        from django.db.models import F, Window
+        from django.db.models.functions import RowNumber
+
+        partition_by = [F(field) for field in distinct_fields]
+
+        if order_fields:
+            window_order = []
+            for field in order_fields:
+                if field.startswith("-"):
+                    window_order.append(F(field[1:]).desc())
+                else:
+                    window_order.append(F(field).asc())
+        else:
+            window_order = [F("pk").asc()]
+
+        return queryset.annotate(
+            _distinct_row_num=Window(
+                expression=RowNumber(),
+                partition_by=partition_by,
+                order_by=window_order,
+            )
+        ).filter(_distinct_row_num=1)
 
     @classmethod
     def get_fields(cls) -> OrderedDict:

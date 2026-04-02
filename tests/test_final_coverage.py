@@ -76,10 +76,14 @@ def test_resolve_queryset_with_orderset_application():
     connection = MagicMock()
     connection._meta.node = NodeWithOrder
 
-    # Filterset mock
+    # Filterset mock — filterset.qs returns a mock queryset whose
+    # .order_by() and .distinct() chain back to itself.
     filterset = MagicMock()
     filterset.form.is_valid.return_value = True
-    filterset.qs.distinct.return_value = qs
+    mock_qs = MagicMock()
+    mock_qs.order_by.return_value = mock_qs
+    mock_qs.distinct.return_value = mock_qs
+    filterset.qs = mock_qs
 
     with patch("django_graphene_filters.connection_field.get_filterset_class") as mock_get_fs:
         mock_fs_class = MagicMock(return_value=filterset)
@@ -90,8 +94,8 @@ def test_resolve_queryset_with_orderset_application():
         args = {"orderBy": [{"name": "asc"}]}
         field.resolve_queryset(connection, [], info, args, {}, mock_fs_class)
 
-        # Verification of logic flow
-        assert filterset.qs.distinct.called
+        # The orderset applies .order_by() on the queryset
+        assert mock_qs.order_by.called
 
 
 # ---------------------------------------------------------------------------
@@ -171,8 +175,9 @@ def test_orderset_get_flat_orders_target_orderset_none_skip():
 
     # Mapping value but target_orderset is None
     data = [{"rel": {"title": "asc"}}]
-    res = MissingTargetOS2.get_flat_orders(data)
-    assert res == []
+    flat_orders, distinct_fields = MissingTargetOS2.get_flat_orders(data)
+    assert flat_orders == []
+    assert distinct_fields == []
 
 
 # ---------------------------------------------------------------------------

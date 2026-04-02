@@ -6,11 +6,8 @@ from django_graphene_filters import (
     apply_cascade_permissions,
 )
 
-from . import aggregates
+from . import aggregates, filters, models, orders
 from . import fields as fieldsets
-from . import filters
-from . import models
-from . import orders
 
 """
 Nodes

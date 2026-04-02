@@ -146,6 +146,9 @@ convention = "google"
 inline-quotes = "double"
 multiline-quotes = "double"
 
+[tool.coverage.report]
+fail_under = 99
+
 # Semantic release settings
 [tool.semantic_release]
 version_variable = [

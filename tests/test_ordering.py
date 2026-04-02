@@ -60,53 +60,177 @@ class TestGetFlatOrders:
 
     def test_asc_with_enum(self):
         data = [{"name": OrderDirection.ASC}]
-        assert ParentOrderSet.get_flat_orders(data) == ["name"]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["name"]
+        assert distinct == []
 
     def test_desc_with_enum(self):
         data = [{"name": OrderDirection.DESC}]
-        assert ParentOrderSet.get_flat_orders(data) == ["-name"]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["-name"]
+        assert distinct == []
 
     def test_asc_with_string(self):
         """Plain string values should still work for backward compatibility."""
         data = [{"name": "asc"}]
-        assert ParentOrderSet.get_flat_orders(data) == ["name"]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["name"]
+        assert distinct == []
 
     def test_desc_with_string(self):
         data = [{"name": "desc"}]
-        assert ParentOrderSet.get_flat_orders(data) == ["-name"]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["-name"]
+        assert distinct == []
 
     def test_multiple_fields(self):
         data = [{"name": OrderDirection.ASC}, {"description": OrderDirection.DESC}]
-        assert ParentOrderSet.get_flat_orders(data) == ["name", "-description"]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["name", "-description"]
+        assert distinct == []
 
     def test_related_order_traversal(self):
         data = [{"related": {"title": OrderDirection.DESC}}]
-        result = ParentOrderSet.get_flat_orders(data)
-        assert result == ["-order_model__title"]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["-order_model__title"]
+        assert distinct == []
 
     def test_related_order_asc(self):
         data = [{"related": {"title": OrderDirection.ASC}}]
-        result = ParentOrderSet.get_flat_orders(data)
-        assert result == ["order_model__title"]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["order_model__title"]
+        assert distinct == []
 
     def test_with_prefix(self):
         data = [{"name": OrderDirection.DESC}]
-        result = ParentOrderSet.get_flat_orders(data, prefix="parent__")
-        assert result == ["-parent__name"]
+        flat, distinct = ParentOrderSet.get_flat_orders(data, prefix="parent__")
+        assert flat == ["-parent__name"]
+        assert distinct == []
 
     def test_empty_data(self):
-        assert ParentOrderSet.get_flat_orders([]) == []
+        flat, distinct = ParentOrderSet.get_flat_orders([])
+        assert flat == []
+        assert distinct == []
 
     def test_non_mapping_items_skipped(self):
         """Non-mapping items in the list are silently skipped."""
         data = ["not_a_dict", {"name": OrderDirection.ASC}]
-        assert ParentOrderSet.get_flat_orders(data) == ["name"]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["name"]
+        assert distinct == []
 
     def test_native_field_mapping_recurse(self):
         """A mapping value for a non-related key should recurse."""
         data = [{"unknown_nested": {"leaf": "desc"}}]
-        result = AdvancedOrderSet.get_flat_orders(data)
-        assert result == ["-unknown_nested__leaf"]
+        flat, distinct = AdvancedOrderSet.get_flat_orders(data)
+        assert flat == ["-unknown_nested__leaf"]
+        assert distinct == []
+
+    def test_asc_distinct_with_enum(self):
+        data = [{"name": OrderDirection.ASC_DISTINCT}, {"description": OrderDirection.ASC}]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["name", "description"]
+        assert distinct == ["name"]
+
+    def test_desc_distinct_with_enum(self):
+        data = [{"name": OrderDirection.DESC_DISTINCT}]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["-name"]
+        assert distinct == ["name"]
+
+    def test_multiple_distinct_fields(self):
+        data = [
+            {"name": OrderDirection.ASC_DISTINCT},
+            {"description": OrderDirection.DESC_DISTINCT},
+            {"is_private": OrderDirection.ASC},
+        ]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["name", "-description", "is_private"]
+        assert distinct == ["name", "description"]
+
+    def test_distinct_on_related_order(self):
+        data = [{"related": {"title": OrderDirection.ASC_DISTINCT}}]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["order_model__title"]
+        assert distinct == ["order_model__title"]
+
+    def test_distinct_with_string_value(self):
+        """String values with _distinct suffix should work."""
+        data = [{"name": "asc_distinct"}]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["name"]
+        assert distinct == ["name"]
+
+    def test_contradictory_direction_same_field(self):
+        """DESC_DISTINCT + ASC on the same field: flat_orders has both, distinct has one."""
+        data = [{"name": OrderDirection.DESC_DISTINCT}, {"name": OrderDirection.ASC}]
+        flat, distinct = ParentOrderSet.get_flat_orders(data)
+        assert flat == ["-name", "name"]
+        assert distinct == ["name"]
+
+
+# ---------------------------------------------------------------------------
+# AdvancedOrderSet – _apply_distinct_postgres deduplication
+# ---------------------------------------------------------------------------
+
+
+class TestApplyDistinctPostgresDedup:
+    """Verify _apply_distinct_postgres deduplicates ORDER BY correctly."""
+
+    def test_contradictory_direction_deduplicates(self):
+        """Same field with different directions: only the first (distinct) entry kept."""
+        from unittest.mock import MagicMock
+
+        qs = MagicMock()
+        qs.order_by.return_value = qs
+        qs.distinct.return_value = qs
+
+        # Simulates [{name: DESC_DISTINCT}, {name: ASC}]
+        result = AdvancedOrderSet._apply_distinct_postgres(
+            qs,
+            distinct_fields=["name"],
+            order_fields=["-name", "name"],
+        )
+
+        # ORDER BY should have "-name" once (the distinct entry), NOT "-name, name"
+        qs.order_by.assert_called_once_with("-name")
+        qs.distinct.assert_called_once_with("name")
+
+    def test_distinct_field_not_in_order_fields(self):
+        """A distinct field not present in order_fields gets appended bare."""
+        from unittest.mock import MagicMock
+
+        qs = MagicMock()
+        qs.order_by.return_value = qs
+        qs.distinct.return_value = qs
+
+        result = AdvancedOrderSet._apply_distinct_postgres(
+            qs,
+            distinct_fields=["category"],
+            order_fields=["name"],
+        )
+
+        # category leads (distinct), then name (tiebreaker)
+        qs.order_by.assert_called_once_with("category", "name")
+        qs.distinct.assert_called_once_with("category")
+
+    def test_multiple_distinct_fields_dedup(self):
+        """Multiple distinct fields are deduplicated individually."""
+        from unittest.mock import MagicMock
+
+        qs = MagicMock()
+        qs.order_by.return_value = qs
+        qs.distinct.return_value = qs
+
+        result = AdvancedOrderSet._apply_distinct_postgres(
+            qs,
+            distinct_fields=["name", "status"],
+            order_fields=["name", "-status", "created"],
+        )
+
+        # distinct fields lead (name, -status), then non-distinct tiebreakers (created)
+        qs.order_by.assert_called_once_with("name", "-status", "created")
+        qs.distinct.assert_called_once_with("name", "status")
 
 
 # ---------------------------------------------------------------------------

@@ -6,10 +6,19 @@ from .mixins import InputObjectTypeFactoryMixin
 
 
 class OrderDirection(graphene.Enum):
-    """Enum to represent the sorting direction of a field."""
+    """Enum to represent the sorting direction of a field.
+
+    ``ASC_DISTINCT`` and ``DESC_DISTINCT`` combine ordering with
+    ``DISTINCT ON`` partitioning.  Fields marked with a ``*_DISTINCT``
+    direction define the partition key; subsequent ``orderBy`` entries
+    act as tie-breakers within each partition (determining which row
+    survives per group).
+    """
 
     ASC = "asc"
     DESC = "desc"
+    ASC_DISTINCT = "asc_distinct"
+    DESC_DISTINCT = "desc_distinct"
 
 
 class OrderArgumentsFactory(InputObjectTypeFactoryMixin):

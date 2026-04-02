@@ -316,16 +316,23 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         )
 
         if filterset.form.is_valid():
-            # Apply .distinct() to remove duplicates caused by relationship joins
-            qs = filterset.qs.distinct()
+            qs = filterset.qs
 
             # Extract orderBy from args and apply orderset_class logic here
             order_arg = args.get("orderBy", [])
             orderset_class = getattr(connection._meta.node._meta, "orderset_class", None)
 
+            has_distinct_on = False
             if orderset_class and order_arg:
                 orderset = orderset_class(data=order_arg, queryset=qs, request=info.context)
                 qs = orderset.qs
+                has_distinct_on = bool(orderset._distinct_fields)
+
+            # Apply blanket .distinct() to remove duplicates caused by
+            # relationship joins — but SKIP it when *_DISTINCT was used
+            # (distinct-on already guarantees uniqueness by a stronger criterion).
+            if not has_distinct_on:
+                qs = qs.distinct()
 
             # Compute aggregates from the filtered queryset (only if requested)
             aggregate_class = getattr(connection._meta.node._meta, "aggregate_class", None)
