@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [Prerelease] — unreleased (targeting 0.7.3)
+
+### Fixed
+
+- **Computed fields not inherited from mixin/base classes** — the
+  `FieldSetMetaclass` discovered computed field declarations (graphene
+  `UnmountedType` attributes) only from `attrs` (the current class body),
+  missing declarations on parent mixins or base classes. Changed to use
+  `dir(new_class)` which includes inherited attributes.
+- **Pure computed fields not wrapped with permission/deny logic** —
+  `_managed_fields` was `field_permissions | field_resolvers`, excluding
+  computed fields that had no `resolve_*` or `check_*_permission`. Added
+  `set(computed_fields)` so all computed fields get the permission wrapper
+  in `_wrap_field_resolvers`.
+- **`AdvancedFieldSet` docstring inaccurate** — the cascade description
+  said "raises → null" but denied non-nullable fields actually return
+  type-appropriate defaults (empty string, `False`, epoch, etc.). Updated
+  to reflect actual behavior.
+
 ## [0.7.2] - 2026-04-02
 
 ### Fixed

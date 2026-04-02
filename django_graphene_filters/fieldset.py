@@ -6,7 +6,9 @@ field visibility, and ``resolve_<field>(root, info)`` methods to
 override field content (masking, computed values, role-based output).
 
 The cascade order is:
-1. ``check_<field>_permission`` — gate (raises → null, doesn't raise → continue)
+1. ``check_<field>_permission`` — gate (raises → denied, doesn't raise → continue).
+   Denied fields return a type-appropriate default (``None`` for nullable,
+   ``""`` for text, ``False`` for boolean, epoch for datetime, etc.).
 2. ``resolve_<field>`` — content override (can assume check passed)
 3. Default resolver — ``getattr(root, field_name)``
 """
@@ -53,17 +55,24 @@ class FieldSetMetaclass(type):
                     field_name = attr_name[8:]  # strip resolve_
                     field_resolvers.add(field_name)
 
-            # 3. Discover computed field declarations (graphene types as class attrs)
+            # 3. Discover computed field declarations (graphene types as class attrs).
+            # Uses dir(new_class) so declarations on mixin/base classes are
+            # inherited — not just attrs (which only has the current class body).
             computed_fields: dict[str, Any] = {}
-            for attr_name, attr_value in attrs.items():
+            for attr_name in dir(new_class):
+                if attr_name.startswith("_"):
+                    continue
+                attr_value = getattr(new_class, attr_name, None)
                 if isinstance(attr_value, UnmountedType):
                     computed_fields[attr_name] = attr_value
 
-            # 4. Store validated config
+            # 4. Store validated config.
+            # _managed_fields includes computed fields so they get the
+            # permission/deny-value wrapper in _wrap_field_resolvers.
             new_class._field_permissions = field_permissions
             new_class._field_resolvers = field_resolvers
             new_class._computed_fields = computed_fields
-            new_class._managed_fields = field_permissions | field_resolvers
+            new_class._managed_fields = field_permissions | field_resolvers | set(computed_fields)
 
         return new_class
 
