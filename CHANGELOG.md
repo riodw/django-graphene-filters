@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [Prerelease] — unreleased (targeting 0.7.2)
+
+### Fixed
+
+- **Nullable FK rows dropped by `apply_cascade_permissions`** —
+  `queryset.filter(field__in=target_qs)` excluded rows where the FK is
+  `NULL`, because `NULL IN (...)` evaluates to `FALSE` in SQL. Rows with
+  no FK reference should remain visible. Fixed by adding
+  `| Q(field__isnull=True)` to preserve nullable FK rows.
+- **`apply_cascade_permissions` assumes `.objects` manager** —
+  `field.related_model.objects` fails if a model overrides the default
+  manager name. Changed to `field.related_model._default_manager.all()`
+  which respects custom manager configuration.
+- **Misleading comment in `apply_cascade_permissions`** — the comment said
+  "concrete FK fields" but didn't explain why M2M is excluded. Updated to
+  explicitly state "single-column FK / OneToOneField" and note that
+  `ManyToManyField` lacks a `column` attribute.
+
 ## [0.7.1] - 2026-04-02
 
 ### Fixed

@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from typing import Any
 
 from django.db import models
+from django.db.models import Q
 from graphene_django import DjangoObjectType
 
 # Context-var for cycle detection in apply_cascade_permissions.
@@ -66,7 +67,9 @@ def apply_cascade_permissions(
         model = node_class._meta.model
 
         for field in model._meta.get_fields():
-            # Only concrete FK fields (have a column in the DB)
+            # Only single-column FK / OneToOneField relations.
+            # ManyToManyField does NOT have a "column" attribute (it's
+            # backed by a join table), so this check is precise.
             if getattr(field, "related_model", None) is None or not hasattr(field, "column"):
                 continue
 
@@ -79,11 +82,17 @@ def apply_cascade_permissions(
             if target_type is None or not hasattr(target_type, "get_queryset"):
                 continue
 
-            # Build subquery: visible PKs of the target model
-            target_qs = target_type.get_queryset(field.related_model.objects, info)
+            # Build subquery: visible PKs of the target model.
+            # Use _default_manager instead of .objects to support models
+            # that override the default manager name.
+            target_qs = target_type.get_queryset(field.related_model._default_manager.all(), info)
 
-            # Constrain: only rows whose FK points to a visible target
-            queryset = queryset.filter(**{f"{field.name}__in": target_qs})
+            # Constrain: only rows whose FK points to a visible target.
+            # Nullable FK rows (NULL) are preserved — they don't reference
+            # a hidden target, so they should remain visible.
+            queryset = queryset.filter(
+                Q(**{f"{field.name}__in": target_qs}) | Q(**{f"{field.name}__isnull": True})
+            )
 
         return queryset
     finally:
