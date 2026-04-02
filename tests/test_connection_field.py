@@ -93,6 +93,19 @@ def test_resolve_queryset_invalid_form():
         assert '{"error": "msg"}' in str(exc.value)
 
 
+def test_invalid_filterset_class_raises_type_error():
+    """Passing a non-AdvancedFilterSet filterset_class raises TypeError."""
+    from django_filters import FilterSet
+
+    class PlainFilterSet(FilterSet):
+        class Meta:
+            model = ConnModel
+            fields = ["name"]
+
+    with pytest.raises(TypeError, match="AdvancedFilterSet"):
+        AdvancedDjangoFilterConnectionField(ConnNode, filterset_class=PlainFilterSet)
+
+
 def test_map_arguments_to_filters():
     field = AdvancedDjangoFilterConnectionField(ConnNode)
     args = {"name": "foo"}
