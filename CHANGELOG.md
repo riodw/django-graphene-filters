@@ -54,6 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   matched a `RelatedAggregate` attribute name (e.g. both defining `values`),
   the relation overwrote the stat subtree. The metaclass now validates that
   the two sets are disjoint and raises `ValueError` on overlap.
+- **Aggregate `datetime` category mixed field kinds** — `DateField`,
+  `TimeField`, and `DurationField` were all mapped to the `"datetime"`
+  category, causing min/max to declare `graphene.DateTime` in the schema
+  even when the ORM returns `date`, `time`, or `timedelta`. Split into
+  four categories: `"datetime"` (→ `DateTime`), `"date"` (→ `Date`),
+  `"time"` (→ `Time`), `"duration"` (→ `Float` as total seconds).
 
 ## [0.7.1] - 2026-04-02
 

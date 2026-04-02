@@ -37,11 +37,11 @@ FIELD_CATEGORIES: dict[str, str] = {
     "AutoField": "numeric",
     "BigAutoField": "numeric",
     "SmallAutoField": "numeric",
-    # datetime
+    # datetime (separate categories for correct GraphQL scalar types)
     "DateTimeField": "datetime",
-    "DateField": "datetime",
-    "TimeField": "datetime",
-    "DurationField": "datetime",
+    "DateField": "date",
+    "TimeField": "time",
+    "DurationField": "duration",
     # boolean
     "BooleanField": "boolean",
     "NullBooleanField": "boolean",
@@ -77,6 +77,21 @@ STAT_TYPES: dict[str, dict[str, type | graphene.List]] = {
         "count": graphene.Int,
         "min": graphene.DateTime,
         "max": graphene.DateTime,
+    },
+    "date": {
+        "count": graphene.Int,
+        "min": graphene.Date,
+        "max": graphene.Date,
+    },
+    "time": {
+        "count": graphene.Int,
+        "min": graphene.Time,
+        "max": graphene.Time,
+    },
+    "duration": {
+        "count": graphene.Int,
+        "min": graphene.Float,  # timedelta as total seconds
+        "max": graphene.Float,
     },
     "boolean": {
         "count": graphene.Int,
