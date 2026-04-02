@@ -1,5 +1,7 @@
 """Additional filters for special lookups."""
 
+from __future__ import annotations
+
 import itertools
 from typing import Any, NamedTuple
 
@@ -113,7 +115,7 @@ class BaseRelatedFilter(LazyRelatedClassMixin):
 
     def __init__(
         self,
-        filterset: str | type["BaseFilterSet"],
+        filterset: str | type[BaseFilterSet],
         *args,
         lookups: list[str] | None = None,
         **kwargs,
@@ -123,19 +125,19 @@ class BaseRelatedFilter(LazyRelatedClassMixin):
         self._filterset = filterset
         self.lookups = lookups or []
 
-    def bind_filterset(self, filterset: type["BaseFilterSet"]) -> None:
+    def bind_filterset(self, filterset: type[BaseFilterSet]) -> None:
         """Bind a filterset class to the current filter instance."""
         if not hasattr(self, "bound_filterset"):
             self.bound_filterset = filterset
 
     @property
-    def filterset(self) -> type["BaseFilterSet"]:
+    def filterset(self) -> type[BaseFilterSet]:
         """Lazy-load the filterset class if it is specified as a string."""
         self._filterset = self.resolve_lazy_class(self._filterset, getattr(self, "bound_filterset", None))
         return self._filterset
 
     @filterset.setter
-    def filterset(self, value: type["BaseFilterSet"]) -> None:
+    def filterset(self, value: type[BaseFilterSet]) -> None:
         self._filterset = value
 
     def get_queryset(self, request: HttpRequest) -> QuerySet:
@@ -146,13 +148,16 @@ class BaseRelatedFilter(LazyRelatedClassMixin):
         """
         queryset = super().get_queryset(request)
         if queryset is None:
-            # Auto-derive from the target filterset's model
+            # Auto-derive from the target filterset's model.
+            # Use _default_manager instead of .objects to support models
+            # that override the default manager name.
             target = self.filterset
             model = getattr(getattr(target, "_meta", None), "model", None)
             if model:
-                return model.objects.all()
+                return model._default_manager.all()
+        parent_name = getattr(getattr(self, "parent", None), "__class__", type(self)).__name__
         assert queryset is not None, (
-            f"Expected .get_queryset() on related filter '{self.parent.__class__.__name__}.{self.field_name}'"
+            f"Expected .get_queryset() on related filter '{parent_name}.{self.field_name}'"
             " to return a `QuerySet`, but got `None`."
         )
         return queryset

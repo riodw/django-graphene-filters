@@ -24,6 +24,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "concrete FK fields" but didn't explain why M2M is excluded. Updated to
   explicitly state "single-column FK / OneToOneField" and note that
   `ManyToManyField` lacks a `column` attribute.
+- **Import-time crash on non-PostgreSQL environments** — `TrigramFilter.Value`
+  used a PEP 604 union annotation `TrigramSimilarity | TrigramDistance` which
+  evaluates to `None | None` → `TypeError` when `psycopg2` is not installed.
+  Fixed by adding `from __future__ import annotations` to `filters.py`,
+  making all annotations lazy strings that are never evaluated at class
+  definition time.
+- **`BaseRelatedFilter.get_queryset` assumes `.objects` manager** — same
+  issue as `apply_cascade_permissions`. Changed `model.objects.all()` to
+  `model._default_manager.all()`.
+- **`BaseRelatedFilter.get_queryset` assertion crash when unbound** — the
+  assertion message referenced `self.parent.__class__.__name__` which raises
+  `AttributeError` if `self.parent` is `None` (unbound filter). Fixed with
+  safe attribute chain via `getattr`.
 
 ## [0.7.1] - 2026-04-02
 
