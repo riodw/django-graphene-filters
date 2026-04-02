@@ -60,6 +60,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   even when the ORM returns `date`, `time`, or `timedelta`. Split into
   four categories: `"datetime"` (→ `DateTime`), `"date"` (→ `Date`),
   `"time"` (→ `Time`), `"duration"` (→ `Float` as total seconds).
+- **Aggregate child queryset deduplication incomplete** —
+  `get_child_queryset()` only applied `.distinct()` for `ManyToManyField`
+  / `ManyToManyRel`, but reverse FK traversals (`ManyToOneRel`) can also
+  produce duplicate rows, inflating `count`, `sum`, `mean`, and `uniques`.
+  Now always applies `.distinct()` on child querysets — the cost on
+  already-unique sets is negligible. Removed the now-unused
+  `_is_m2m_lookup()` static method.
+- **Aggregate `get_child_queryset` assumes `.objects` manager** — changed
+  `target_model.objects.filter(...)` to
+  `target_model._default_manager.filter(...)` for consistency with the
+  same fix applied to `permissions.py` and `filters.py`.
 
 ## [0.7.1] - 2026-04-02
 

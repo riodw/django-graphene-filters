@@ -257,17 +257,6 @@ def test_get_child_selection_field_not_found():
 
 
 # ---------------------------------------------------------------------------
-# aggregateset.py — M2M lookup
-# ---------------------------------------------------------------------------
-
-
-def test_is_m2m_lookup_exception():
-    """Cover _is_m2m_lookup except branch (lines 414-415)."""
-    # Pass a nonexistent field name → should return False
-    result = AdvancedAggregateSet._is_m2m_lookup(ObjectType, "totally_fake_field")
-    assert result is False
-
-
 # ---------------------------------------------------------------------------
 # connection_field.py — aggregate properties
 # ---------------------------------------------------------------------------
@@ -545,15 +534,6 @@ def test_extract_aggregate_selection_no_aggregates_field():
 
 
 @pytest.mark.django_db
-def test_is_m2m_lookup_true():
-    """Cover _is_m2m_lookup returning True for actual M2M field."""
-    from django.contrib.auth.models import User
-
-    result = AdvancedAggregateSet._is_m2m_lookup(User, "groups")
-    assert result is True
-
-
-@pytest.mark.django_db
 def test_get_child_queryset_m2m_distinct():
     """Cover get_child_queryset applying .distinct() for M2M (line 396)."""
     from django.contrib.auth.models import Group, User
@@ -616,3 +596,33 @@ def test_compute_local_only_skips_related_aggregates():
     result = agg.compute(local_only=True)
     assert "name" in result
     assert "objects" not in result
+
+
+def test_reserved_count_field_name_raises():
+    """Metaclass rejects 'count' in Meta.fields (reserved for root total-row count)."""
+    # Patch _get_field_category to accept "count" as a valid field so we
+    # reach the reserved-name check (ObjectType has no field named "count").
+    with (
+        patch(
+            "django_graphene_filters.aggregateset._get_field_category",
+            return_value="numeric",
+        ),
+        pytest.raises(ValueError, match="conflicts with the reserved root-level aggregate 'count'"),
+    ):
+
+        class BadAgg(AdvancedAggregateSet):
+            class Meta:
+                model = ObjectType
+                fields = {"count": ["min", "max"]}
+
+
+def test_field_relation_name_collision_raises():
+    """Metaclass rejects overlap between Meta.fields keys and RelatedAggregate names."""
+    with pytest.raises(ValueError, match="Name collision"):
+
+        class BadAgg(AdvancedAggregateSet):
+            name = RelatedAggregate(AdvancedAggregateSet, field_name="name")
+
+            class Meta:
+                model = ObjectType
+                fields = {"name": ["count"]}

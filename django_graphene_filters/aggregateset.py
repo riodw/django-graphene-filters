@@ -405,32 +405,14 @@ class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
             A queryset of the target model scoped to the parent queryset.
         """
         target_model = rel_agg.aggregate_class.Meta.model
-        qs = target_model.objects.filter(**{f"{rel_agg.field_name}__in": self.queryset})
+        qs = target_model._default_manager.filter(**{f"{rel_agg.field_name}__in": self.queryset})
 
-        # Detect M2M: if the lookup path traverses a ManyToManyField or
-        # ManyToManyRel, the join produces duplicate rows.  Apply .distinct()
-        # to give consumers the expected deduplicated counts.
-        if self._is_m2m_lookup(target_model, rel_agg.field_name):
-            qs = qs.distinct()
-
-        return qs
-
-    @staticmethod
-    def _is_m2m_lookup(target_model: type, field_name: str) -> bool:
-        """Check if ``field_name`` on the target model traverses a M2M relationship.
-
-        The ``field_name`` is the lookup path used in
-        ``target_model.objects.filter(field_name__in=...)``.  If that path
-        goes through a ``ManyToManyField`` or ``ManyToManyRel``, the join
-        will produce duplicate rows.
-        """
-        from django.db.models import ManyToManyField, ManyToManyRel
-
-        try:
-            field = target_model._meta.get_field(field_name)
-            return isinstance(field, (ManyToManyField, ManyToManyRel))
-        except Exception:
-            return False
+        # Always apply .distinct() — any relationship traversal via
+        # filter(field__in=parent_qs) can produce duplicate rows:
+        # ManyToMany, ManyToOneRel (reverse FK), and even OneToOne
+        # in edge cases with multi-table inheritance.  The cost of
+        # .distinct() on an already-unique set is negligible.
+        return qs.distinct()
 
     def _check_field_permission(self, field_name: str) -> None:
         """Call ``check_<field>_permission(request)`` if it exists."""
