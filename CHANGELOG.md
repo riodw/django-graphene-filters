@@ -81,6 +81,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DATABASES`). `reload_settings` now calls
   `get_fixed_settings.cache_clear()` and updates `FIXED_SETTINGS`.
 - **Stray `# 4`, `# 3`, `# 2`, `# 1` comments in `conf.py`** — removed.
+- **Missing `convert_enum` on flat filter arguments** — upstream
+  graphene-django runs `convert_enum()` on every flat filter value so
+  Graphene `Enum` inputs become plain Python values that django-filter
+  expects. The override in `map_arguments_to_filters` was passing raw
+  enum wrappers through, which could break validation or ORM lookups.
+  Now imports and applies `convert_enum` from
+  `graphene_django.filter.fields`.
+- **`assert` for filterset class validation** — replaced `assert
+  issubclass(...)` in `AdvancedDjangoFilterConnectionField.__init__` with
+  an explicit `raise TypeError`. Assertions are stripped by `python -O`,
+  allowing invalid filterset classes to slip through silently.
+- **`map_arguments_to_filters` misleading docstring** — the docstring
+  described `department_Name` → `department__name` transform logic that
+  was never implemented. Replaced with accurate description of what the
+  method actually does (filter + `convert_enum`).
 
 ## [0.7.1] - 2026-04-02
 

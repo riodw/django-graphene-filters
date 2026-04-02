@@ -14,6 +14,7 @@ from django.db import models
 from django.db.models.constants import LOOKUP_SEP
 from graphene_django import DjangoObjectType
 from graphene_django.filter import DjangoFilterConnectionField
+from graphene_django.filter.fields import convert_enum
 
 # Import the utility that generates standard arguments (e.g., name__icontains -> name_Icontains)
 from graphene_django.filter.utils import get_filtering_args_from_filterset
@@ -56,10 +57,14 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         super().__init__(type, fields, order_by, extra_filter_meta, filterset_class, *args, **kwargs)
 
         # Validate that the provided FilterSet class is an AdvancedFilterSet
-        assert self.provided_filterset_class is None or issubclass(
+        if self.provided_filterset_class is not None and not issubclass(
             self.provided_filterset_class,
             AdvancedFilterSet,
-        ), "Use the `AdvancedFilterSet` class with `AdvancedDjangoFilterConnectionField`"
+        ):
+            raise TypeError(
+                "Use the `AdvancedFilterSet` class with `AdvancedDjangoFilterConnectionField`. "
+                f"Got {self.provided_filterset_class.__name__!r} instead."
+            )
 
         self._filter_input_type_prefix = filter_input_type_prefix
 
@@ -382,31 +387,14 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         args: dict[str, Any],
         filtering_args: dict[str, graphene.InputField],
     ) -> dict[str, Any]:
-        """Map Graphene argument names back to Django FilterSet field names.
+        """Map Graphene argument names to FilterSet-compatible data.
 
-        Graphene usually converts `department__name` -> `department_Name`.
-        We need to reverse this so the FilterSet recognizes the data.
+        Filters recognized arguments (present in ``filtering_args``) and
+        normalizes Graphene ``Enum`` values to plain Python values via
+        ``convert_enum``, matching upstream graphene-django behaviour.
         """
         mapped_data = {}
-
-        # In graphene-django, the `filtering_args` keys are the GraphQL argument names.
-        # However, `filtering_args` values don't easily store the original filter name.
-        # A reliable heuristic is that standard arguments are generated from the FilterSet.
-
-        # NOTE: A simpler approach for standard kwargs is passing them as-is,
-        # but AdvancedFilterSet expects exact matches to declared filters.
-
-        # We'll traverse the args provided in the query
         for arg_name, arg_value in args.items():
-            # If the argument is in our schema
             if arg_name in filtering_args:
-                # 1. Check if the arg_name exists directly in the generated filterset (unlikely for relations)
-                # 2. Heuristic: Graphene replaces `__` with `_` and preserves case usually,
-                #    but to support `department_Name` -> `department__name`, we might need to match
-                #    against the filterset fields.
-
-                # Note: This is a simplified mapping. For complex cases, we might need
-                # to inspect the filterset class filters directly.
-                mapped_data[arg_name] = arg_value
-
+                mapped_data[arg_name] = convert_enum(arg_value)
         return mapped_data
