@@ -21,7 +21,7 @@ from .orders import BaseRelatedOrder, RelatedOrder
 from .orderset import AdvancedOrderSet
 from .permissions import apply_cascade_permissions
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
 # All classes, methods, part of the public API
 # easier to manage and understand the package

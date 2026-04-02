@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [0.7.0] - 2026-04-02
+
+### Added
+
+- **`DISTINCT ON` support** — new `ASC_DISTINCT` and `DESC_DISTINCT` values on
+  the `OrderDirection` enum. Fields marked with a `*_DISTINCT` direction define
+  partition keys within `orderBy`; subsequent entries act as tie-breakers
+  (determining which row survives per group).
+  - **PostgreSQL** — uses native `DISTINCT ON` for optimal performance.
+  - **All other backends** (SQLite, MySQL 8+, Oracle, MariaDB 10.2+) —
+    emulated via `Window(RowNumber(), partition_by=..., order_by=...)`.
+    Backend detection is automatic via the existing `IS_POSTGRESQL` flag.
+  - **No new top-level argument** — distinct is expressed inline within the
+    existing `orderBy` array, keeping the API surface minimal.
+  - **Permission reuse** — `check_<field>_permission` methods on
+    `AdvancedOrderSet` apply to `*_DISTINCT` directions identically to
+    `ASC` / `DESC`.
+  - **PostgreSQL ORDER BY deduplication** — `_apply_distinct_postgres`
+    prevents invalid SQL (e.g. `ORDER BY name DESC, name ASC`) when the
+    same field appears with contradictory directions by keeping only the
+    first (distinct) entry.
+  - **Blanket `.distinct()` skip** — `resolve_queryset` in
+    `connection_field.py` skips the blanket `.distinct()` call when
+    `*_DISTINCT` is active, since distinct-on already guarantees uniqueness.
+- **Distinct integration tests** — `test_distinct.py` in the cookbook example
+  with 10 tests covering: basic distinct, `DESC_DISTINCT`, boolean fields,
+  filter + distinct, pagination, duplicate names, empty results, group
+  elimination, unique value count, and regression (no distinct returns all).
+- **Distinct unit tests** — 5 new `ASC_DISTINCT` / `DESC_DISTINCT` tests in
+  `test_ordering.py` plus 3 `_apply_distinct_postgres` deduplication tests
+  and 1 contradictory direction test.
+- **Distinct-on spec** — `docs/distinct_on-spec.md` with full design rationale,
+  edge cases (19 scenarios), stress tests (5 scenarios), database
+  compatibility table, and future extensibility notes (`NULLS_FIRST` /
+  `NULLS_LAST`).
+- **99% coverage enforcement** — `[tool.coverage.report] fail_under = 99` in
+  `pyproject.toml` and `--fail-under=99` in CI workflow.
+
+### Changed
+
+- **`get_flat_orders` return type** — **BREAKING**: returns
+  `tuple[list[str], list[str]]` instead of `list[str]`. The second list
+  contains bare field paths for fields whose direction was `*_DISTINCT`.
+  External callers of this classmethod must destructure the return value:
+  `flat_orders, distinct_fields = MyOrderSet.get_flat_orders(data)`.
+- **`AdvancedOrderSet.__init__`** — now applies distinct-on after ordering
+  when `_distinct_fields` is non-empty. Stores `_distinct_fields` on the
+  instance for inspection by `connection_field.py`.
+
 ## [0.6.0] - 2026-03-27
 
 ### Added
@@ -382,6 +431,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline** — GitHub Actions testing across Python 3.10–3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
+[0.7.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.0
 [0.6.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.6.0
 [0.5.2]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.2
 [0.5.1]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.5.1

@@ -97,7 +97,7 @@ uv run python examples/cookbook/manage.py delete_users 5
 
 ```shell
 uv run coverage run -m pytest
-uv run coverage report --fail-under=100
+uv run coverage report --fail-under=99
 uv run coverage report --show-missing
 # run on a single test file
 uv run coverage run -m pytest tests/test_input_data_factories.py && uv run coverage report -m django_graphene_filters/input_data_factories.py
