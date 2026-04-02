@@ -125,7 +125,7 @@ def test_advanced_django_object_type_init_with_meta_branch():
     _meta = DjangoObjectTypeOptions(Dummy)
     # Pass _meta directly to hit the 'if not _meta:' skip
     AdvancedDjangoObjectType.__init_subclass_with_meta__(
-        orderset_class=None, _meta=_meta, model=FinalUniqueCoverageModel
+        orderset_class=None, _meta=_meta, model=FinalUniqueCoverageModel, fields="__all__"
     )
     assert _meta.orderset_class is None
 

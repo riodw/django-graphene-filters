@@ -13,6 +13,7 @@ Each test verifies:
 """
 
 import json
+import warnings
 from collections import Counter
 
 from cookbook.recipes.models import Attribute, Object, ObjectType, Value
@@ -56,6 +57,9 @@ class EdgeAggregateTests(GraphQLTestCase):
 
     def setUp(self):
         super().setUp()
+        # Suppress InputObjectType overwrite warnings caused by test-ordering
+        # interactions with the global graphene type registry.
+        warnings.filterwarnings("ignore", message="InputObjectType.*was previously built")
         Value.objects.all().delete()
         Object.objects.all().delete()
         Attribute.objects.all().delete()

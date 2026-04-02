@@ -26,6 +26,7 @@ class ConnFilterSet(AdvancedFilterSet):
 class ConnNode(DjangoObjectType):
     class Meta:
         model = ConnModel
+        fields = "__all__"
         interfaces = (graphene.Node,)
         filterset_class = ConnFilterSet
 
