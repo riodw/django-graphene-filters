@@ -37,6 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   assertion message referenced `self.parent.__class__.__name__` which raises
   `AttributeError` if `self.parent` is `None` (unbound filter). Fixed with
   safe attribute chain via `getattr`.
+- **`get_filterset_class` keyword collision** — if `extra_filter_meta`
+  contained `filterset_base_class`, it was passed through `**meta` to
+  `custom_filterset_factory` which also receives it as an explicit kwarg,
+  causing `TypeError: multiple values for keyword argument`. Reserved keys
+  are now stripped before passing.
+- **`get_filterset_class` incorrect `**meta` type annotation** — changed
+  `**meta: dict[str, Any]` to `**meta: Any` to match Python's variadic
+  kwargs typing convention.
 
 ## [0.7.1] - 2026-04-02
 

@@ -7,18 +7,27 @@ from graphene_django.filter.utils import replace_csv_filters
 
 from .filterset import AdvancedFilterSet
 
+_RESERVED_FACTORY_KEYS = {"filterset_base_class"}
+
 
 def get_filterset_class(
     filterset_class: type[AdvancedFilterSet] | None,
-    **meta: dict[str, Any],
+    **meta: Any,
 ) -> type[AdvancedFilterSet]:
     """Return a FilterSet class for use in GraphQL queries.
 
-    This function is a partial copy of the `get_filterset_class` function from graphene-django.
+    This function is a partial copy of the ``get_filterset_class`` function
+    from graphene-django.
 
     Args:
-        filterset_class: An optional base class that extends `AdvancedFilterSet`.
-        **meta: Additional metadata for customizing the filterset.
+        filterset_class: An optional base class that extends ``AdvancedFilterSet``.
+        **meta: Additional metadata for customizing the filterset (e.g.
+            ``model``, ``fields``).  Keys that collide with
+            ``custom_filterset_factory``'s own parameters
+            (``filterset_base_class``) are silently stripped to prevent
+            ``TypeError: multiple values for keyword argument``.
+
+            Note: ``model`` is required when ``filterset_class`` is ``None``.
 
     Returns:
         A FilterSet class based on the provided parameters.
@@ -28,9 +37,12 @@ def get_filterset_class(
         graphene_filterset_class = setup_filterset(filterset_class)
     # If no base class is provided, create a custom FilterSet class based on `AdvancedFilterSet`
     else:
+        # Strip reserved keys to prevent keyword collisions with
+        # custom_filterset_factory(model, filterset_base_class=..., **meta).
+        safe_meta = {k: v for k, v in meta.items() if k not in _RESERVED_FACTORY_KEYS}
         graphene_filterset_class = custom_filterset_factory(
             filterset_base_class=AdvancedFilterSet,
-            **meta,
+            **safe_meta,
         )
 
     # Replace any comma-separated value (CSV) filters with a more flexible format
