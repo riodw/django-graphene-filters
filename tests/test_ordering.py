@@ -500,6 +500,37 @@ class TestOrderArgumentsFactory:
         type2 = factory.create_order_input_type()
         assert type1 is type2
 
+    def test_circular_related_order_does_not_recurse(self):
+        """Circular RelatedOrder references should produce an empty type, not stack overflow."""
+
+        class CircularAOrder(AdvancedOrderSet):
+            b = RelatedOrder("CircularBOrder", field_name="b_rel")
+
+            class Meta:
+                model = OrderModel
+                fields = ["name"]
+
+        class CircularBOrder(AdvancedOrderSet):
+            a = RelatedOrder(CircularAOrder, field_name="a_rel")
+
+            class Meta:
+                model = RelatedModel
+                fields = ["title"]
+
+        # Resolve the lazy string reference
+        CircularAOrder.related_orders["b"]._orderset = CircularBOrder
+
+        # Clear any cached types from prior tests
+        prefix = "CircularTest"
+        for key in list(OrderArgumentsFactory.input_object_types):
+            if key.startswith(prefix):
+                del OrderArgumentsFactory.input_object_types[key]
+
+        factory = OrderArgumentsFactory(CircularAOrder, prefix)
+        # Should not raise RecursionError
+        input_type = factory.create_order_input_type()
+        assert input_type is not None
+
 
 # ---------------------------------------------------------------------------
 # AdvancedDjangoObjectType

@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
-## [Prerelease] — unreleased (targeting 0.7.3)
+## [0.7.3] - 2026-04-04
 
 ### Fixed
 
@@ -609,6 +609,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline** — GitHub Actions testing across Python 3.10–3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
+[0.7.3]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.3
 [0.7.2]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.2
 [0.7.1]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.1
 [0.7.0]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.0
