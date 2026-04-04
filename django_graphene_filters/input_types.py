@@ -129,7 +129,7 @@ class SearchRankWeightsInputType(graphene.InputObjectType):
     Input type for specifying the weights for SearchRank objects.
 
     Default values are set according to Django documentation.
-    https://docs.djangoproject.com/en/3.2/ref/contrib/postgres/search/#weighting-queries
+    https://docs.djangoproject.com/en/stable/ref/contrib/postgres/search/#weighting-queries
     """
 
     D = graphene.Float(default_value=0.1, description="Weight for D letter")
