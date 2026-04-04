@@ -1,6 +1,7 @@
-"""Module for converting a AdvancedOrderSet class to ordering arguments."""
+"""Module for converting an AdvancedOrderSet class to ordering arguments."""
 
 import graphene
+from stringcase import pascalcase
 
 from .mixins import InputObjectTypeFactoryMixin
 
@@ -23,6 +24,10 @@ class OrderDirection(graphene.Enum):
 
 class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
     """Factory for creating ordering arguments in GraphQL from an AdvancedOrderSet class."""
+
+    # Track which orderset classes are currently being built to prevent
+    # infinite recursion from circular RelatedOrder references.
+    _building: set[type] = set()
 
     def __init__(
         self,
@@ -56,18 +61,27 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
         if type_name in type(self).input_object_types:
             return type(self).input_object_types[type_name]
 
-        fields = {}
-        # Fetch the available ordering fields from the Meta class and RelatedOrders
-        for field_name, related_order in orderset_class.get_fields().items():
-            if related_order:
-                # Relationship traversal
-                sub_prefix = f"{prefix}{field_name.capitalize()}"
-                target_orderset = related_order.orderset
-                if target_orderset:
-                    sub_type = self.create_order_input_type(target_orderset, sub_prefix)
-                    fields[field_name] = graphene.InputField(sub_type)
-            else:
-                # Flat field (no traversal, leaf node)
-                fields[field_name] = graphene.InputField(OrderDirection)
+        # Cycle guard: if this orderset is already being built (circular
+        # RelatedOrder), return an empty type to break the recursion.
+        if orderset_class in OrderArgumentsFactory._building:
+            return type(self).create_input_object_type(type_name, {})
 
-        return type(self).create_input_object_type(type_name, fields)
+        OrderArgumentsFactory._building.add(orderset_class)
+        try:
+            fields = {}
+            # Fetch the available ordering fields from the Meta class and RelatedOrders
+            for field_name, related_order in orderset_class.get_fields().items():
+                if related_order:
+                    # Relationship traversal
+                    sub_prefix = f"{prefix}{pascalcase(field_name)}"
+                    target_orderset = related_order.orderset
+                    if target_orderset:
+                        sub_type = self.create_order_input_type(target_orderset, sub_prefix)
+                        fields[field_name] = graphene.InputField(sub_type)
+                else:
+                    # Flat field (no traversal, leaf node)
+                    fields[field_name] = graphene.InputField(OrderDirection)
+
+            return type(self).create_input_object_type(type_name, fields)
+        finally:
+            OrderArgumentsFactory._building.discard(orderset_class)

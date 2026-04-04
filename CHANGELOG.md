@@ -55,6 +55,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   value (no loop). Passing multiple NOT entries from GraphQL would crash.
   Now iterates the list and combines with `~` (inversion), matching the
   AND/OR pattern. Also handles `None` gracefully with `or []` fallback.
+- **`OrderArgumentsFactory` infinite recursion on circular `RelatedOrder`** —
+  `create_order_input_type` had no cycle guard, so circular ordersets
+  (e.g. `ObjectOrder → ValueOrder → ObjectOrder`) would recurse until
+  stack overflow. Added a `_building` set with try/finally, matching the
+  pattern already used by `AggregateArgumentsFactory`.
+- **`OrderArgumentsFactory` uses `capitalize()` instead of `pascalcase()`**
+  — for snake_case relation names like `object_type`, `capitalize()`
+  produced `Object_type` instead of `ObjectType`. Changed to
+  `stringcase.pascalcase()` for consistency with `FilterArgumentsFactory`.
 - **`FilterArgumentsFactory.arguments` defeats caching** — the
   `.arguments` property used `dict.get(key, expensive_default())` which
   evaluates `create_filter_input_type(filterset_to_trees(...))` on every
