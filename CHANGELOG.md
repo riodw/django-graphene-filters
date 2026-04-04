@@ -45,6 +45,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "handle multiple terms (quoted and non-quoted)" but `str.split()` does
   not parse quotes. Updated docstring to accurately describe behaviour:
   whitespace-split, ANDed terms, no quoted-phrase support.
+- **Hardcoded `"and"` / `"or"` / `"not"` in `tree_input_type_to_data`** —
+  same configuration bug as `filterset.py`: tree conversion used literal
+  strings instead of `settings.AND_KEY` / `OR_KEY` / `NOT_KEY`. Now uses
+  the configurable settings, aligned with all other tree-parsing code.
+- **`create_search_query` NOT handling broken** —
+  `SearchQueryInputType.not` is declared as `List(SearchQueryInputType)`
+  in the GraphQL schema, but `create_search_query` treated it as a single
+  value (no loop). Passing multiple NOT entries from GraphQL would crash.
+  Now iterates the list and combines with `~` (inversion), matching the
+  AND/OR pattern. Also handles `None` gracefully with `or []` fallback.
 - **`FilterArgumentsFactory.arguments` defeats caching** — the
   `.arguments` property used `dict.get(key, expensive_default())` which
   evaluates `create_filter_input_type(filterset_to_trees(...))` on every

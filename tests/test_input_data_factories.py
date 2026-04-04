@@ -272,7 +272,7 @@ def test_create_search_query_complex_operations():
         if k == local_settings.OR_KEY:
             return [t1, t2]
         if k == local_settings.NOT_KEY:
-            return t1
+            return [t1]
 
     with (
         patch("django_graphene_filters.input_data_factories.validate_search_query"),
@@ -286,7 +286,7 @@ def test_create_search_query_complex_operations():
         data = {
             local_settings.AND_KEY: [{"value": "term1"}, {"value": "term2"}],
             local_settings.OR_KEY: [{"value": "term3"}, {"value": "term4"}],
-            local_settings.NOT_KEY: {"value": "term5"},
+            local_settings.NOT_KEY: [{"value": "term5"}],
         }
         create_search_query(data)
         # 5 leaves = 5 calls to SearchQuery

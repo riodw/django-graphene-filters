@@ -52,9 +52,9 @@ def tree_input_type_to_data(
     result: dict[str, Any] = {}
     for key, value in tree_input_type.items():
         # Handling logical operations on the filter set
-        if key in ("and", "or"):
+        if key in (settings.AND_KEY, settings.OR_KEY):
             result[key] = [tree_input_type_to_data(filterset_class, subtree) for subtree in value]
-        elif key == "not":
+        elif key == settings.NOT_KEY:
             result[key] = tree_input_type_to_data(filterset_class, value)
         else:
             # Translate remaining key-value pairs into data suitable for the FilterSet
@@ -202,8 +202,12 @@ def create_search_query(
             or_search_query = create_search_query(or_input_type)
         else:
             or_search_query = or_search_query | create_search_query(or_input_type)
-    not_input_type = input_type.get(settings.NOT_KEY)
-    not_search_query = create_search_query(not_input_type) if not_input_type else None
+    not_search_query = None
+    for not_input_type in input_type.get(settings.NOT_KEY, []) or []:
+        sub = create_search_query(not_input_type)
+        if sub is not None:
+            negated = ~sub
+            not_search_query = not_search_query & negated if not_search_query else negated
     valid_queries = (q for q in (and_search_query, or_search_query, not_search_query) if q is not None)
     for valid_query in valid_queries:
         search_query = search_query & valid_query if search_query else valid_query
