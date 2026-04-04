@@ -306,9 +306,9 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
                 # Add to expanded filters if it's not an explicitly declared filter
                 if gen_name not in orig_declared:
                     expanded[gen_name] = gen_f
-        except Exception:
-            # Swallow TypeError if field doesn't exist on model (e.g. reverse relation)
-            # This allows safe failover if you accidentally use expand_auto_filter
+        except (TypeError, KeyError):
+            # TypeError: field doesn't exist on model (e.g. reverse relation)
+            # KeyError: field name not found in generated filters
             pass
 
         # restore reference to original attributes (opts/declared filters)
@@ -384,11 +384,11 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         if not isinstance(data, dict):
             return
         for key, value in data.items():
-            if key in ("and", "or"):
+            if key in (settings.AND_KEY, settings.OR_KEY):
                 if isinstance(value, list):
                     for sub in value:
                         self._collect_filter_fields(sub, fields)
-            elif key == "not":
+            elif key == settings.NOT_KEY:
                 self._collect_filter_fields(value, fields)
             else:
                 # Try direct lookup first (covers non-related fields)
@@ -501,15 +501,15 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         def errors(self) -> ErrorDict:
             """Return an ErrorDict for the data provided for the form."""
             self_errors: ErrorDict = super().errors
-            for key in ("and", "or"):
+            for key, attr in ((settings.AND_KEY, "and_forms"), (settings.OR_KEY, "or_forms")):
                 errors: ErrorDict = ErrorDict()
-                for i, form in enumerate(getattr(self, f"{key}_forms")):
+                for i, form in enumerate(getattr(self, attr)):
                     if form.errors:
                         errors[f"{key}_{i}"] = form.errors
                 if errors:
                     self_errors.update({key: errors})
             if self.not_form and self.not_form.errors:
-                self_errors.update({"not": self.not_form.errors})
+                self_errors.update({settings.NOT_KEY: self.not_form.errors})
             return self_errors
 
     @classmethod
@@ -534,12 +534,16 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         return f"{field_name}__{lookup}"
 
     def build_search_conditions(self, queryset: QuerySet, search_query: str) -> QuerySet:
-        """Constructs Q objects for search terms across search_fields."""
+        """Construct Q objects for search terms across search_fields.
+
+        Terms are whitespace-split and ANDed: every term must match at
+        least one search field.  Quoted-phrase handling is not implemented
+        — quotes are treated as literal characters.
+        """
         search_fields = self.get_search_fields()
         if not search_fields or not search_query:
             return queryset
 
-        # Split terms to handle multiple terms (quoted and non-quoted)
         search_terms = search_query.split()
         orm_lookups = [self.construct_search(field) for field in search_fields]
 
@@ -619,11 +623,14 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         data: dict[str, Any],
     ) -> Form | TreeFormMixin:
         """Create a form from a form class and data."""
+        logic_keys = (settings.AND_KEY, settings.OR_KEY, settings.NOT_KEY)
         return form_class(
-            data={k: v for k, v in data.items() if k not in ("and", "or", "not")},
-            and_forms=[self.create_form(form_class, and_data) for and_data in data.get("and", [])],
-            or_forms=[self.create_form(form_class, or_data) for or_data in data.get("or", [])],
-            not_form=(self.create_form(form_class, data["not"]) if data.get("not") else None),
+            data={k: v for k, v in data.items() if k not in logic_keys},
+            and_forms=[self.create_form(form_class, and_data) for and_data in data.get(settings.AND_KEY, [])],
+            or_forms=[self.create_form(form_class, or_data) for or_data in data.get(settings.OR_KEY, [])],
+            not_form=(
+                self.create_form(form_class, data[settings.NOT_KEY]) if data.get(settings.NOT_KEY) else None
+            ),
         )
 
     def find_filter(self, data_key: str) -> Filter:
@@ -632,6 +639,9 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         The data key may differ from a filter name, because
         the data keys may contain DEFAULT_LOOKUP_EXPR and user can create
         a AdvancedFilterSet class without following the naming convention.
+
+        Raises:
+            KeyError: If no matching filter is found.
         """
         if LOOKUP_SEP in data_key:
             field_name, lookup_expr = data_key.rsplit(LOOKUP_SEP, 1)
@@ -643,6 +653,11 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
         for filter_value in self.filters.values():
             if filter_value.field_name == field_name and filter_value.lookup_expr == lookup_expr:
                 return filter_value
+        raise KeyError(
+            f"No filter found for data key '{data_key}' "
+            f"(field_name='{field_name}', lookup_expr='{lookup_expr}') "
+            f"on {type(self).__name__}. Available filters: {list(self.filters.keys())}"
+        )
 
     def filter_queryset(self, queryset: models.QuerySet) -> models.QuerySet:
         """Filter a queryset with a top level form's `cleaned_data`."""

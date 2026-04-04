@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from unittest.mock import MagicMock, patch
 
+import pytest
 from django import forms
 from django.db import models
 
@@ -88,8 +89,9 @@ def test_find_filter_fallback_loop():
     f = fs.filters.pop("name")
     fs.filters["fake_key"] = f
     assert fs.find_filter("name") == f
-    # Non-existent
-    assert fs.find_filter("missing") is None
+    # Non-existent — now raises KeyError with a descriptive message
+    with pytest.raises(KeyError, match="No filter found for data key 'missing'"):
+        fs.find_filter("missing")
 
 
 def test_create_filters_pg_trigram_loop():

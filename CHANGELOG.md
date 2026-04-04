@@ -25,6 +25,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   said "raises → null" but denied non-nullable fields actually return
   type-appropriate defaults (empty string, `False`, epoch, etc.). Updated
   to reflect actual behavior.
+- **Hardcoded `"and"` / `"or"` / `"not"` in `AdvancedFilterSet`** — tree
+  logic in `_collect_filter_fields`, `create_form`, and
+  `TreeFormMixin.errors` used literal strings instead of
+  `settings.AND_KEY` / `OR_KEY` / `NOT_KEY`. Projects that changed these
+  keys via `DJANGO_GRAPHENE_FILTERS` settings would silently break:
+  permission collection, form construction, and error aggregation would
+  not see nested trees. Now uses the configurable settings throughout.
+- **`find_filter` silently returns `None`** — when no matching filter was
+  found, execution fell off the end of the method returning `None`. The
+  caller in `get_queryset_proxy_for_form` would then raise an unhelpful
+  `AttributeError: 'NoneType' object has no attribute 'filter'`. Now
+  raises `KeyError` with a descriptive message listing available filters.
+- **`expand_auto_filter` swallows all exceptions** — the bare
+  `except Exception: pass` hid real bugs during auto-filter expansion.
+  Narrowed to `except (TypeError, KeyError)` which covers the documented
+  cases (field doesn't exist on model, field name not in generated filters).
+- **Search docstring claims quoted-phrase handling** — the comment said
+  "handle multiple terms (quoted and non-quoted)" but `str.split()` does
+  not parse quotes. Updated docstring to accurately describe behaviour:
+  whitespace-split, ANDed terms, no quoted-phrase support.
 - **`FilterArgumentsFactory.arguments` defeats caching** — the
   `.arguments` property used `dict.get(key, expensive_default())` which
   evaluates `create_filter_input_type(filterset_to_trees(...))` on every
