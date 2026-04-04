@@ -58,6 +58,10 @@ GRAPHENE = {
     "MIDDLEWARE": ("graphene_django.debug.DjangoDebugMiddleware",),
 }
 
+DJANGO_GRAPHENE_FILTERS = {
+    "HIDE_FLAT_FILTERS": False,
+}
+
 ROOT_URLCONF = "cookbook.urls"
 
 APPEND_SLASH = True

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [0.7.4] - 2026-04-04
+
+### Added
+
+- **`HIDE_FLAT_FILTERS` setting** — when set to `True` in
+  `DJANGO_GRAPHENE_FILTERS`, the flat snake_case filter arguments
+  (e.g. `brand_Link_In`, `category_Description_Istartswith`) are omitted
+  from the GraphQL schema. They no longer appear in GraphiQL
+  autocomplete or schema introspection, reducing clutter on models with
+  many related filters. The nested `filter: { ... }` tree, Relay
+  pagination (`first`, `last`, `before`, `after`), `orderBy`, and
+  `search` arguments are unaffected. Defaults to `False` (existing
+  behaviour unchanged).
+
+  ```python
+  # settings.py
+  DJANGO_GRAPHENE_FILTERS = {
+      "HIDE_FLAT_FILTERS": True,
+  }
+  ```
+
 ## [0.7.3] - 2026-04-04
 
 ### Fixed
@@ -609,6 +630,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline** — GitHub Actions testing across Python 3.10–3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
+[0.7.4]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.4
 [0.7.3]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.3
 [0.7.2]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.2
 [0.7.1]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.1

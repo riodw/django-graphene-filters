@@ -201,14 +201,21 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         This merges:
         1. Standard Graphene arguments (flat, e.g., 'department_Name')
         2. Advanced arguments (nested, e.g., 'filter')
+
+        When ``HIDE_FLAT_FILTERS`` is ``True`` in ``DJANGO_GRAPHENE_FILTERS``
+        settings, the flat arguments are omitted from the schema.  They still
+        work if passed directly (for backward compatibility), but they won't
+        appear in GraphiQL autocomplete or schema introspection.
         """
         if not self._filtering_args:
             # 1. Get Standard Arguments (Flat style derived from filter_fields)
             # We use a trimmed version of the class to HIDE the expanded RelatedFilters
             # from the root-level arguments.
-            trimmed_class = self._get_trimmed_filterset_class()
-
-            standard_args = get_filtering_args_from_filterset(trimmed_class, self.node_type)
+            if not settings.HIDE_FLAT_FILTERS:
+                trimmed_class = self._get_trimmed_filterset_class()
+                standard_args = get_filtering_args_from_filterset(trimmed_class, self.node_type)
+            else:
+                standard_args = {}
 
             # 2. Get Advanced Arguments (The 'filter' tree input)
             # We use the FULL class here so the tree is built correctly
