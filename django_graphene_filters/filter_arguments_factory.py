@@ -74,12 +74,24 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
         Returns:
             A dictionary mapping from argument names to graphene.Argument objects.
         """
-        input_object_type = self.input_object_types.get(
-            self.filter_input_type_name,
+        if self.filter_input_type_name in self.input_object_types:
+            # Cache hit — check for collision (same type name, different filterset)
+            prior = self._type_filterset_registry.get(self.filter_input_type_name)
+            if prior is not None and prior is not self.filterset_class:
+                warnings.warn(
+                    f"InputObjectType '{self.filter_input_type_name}' was previously built for "
+                    f"'{prior.__name__}' but is now being overwritten for "
+                    f"'{self.filterset_class.__name__}'. "
+                    "Queries using the first field will silently use the wrong filter schema. "
+                    "Set unique `filter_input_type_prefix` values on each "
+                    "AdvancedDjangoFilterConnectionField to fix this.",
+                    stacklevel=2,
+                )
+        else:
             self.create_filter_input_type(
                 self.filterset_to_trees(self.filterset_class),
-            ),
-        )
+            )
+        input_object_type = self.input_object_types[self.filter_input_type_name]
         return {
             settings.FILTER_KEY: graphene.Argument(
                 input_object_type,
@@ -121,21 +133,6 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
                 description="`Not` field",
             ),
         }
-
-        # Detect collisions: same type name registered for a different filterset class.
-        # This causes silent incorrect behaviour — the second filterset silently replaces
-        # the first in the schema — so we warn loudly instead of failing silently.
-        prior = self._type_filterset_registry.get(self.filter_input_type_name)
-        if prior is not None and prior is not self.filterset_class:
-            warnings.warn(
-                f"InputObjectType '{self.filter_input_type_name}' was previously built for "
-                f"'{prior.__name__}' but is now being overwritten for "
-                f"'{self.filterset_class.__name__}'. "
-                "Queries using the first field will silently use the wrong filter schema. "
-                "Set unique `filter_input_type_prefix` values on each "
-                "AdvancedDjangoFilterConnectionField to fix this.",
-                stacklevel=4,
-            )
 
         # Combine all fields and create the InputObjectType
         self.input_object_types[self.filter_input_type_name] = cast(

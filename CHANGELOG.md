@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   said "raises → null" but denied non-nullable fields actually return
   type-appropriate defaults (empty string, `False`, epoch, etc.). Updated
   to reflect actual behavior.
+- **`FilterArgumentsFactory.arguments` defeats caching** — the
+  `.arguments` property used `dict.get(key, expensive_default())` which
+  evaluates `create_filter_input_type(filterset_to_trees(...))` on every
+  access even when the type is already cached. Changed to an explicit
+  `if key not in cache` check. The collision warning (same type name,
+  different filterset) was moved from `create_filter_input_type` to
+  `.arguments` so it fires on cache hits too.
 
 ## [0.7.2] - 2026-04-02
 
