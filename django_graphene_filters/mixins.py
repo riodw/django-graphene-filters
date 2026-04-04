@@ -10,7 +10,14 @@ from django.utils.module_loading import import_string
 def get_concrete_field_names(model: type[models.Model]) -> list[str]:
     """Return the names of all concrete (column-backed) fields on a Django model.
 
-    This excludes reverse relations, many-to-many managers, and other virtual fields.
+    Uses ``hasattr(f, "column")`` rather than ``f.concrete`` because
+    Django's ``concrete`` attribute is ``True`` for ``ManyToManyField``
+    (which has no column on the model's table).  The ``column`` attribute
+    only exists on fields that map to a single DB column — ``ForeignKey``,
+    ``OneToOneField``, ``CharField``, ``IntegerField``, etc.
+
+    This excludes reverse relations, many-to-many managers, and other
+    virtual fields.
     """
     return [f.name for f in model._meta.get_fields() if hasattr(f, "column")]
 
@@ -24,9 +31,14 @@ class LazyRelatedClassMixin:
     def resolve_lazy_class(self, class_ref: Any, bound_class: type | None) -> Any:
         """Resolve a class reference.
 
-        If it's a string, attempts absolute import and falls back to relative import
-        using the bound class's module. If callable (but not a class type), executes it.
-        Otherwise, returns it as-is.
+        String references are resolved in two steps:
+        1. Try as an absolute import path (e.g. ``"myapp.filters.MyFilter"``)
+        2. On ``ImportError``, fall back to ``bound_class.__module__ + "." + class_ref``
+           (e.g. ``"MyFilter"`` → ``"myapp.filters.MyFilter"`` if bound to a
+           class in ``myapp.filters``)
+
+        Callables (but not class types) are invoked as zero-arg factories.
+        Everything else is returned as-is.
         """
         if isinstance(class_ref, str):
             try:
@@ -44,7 +56,13 @@ class LazyRelatedClassMixin:
 
 
 class InputObjectTypeFactoryMixin:
-    """Mixin for dynamically creating and caching Graphene InputObjectTypes."""
+    """Mixin for dynamically creating and caching Graphene InputObjectTypes.
+
+    The cache is keyed by type **name** only.  Callers must ensure unique
+    names (e.g. via a prefix derived from the node type + class name) to
+    avoid collisions.  ``FilterArgumentsFactory`` defines its own
+    ``input_object_types`` dict to isolate filter types from order types.
+    """
 
     input_object_types: dict[str, type[graphene.InputObjectType]] = {}
 
@@ -75,8 +93,10 @@ class InputObjectTypeFactoryMixin:
 class ObjectTypeFactoryMixin:
     """Mixin for dynamically creating and caching Graphene ObjectTypes (output types).
 
-    Unlike ``InputObjectTypeFactoryMixin`` which creates input types for filters/orders,
-    this creates output types suitable for aggregate result schemas.
+    Unlike ``InputObjectTypeFactoryMixin`` which creates input types for
+    filters/orders, this creates output types suitable for aggregate result
+    schemas.  The cache is keyed by type **name** only — callers must
+    ensure unique names via prefixes.
     """
 
     object_types: dict[str, type[graphene.ObjectType]] = {}
