@@ -627,7 +627,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Cookbook example app** — full working Django + Graphene project under
   `examples/cookbook/` demonstrating all features with an EAV data model
   (`ObjectType`, `Object`, `Attribute`, `Value`).
-- **CI pipeline** — GitHub Actions testing across Python 3.10–3.14 × Django
+- **CI pipeline** — GitHub Actions testing across Python 3.10-3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
 [0.7.4]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.4

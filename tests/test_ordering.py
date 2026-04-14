@@ -51,7 +51,7 @@ class ParentOrderSet(AdvancedOrderSet):
 
 
 # ---------------------------------------------------------------------------
-# AdvancedOrderSet – get_flat_orders
+# AdvancedOrderSet - get_flat_orders
 # ---------------------------------------------------------------------------
 
 
@@ -170,7 +170,7 @@ class TestGetFlatOrders:
 
 
 # ---------------------------------------------------------------------------
-# AdvancedOrderSet – _apply_distinct_postgres deduplication
+# AdvancedOrderSet - _apply_distinct_postgres deduplication
 # ---------------------------------------------------------------------------
 
 
@@ -234,7 +234,7 @@ class TestApplyDistinctPostgresDedup:
 
 
 # ---------------------------------------------------------------------------
-# AdvancedOrderSet – get_fields
+# AdvancedOrderSet - get_fields
 # ---------------------------------------------------------------------------
 
 
@@ -268,7 +268,7 @@ class TestGetFields:
 
 
 # ---------------------------------------------------------------------------
-# AdvancedOrderSet – __init__ and check_permissions
+# AdvancedOrderSet - __init__ and check_permissions
 # ---------------------------------------------------------------------------
 
 
@@ -414,7 +414,7 @@ def test_metaclass_binds_orderset():
 
 
 # ---------------------------------------------------------------------------
-# orders.py – BaseRelatedOrder / RelatedOrder
+# orders.py - BaseRelatedOrder / RelatedOrder
 # ---------------------------------------------------------------------------
 
 
@@ -577,7 +577,7 @@ class TestAdvancedDjangoObjectType:
 
 
 # ---------------------------------------------------------------------------
-# Connection field – ordering integration
+# Connection field - ordering integration
 # ---------------------------------------------------------------------------
 
 

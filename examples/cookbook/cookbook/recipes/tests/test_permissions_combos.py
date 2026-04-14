@@ -248,7 +248,7 @@ class PermissionCombinationTests(GraphQLTestCase):
         with self.subTest(permissions="unauthenticated"):
             self._run_query_and_validate([], "unauthenticated")
 
-        # Queries 2–17: authenticated users with each permission combo
+        # Queries 2-17: authenticated users with each permission combo
         for i, perms in enumerate(self.perm_combos):
             label = ", ".join(perms) if perms else "no perms"
 

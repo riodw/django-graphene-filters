@@ -104,7 +104,7 @@ class TestCollectFilterFields:
 
 
 # ---------------------------------------------------------------------------
-# check_permissions – direct
+# check_permissions - direct
 # ---------------------------------------------------------------------------
 
 
@@ -173,7 +173,7 @@ class TestFilterPermissionsDirect:
 
 
 # ---------------------------------------------------------------------------
-# check_permissions – delegation through related filters
+# check_permissions - delegation through related filters
 # ---------------------------------------------------------------------------
 
 
@@ -239,7 +239,7 @@ class TestFilterPermissionsDelegation:
 
 
 # ---------------------------------------------------------------------------
-# check_permissions – and/or/not tree structure
+# check_permissions - and/or/not tree structure
 # ---------------------------------------------------------------------------
 
 
