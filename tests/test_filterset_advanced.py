@@ -437,3 +437,98 @@ def test_trigram_search_warnings():
             TrigramWarnFS.create_full_text_search_filters(OrderedDict())
             assert len(w) > 0
             assert "Trigram search is not available" in str(w[-1].message)
+
+
+# ---------------------------------------------------------------------------
+# Regression: RelatedFilter expansion must sync base_filters
+# ---------------------------------------------------------------------------
+
+
+class RelatedTestModel(models.Model):
+    """Target model for RelatedFilter regression tests."""
+
+    title = models.CharField(max_length=100)
+    parent = models.ForeignKey(
+        FilterSetTestModel,
+        related_name="children",
+        on_delete=models.CASCADE,
+    )
+
+    class Meta:
+        app_label = "recipes"
+
+
+def test_related_filter_expansion_syncs_base_filters():
+    """Expanded RelatedFilter paths must appear in base_filters.
+
+    Before the fix, base_filters only contained Meta.fields entries.
+    RelatedFilter paths (e.g. ``children__title``) were in the GraphQL
+    schema but silently dropped during actual ORM filtering.
+    """
+    from django_graphene_filters.filters import RelatedFilter
+
+    class ChildFilter(AdvancedFilterSet):
+        class Meta:
+            model = RelatedTestModel
+            fields = {"title": ["exact", "icontains"]}
+
+    class ParentFilter(AdvancedFilterSet):
+        children = RelatedFilter(ChildFilter, field_name="children")
+
+        class Meta:
+            model = FilterSetTestModel
+            fields = {"name": ["exact"]}
+
+    # Trigger expansion
+    all_filters = ParentFilter.get_filters()
+
+    # Expanded path must be in get_filters() result
+    assert "children__title" in all_filters, (
+        f"Expanded path 'children__title' missing from get_filters(). Keys: {list(all_filters.keys())}"
+    )
+
+    # And critically — also in base_filters (used by forms / filter_queryset)
+    assert "children__title" in ParentFilter.base_filters, (
+        f"Expanded path 'children__title' missing from base_filters. "
+        f"Keys: {list(ParentFilter.base_filters.keys())}. "
+        "This means the filter is visible in the schema but silently ignored at runtime."
+    )
+
+
+def test_related_filter_expanded_paths_reach_form():
+    """A filterset instance's form must include fields for RelatedFilter paths.
+
+    This is the consequence of base_filters being synced: when a filterset
+    is instantiated, ``self.filters = deepcopy(base_filters)``, and the
+    form is built from ``self.filters``.  If base_filters lacks the
+    expanded paths, the form silently ignores them in cleaned_data.
+    """
+    from django_graphene_filters.filters import RelatedFilter
+
+    class ChildFilter2(AdvancedFilterSet):
+        class Meta:
+            model = RelatedTestModel
+            fields = {"title": ["exact"]}
+
+    class ParentFilter2(AdvancedFilterSet):
+        children = RelatedFilter(ChildFilter2, field_name="children")
+
+        class Meta:
+            model = FilterSetTestModel
+            fields = {"name": ["exact"]}
+
+    # Force expansion
+    ParentFilter2.get_filters()
+
+    # Create an instance with data that uses the expanded path
+    fs = ParentFilter2(
+        data={"children__title": "hello"},
+        queryset=FilterSetTestModel.objects.none(),
+    )
+
+    assert fs.form.is_valid()
+    assert "children__title" in fs.form.cleaned_data, (
+        f"Expanded path 'children__title' not in form cleaned_data. "
+        f"Keys: {list(fs.form.cleaned_data.keys())}. "
+        "The filter data will be silently dropped."
+    )
