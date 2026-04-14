@@ -475,6 +475,11 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
                 not isinstance(f._filterset, str) for f in cls.related_filters.values()
             ):
                 cls._expanded_filters = all_filters
+                # Sync base_filters so that forms and filter_queryset see
+                # the full expanded set — not just Meta.fields originals.
+                # Without this, RelatedFilter paths are visible in the
+                # GraphQL schema but silently ignored during filtering.
+                cls.base_filters = all_filters
             return all_filters
         finally:
             # CRITICAL: Reset the flag so future calls (e.g. in other FilterSets)
