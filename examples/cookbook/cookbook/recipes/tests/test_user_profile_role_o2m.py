@@ -267,6 +267,45 @@ class UserProfileRoleFilterTests(TransactionTestCase):
             end_date=None,
         )
 
+        # ----- Cross-row trap users -----
+        # These users have multiple roles where DIFFERENT rows satisfy
+        # different filter conditions.  If the filter incorrectly matches
+        # across rows, these users would appear in results when they should not.
+
+        # Frank: Admin ENDED before range + Editor ONGOING (overlaps range)
+        #   Cross-row bug would combine: role=Admin (row 1) + null end (row 2)
+        self.frank = User.objects.create_user(username="frank", password="testpass")
+        frank_profile = Profile.objects.create(user=self.frank)
+        UserRole.objects.create(
+            profile=frank_profile,
+            role=self.admin_role,
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 2, 1),
+        )
+        UserRole.objects.create(
+            profile=frank_profile,
+            role=self.editor_role,
+            start_date=date(2026, 2, 15),
+            end_date=None,
+        )
+
+        # Grace: Admin STARTS after range + Editor OVERLAPS range
+        #   Cross-row bug would combine: role=Admin (row 1) + start<=end (row 2)
+        self.grace = User.objects.create_user(username="grace", password="testpass")
+        grace_profile = Profile.objects.create(user=self.grace)
+        UserRole.objects.create(
+            profile=grace_profile,
+            role=self.admin_role,
+            start_date=date(2026, 3, 1),
+            end_date=None,
+        )
+        UserRole.objects.create(
+            profile=grace_profile,
+            role=self.editor_role,
+            start_date=date(2026, 2, 1),
+            end_date=date(2026, 2, 28),
+        )
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -332,6 +371,8 @@ class UserProfileRoleFilterTests(TransactionTestCase):
         carol: Admin Jan-Feb 1, end_date(Feb 1) < start(Feb 26) ✗
         dave:  Editor, wrong role ✗
         eve:   Admin Mar-ongoing, start_date(Mar 1) > end(Feb 27) ✗
+        frank: Admin ended Feb 1 ✗ (Editor ongoing is wrong role) ✗
+        grace: Admin starts Mar 1 ✗ (Editor overlaps but wrong role) ✗
         """
         usernames = self._role_during_query([self.admin_role.id], "2026-02-26", "2026-02-27")
         self.assertEqual(usernames, ["alice", "bob"])
@@ -342,6 +383,8 @@ class UserProfileRoleFilterTests(TransactionTestCase):
         alice: Admin overlaps ✓
         bob:   Admin overlaps ✓
         dave:  Editor Feb 20-28 overlaps ✓
+        frank: Editor Feb 15-ongoing overlaps ✓ (same row matches all conditions)
+        grace: Editor Feb 1-28 overlaps ✓ (same row matches all conditions)
         carol: Admin ended Feb 1 ✗
         eve:   Admin started Mar 1 ✗
         """
@@ -350,15 +393,17 @@ class UserProfileRoleFilterTests(TransactionTestCase):
             "2026-02-26",
             "2026-02-27",
         )
-        self.assertEqual(usernames, ["alice", "bob", "dave"])
+        self.assertEqual(usernames, ["alice", "bob", "dave", "frank", "grace"])
 
     def test_null_end_date_matches(self):
         """Query range Apr 1-30: only roles with null end_date or end >= Apr 1 match.
 
-        eve: Admin Mar 1-ongoing, start(Mar 1) <= end(Apr 30) ✓, end_date NULL ✓
+        eve:   Admin Mar 1-ongoing, start(Mar 1) <= Apr 30 ✓, end NULL ✓
+        grace: Admin Mar 1-ongoing, start(Mar 1) <= Apr 30 ✓, end NULL ✓
+        frank: Admin ended Feb 1 ✗ (Editor ongoing is wrong role) ✗
         """
         usernames = self._role_during_query([self.admin_role.id], "2026-04-01", "2026-04-30")
-        self.assertEqual(usernames, ["eve"])
+        self.assertEqual(usernames, ["eve", "grace"])
 
     def test_no_match_before_any_role(self):
         """Query range entirely before any Admin assignment → empty result."""
@@ -373,24 +418,28 @@ class UserProfileRoleFilterTests(TransactionTestCase):
     def test_exact_boundary_end_date_equals_start(self):
         """bob's end_date (Feb 28) equals query start → overlap on that day.
 
-        bob: Admin Feb 15-28, query Feb 28-Mar 15 → end(28) >= start(28) ✓
         alice: Admin Jan-Mar 1 → end(Mar 1) >= start(Feb 28) ✓
-        eve: Admin Mar 1-null → start(Mar 1) <= end(Mar 15) ✓, null end ✓
+        bob:   Admin Feb 15-28 → end(28) >= start(28) ✓
+        eve:   Admin Mar 1-null → start(Mar 1) <= end(Mar 15) ✓, null end ✓
+        grace: Admin Mar 1-null → same as eve ✓
         carol: Admin Jan-Feb 1 → end(Feb 1) >= start(Feb 28) ✗
+        frank: Admin Jan-Feb 1 → end(Feb 1) >= start(Feb 28) ✗
         """
         usernames = self._role_during_query([self.admin_role.id], "2026-02-28", "2026-03-15")
-        self.assertEqual(usernames, ["alice", "bob", "eve"])
+        self.assertEqual(usernames, ["alice", "bob", "eve", "grace"])
 
     def test_exact_boundary_start_date_equals_end(self):
         """eve's start_date (Mar 1) equals query end → overlap on that day.
 
-        eve: Admin Mar 1-null → start(Mar 1) <= end(Mar 1) ✓, null end ✓
-        alice: Admin Jan-Mar 1 → start(Jan 1) <= end(Mar 1) ✓, end(Mar 1) >= start(Mar 1) ✓
-        bob: Admin Feb 15-28 → end(Feb 28) >= start(Mar 1) ✗
+        alice: Admin Jan-Mar 1 → end(Mar 1) >= start(Mar 1) ✓
+        eve:   Admin Mar 1-null → start(Mar 1) <= end(Mar 1) ✓, null end ✓
+        grace: Admin Mar 1-null → same as eve ✓
+        bob:   Admin Feb 15-28 → end(Feb 28) >= start(Mar 1) ✗
         carol: Admin Jan-Feb 1 → end(Feb 1) >= start(Mar 1) ✗
+        frank: Admin Jan-Feb 1 → end(Feb 1) >= start(Mar 1) ✗
         """
         usernames = self._role_during_query([self.admin_role.id], "2026-03-01", "2026-03-01")
-        self.assertEqual(usernames, ["alice", "eve"])
+        self.assertEqual(usernames, ["alice", "eve", "grace"])
 
     def test_staff_user_excluded_by_join(self):
         """Staff user has no profile → excluded by the inner join, never in results."""
@@ -400,3 +449,49 @@ class UserProfileRoleFilterTests(TransactionTestCase):
             "2099-12-31",
         )
         self.assertNotIn("staff", usernames)
+
+    # ------------------------------------------------------------------
+    # Cross-row integrity: all conditions must match the SAME UserRole row
+    # ------------------------------------------------------------------
+
+    def test_cross_row_trap_frank(self):
+        """Frank must NOT match 'Admin during Feb 26-27'.
+
+        Frank has two roles that TOGETHER would satisfy all conditions
+        but NO SINGLE ROW does:
+          - Admin Jan 1 - Feb 1:  role=Admin ✓, start<=Feb27 ✓, end(Feb1)>=Feb26 ✗
+          - Editor Feb 15 - null: role=Editor ✗ (not Admin)
+
+        A cross-row bug would combine Admin from row 1 + null end from row 2
+        and incorrectly match Frank.
+        """
+        usernames = self._role_during_query([self.admin_role.id], "2026-02-26", "2026-02-27")
+        self.assertNotIn("frank", usernames)
+
+    def test_cross_row_trap_grace(self):
+        """Grace must NOT match 'Admin during Feb 26-27'.
+
+        Grace has two roles that TOGETHER would satisfy all conditions
+        but NO SINGLE ROW does:
+          - Admin Mar 1 - null:   role=Admin ✓, start(Mar1)<=Feb27 ✗
+          - Editor Feb 1 - Feb 28: role=Editor ✗ (not Admin)
+
+        A cross-row bug would combine Admin from row 1 + start<=end from row 2
+        and incorrectly match Grace.
+        """
+        usernames = self._role_during_query([self.admin_role.id], "2026-02-26", "2026-02-27")
+        self.assertNotIn("grace", usernames)
+
+    def test_cross_row_users_match_when_single_row_qualifies(self):
+        """Frank and Grace DO match when querying a role they actually held during the range.
+
+        This confirms they're not globally excluded - they just don't have
+        a qualifying Admin row for Feb 26-27.  Their Editor rows DO qualify
+        for 'Editor during Feb 26-27'.
+
+        frank: Editor Feb 15-null → role=Editor ✓, start<=Feb27 ✓, end NULL ✓
+        grace: Editor Feb 1-28   → role=Editor ✓, start<=Feb27 ✓, end>=Feb26 ✓
+        """
+        usernames = self._role_during_query([self.editor_role.id], "2026-02-26", "2026-02-27")
+        self.assertIn("frank", usernames)
+        self.assertIn("grace", usernames)

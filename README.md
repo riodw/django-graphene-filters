@@ -108,9 +108,8 @@ https://github.com/riodw/django-graphene-filters/actions/workflows/django.yml
 ### Formatting and Linting:
 
 ```shell
-# pyproject.toml [tool.black]
-uv run black .
 # pyproject.toml [tool.ruff]
+uv run ruff format .
 uv run ruff check --fix .
 ```
 

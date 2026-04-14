@@ -42,7 +42,6 @@ Issues = "https://github.com/riodw/django-graphene-filters/issues"
 
 [dependency-groups]
 dev = [
-    "black>=26.1.0",
     "coverage>=7.13.2",
     "pre-commit>=4.5.1",
     "pytest>=9.0.2",
@@ -59,28 +58,6 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["django_graphene_filters"]
-
-[tool.black]
-line-length = 110
-skip-magic-trailing-comma = false
-exclude = '''
-/(
-    \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-  | env
-  | venv
-  | \.pytest_cache
-  | \.coverage
-  | htmlcov
-)/
-'''
 
 [tool.ruff]
 line-length = 110

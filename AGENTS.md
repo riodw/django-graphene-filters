@@ -35,11 +35,11 @@ uv run coverage run -m pytest tests/test_input_data_factories.py && uv run cover
 
 ### Formatting and Linting
 ```
-uv run black .
+uv run ruff format .
 uv run ruff check --fix .
 ```
 
-**Always run both commands after making any code changes.** Line length is 110 for both black and ruff. Ruff enforces Google-style docstrings (`D`), type annotations (`ANN`), and isort (`I`) among others. Tests and examples have relaxed rules (see `pyproject.toml [tool.ruff.lint.per-file-ignores]`).
+**Always run both commands after making any code changes.** Line length is 110 (see `pyproject.toml [tool.ruff]`). Ruff enforces Google-style docstrings (`D`), type annotations (`ANN`), and isort (`I`) among others. Tests and examples have relaxed rules (see `pyproject.toml [tool.ruff.lint.per-file-ignores]`).
 
 ### Running the Example App
 ```

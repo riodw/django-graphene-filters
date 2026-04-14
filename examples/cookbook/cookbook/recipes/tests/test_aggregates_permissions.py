@@ -228,8 +228,7 @@ class AggregatePermissionTests(GraphQLTestCase):
             self.assertEqual(
                 agg["objects"]["count"],
                 expected_obj,
-                f"[{label}] Object aggregate count: expected {expected_obj}, "
-                f"got {agg['objects']['count']}",
+                f"[{label}] Object aggregate count: expected {expected_obj}, got {agg['objects']['count']}",
             )
 
             # Verify Object field aggregates (uniques excluded — staff-only)

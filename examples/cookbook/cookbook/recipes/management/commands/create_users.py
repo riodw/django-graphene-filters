@@ -25,6 +25,6 @@ class Command(BaseCommand):
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Done! Created {result['users']} users. " f"Password for all: {TEST_USER_PASSWORD}"
+                f"Done! Created {result['users']} users. Password for all: {TEST_USER_PASSWORD}"
             )
         )

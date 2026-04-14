@@ -113,8 +113,7 @@ class EdgeAggregateTests(GraphQLTestCase):
             self.assertEqual(
                 values_agg["count"],
                 expected_count,
-                f"[{label}] Object '{obj_name}': count expected {expected_count}, "
-                f"got {values_agg['count']}",
+                f"[{label}] Object '{obj_name}': count expected {expected_count}, got {values_agg['count']}",
             )
 
             if expected_count > 0:
