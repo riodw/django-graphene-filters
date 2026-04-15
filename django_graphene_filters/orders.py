@@ -8,8 +8,8 @@ from .mixins import LazyRelatedClassMixin
 class BaseRelatedOrder(LazyRelatedClassMixin):
     """Base class for related ordering. Serves as foundation for relationship sorting."""
 
-    def __init__(self, orderset: str | type, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, orderset: str | type) -> None:
+        super().__init__()
         self._orderset = orderset
 
     def bind_orderset(self, orderset: type) -> None:
@@ -35,6 +35,6 @@ class RelatedOrder(BaseRelatedOrder):
     class defined for the related model.
     """
 
-    def __init__(self, orderset: str | type, field_name: str, **kwargs) -> None:
-        super().__init__(orderset, **kwargs)
+    def __init__(self, orderset: str | type, field_name: str) -> None:
+        super().__init__(orderset)
         self.field_name = field_name
