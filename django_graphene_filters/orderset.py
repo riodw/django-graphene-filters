@@ -15,11 +15,29 @@ class OrderSetMetaclass(type):
     """Custom metaclass for creating OrderSet classes and attaching RelatedOrders."""
 
     def __new__(cls, name: str, bases: tuple, attrs: dict[str, Any]) -> "OrderSetMetaclass":
-        """Create a new OrderSet class and populate ``related_orders``."""
+        """Create a new OrderSet class and populate ``related_orders``.
+
+        Inherits ``RelatedOrder`` declarations from base classes so that
+        subclassing an ``AdvancedOrderSet`` preserves relationship ordering
+        support.  Declarations on the current class override same-named
+        declarations on bases (standard Python MRO semantics).
+        """
         new_class = super().__new__(cls, name, bases, attrs)
-        new_class.related_orders = OrderedDict(
-            [(n, f) for n, f in attrs.items() if isinstance(f, orders.BaseRelatedOrder)]
-        )
+
+        # Start with inherited related_orders from base classes (in MRO order,
+        # with later bases overriding earlier ones — matches Python's method
+        # resolution).
+        inherited: OrderedDict = OrderedDict()
+        for base in reversed(bases):
+            for n, f in getattr(base, "related_orders", {}).items():
+                inherited[n] = f
+
+        # Apply the current class's own declarations, overriding inherited ones.
+        for n, f in attrs.items():
+            if isinstance(f, orders.BaseRelatedOrder):
+                inherited[n] = f
+
+        new_class.related_orders = inherited
         for f in new_class.related_orders.values():
             f.bind_orderset(new_class)
         return new_class
@@ -149,12 +167,18 @@ class AdvancedOrderSet(metaclass=OrderSetMetaclass):
     ) -> Any:
         """Apply ``DISTINCT ON`` to the queryset.
 
-        PostgreSQL uses native ``.distinct(*fields)``.  All other backends
-        use ``Window(RowNumber())`` to emulate the same behaviour.
+        PostgreSQL uses native ``.distinct(*fields)`` — but only when the
+        queryset does not have a ``GROUP BY`` clause.  Django raises
+        ``NotImplementedError("annotate() + distinct(fields) is not
+        implemented.")`` when ``.distinct(*fields)`` is combined with an
+        aggregate-bearing queryset.  In that case (and for all non-PostgreSQL
+        backends) we fall back to ``Window(RowNumber())`` emulation.
         """
         from .conf import settings
 
-        if settings.IS_POSTGRESQL:
+        has_group_by = bool(getattr(queryset.query, "group_by", None))
+
+        if settings.IS_POSTGRESQL and not has_group_by:
             return cls._apply_distinct_postgres(queryset, distinct_fields, order_fields)
         return cls._apply_distinct_emulated(queryset, distinct_fields, order_fields)
 

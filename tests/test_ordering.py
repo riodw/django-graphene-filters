@@ -233,6 +233,112 @@ class TestApplyDistinctPostgresDedup:
         qs.distinct.assert_called_once_with("name", "status")
 
 
+class TestApplyDistinctGroupByFallback:
+    """Verify apply_distinct falls back to emulated when queryset has GROUP BY."""
+
+    def test_postgres_with_group_by_falls_back_to_emulated(self):
+        """On PostgreSQL, a queryset with GROUP BY skips native DISTINCT ON."""
+        from unittest.mock import MagicMock, patch
+
+        qs = MagicMock()
+        qs.query.group_by = True  # Simulates an aggregate-annotated queryset
+        qs.annotate.return_value = qs
+        qs.filter.return_value = qs
+
+        with (
+            patch("django_graphene_filters.conf.settings.IS_POSTGRESQL", True),
+            patch.object(AdvancedOrderSet, "_apply_distinct_emulated") as mock_emulated,
+            patch.object(AdvancedOrderSet, "_apply_distinct_postgres") as mock_native,
+        ):
+            mock_emulated.return_value = qs
+
+            AdvancedOrderSet.apply_distinct(qs, ["name"], ["name"])
+
+            mock_emulated.assert_called_once()
+            mock_native.assert_not_called()
+
+    def test_postgres_without_group_by_uses_native(self):
+        """On PostgreSQL, a queryset without GROUP BY uses native DISTINCT ON."""
+        from unittest.mock import MagicMock, patch
+
+        qs = MagicMock()
+        qs.query.group_by = None
+
+        with (
+            patch("django_graphene_filters.conf.settings.IS_POSTGRESQL", True),
+            patch.object(AdvancedOrderSet, "_apply_distinct_emulated") as mock_emulated,
+            patch.object(AdvancedOrderSet, "_apply_distinct_postgres") as mock_native,
+        ):
+            mock_native.return_value = qs
+
+            AdvancedOrderSet.apply_distinct(qs, ["name"], ["name"])
+
+            mock_native.assert_called_once()
+            mock_emulated.assert_not_called()
+
+
+class TestRelatedOrderInheritance:
+    """Verify RelatedOrder declarations are inherited from base classes."""
+
+    def test_subclass_inherits_related_orders(self):
+        """A subclass preserves its base class's RelatedOrder declarations."""
+
+        class BaseOrder(AdvancedOrderSet):
+            related = RelatedOrder(ChildOrderSet, field_name="order_model")
+
+            class Meta:
+                model = OrderModel
+                fields = ["name"]
+
+        class SubOrder(BaseOrder):
+            class Meta:
+                model = OrderModel
+                fields = ["name", "description"]
+
+        # The subclass should still see the inherited `related` RelatedOrder
+        assert "related" in SubOrder.related_orders
+        assert isinstance(SubOrder.related_orders["related"], RelatedOrder)
+
+    def test_subclass_can_override_related_order(self):
+        """A subclass can override an inherited RelatedOrder by redeclaring it."""
+
+        class BaseOrder(AdvancedOrderSet):
+            related = RelatedOrder(ChildOrderSet, field_name="order_model")
+
+            class Meta:
+                model = OrderModel
+                fields = ["name"]
+
+        class SubOrder(BaseOrder):
+            # Override with a different field_name
+            related = RelatedOrder(ChildOrderSet, field_name="other_model")
+
+            class Meta:
+                model = OrderModel
+                fields = ["name"]
+
+        assert SubOrder.related_orders["related"].field_name == "other_model"
+
+    def test_get_fields_exposes_inherited_related_orders(self):
+        """get_fields() on a subclass includes inherited RelatedOrder entries."""
+
+        class BaseOrder(AdvancedOrderSet):
+            related = RelatedOrder(ChildOrderSet, field_name="order_model")
+
+            class Meta:
+                model = OrderModel
+                fields = ["name"]
+
+        class SubOrder(BaseOrder):
+            class Meta:
+                model = OrderModel
+                fields = ["name"]
+
+        fields = SubOrder.get_fields()
+        assert "related" in fields
+        assert fields["related"] is not None  # has a RelatedOrder instance
+
+
 # ---------------------------------------------------------------------------
 # AdvancedOrderSet - get_fields
 # ---------------------------------------------------------------------------

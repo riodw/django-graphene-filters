@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [Prerelease] — unreleased (targeting 0.7.5)
+
+### Fixed
+
+- **PostgreSQL `*_DISTINCT` crashes on aggregate-annotated querysets** —
+  the PostgreSQL native path called `.distinct(*fields)` on querysets
+  that may already have aggregate annotations from earlier filter steps
+  (e.g. via `AnnotatedFilter` subclasses or `AggregateArgumentsFactory`).
+  Django raises `NotImplementedError: annotate() + distinct(fields) is
+  not implemented.` whenever `GROUP BY` is present. `apply_distinct` now
+  detects `queryset.query.group_by` and falls back to the
+  `Window(RowNumber())` emulation when it's truthy — keeping the native
+  fast path for simple querysets while handling the aggregate case
+  correctly.
+- **`RelatedOrder` declarations not inherited by subclasses** —
+  `OrderSetMetaclass` built `related_orders` from the current class's
+  `attrs` only, silently stripping every inherited `RelatedOrder` from
+  base classes. Subclassing an `AdvancedOrderSet` caused `get_fields`,
+  `get_flat_orders`, and `check_permissions` to all lose relationship
+  ordering support. The metaclass now walks base classes in MRO order
+  first, then applies the current class's declarations on top
+  (matching Python's method resolution semantics — a subclass can still
+  override an inherited `RelatedOrder` by redeclaring it).
+- **`BaseRelatedOrder` and `RelatedOrder` spurious `*args, **kwargs` removed** —
+  both `__init__` methods accepted `*args, **kwargs` and forwarded them to
+  `super().__init__()`, but `LazyRelatedClassMixin` → `object` accepts no
+  extra arguments. Passing unexpected kwargs would raise `TypeError:
+  object.__init__() takes exactly one argument`. The signatures now
+  accurately reflect what is accepted: `BaseRelatedOrder(orderset)` and
+  `RelatedOrder(orderset, field_name)`.
+
 ## [0.7.4] - 2026-04-04
 
 ### Added
