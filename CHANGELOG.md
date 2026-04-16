@@ -30,6 +30,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first, then applies the current class's declarations on top
   (matching Python's method resolution semantics — a subclass can still
   override an inherited `RelatedOrder` by redeclaring it).
+- **Bare transform lookups omitted from `__all__` filter generation** —
+  `lookups_for_field` only emitted expanded sub-lookups for transforms
+  (e.g. `date__exact`, `date__lt`) but never the bare transform form
+  (e.g. `date`). `filter(created__date=today)` is valid ORM shorthand for
+  `filter(created__date__exact=today)` and is supported by django-filter, so it
+  should be included when a field is declared as `"__all__"`. Both
+  `lookups_for_field` and `lookups_for_transform` now emit the bare transform
+  expression before the expanded sub-lookups.
+- **Multi-transform cycle recursion in `lookups_for_transform`** —
+  the existing `type(transform) is lookup` guard only caught direct
+  self-loops (`a__a__…`, e.g. `Unaccent` registered on its own output
+  field). Chains that cycle through two or more transform classes
+  (`a__b__a__b__…`) would recurse until `RecursionError`. The function
+  now threads a `frozenset[type[Transform]]` of visited classes through
+  the recursion and skips any Transform class already present in the
+  chain, terminating both direct and multi-step cycles safely. The
+  parameter is internal (`_visited`); callers still invoke
+  `lookups_for_transform(transform)` as before.
+- **Transform-own lookups ignored during lookup discovery** —
+  `lookups_for_transform` only inspected `transform.output_field.get_lookups()`,
+  bypassing any lookups registered directly on the transform class itself
+  (e.g. via `MyTransform.register_lookup(SomeLookup)`). Since `Transform`
+  inherits from `RegisterLookupMixin`, transform classes can carry their own
+  `class_lookups`. The function now merges both sources, with transform-own
+  entries taking precedence, so custom and third-party transforms that expose
+  extra operators are fully discovered.
 - **`BaseRelatedOrder` and `RelatedOrder` spurious `*args, **kwargs` removed** —
   both `__init__` methods accepted `*args, **kwargs` and forwarded them to
   `super().__init__()`, but `LazyRelatedClassMixin` → `object` accepts no
