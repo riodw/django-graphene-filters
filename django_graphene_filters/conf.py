@@ -46,9 +46,9 @@ DEFAULT_SETTINGS = {
     #
     # Configure in your project's ``settings.py``::
     #
-    #     DJANGO_GRAPHENE_FILTERS = {
-    #         "ASYNC_AGGREGATES": True,
-    #     }
+    #     DJANGO_GRAPHENE_FILTERS = {  # noqa: ERA001
+    #         "ASYNC_AGGREGATES": True,  # noqa: ERA001
+    #     }  # noqa: ERA001
     #
     # This is an explicit opt-in — we deliberately do NOT probe for a
     # running event loop because that isn't the same signal as "Graphene
