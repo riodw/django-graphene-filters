@@ -414,16 +414,21 @@ class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
 
         This method is overridden to perform LAZY expansion of RelatedFilters.
         """
-        # If we have already expanded and cached, return it.
-        # Note: We must be careful with inheritance, but get_filters is usually called on the final class.
-        if getattr(cls, "_expanded_filters", None) is not None:
-            return cls._expanded_filters
+        # Cache / in-progress flag lookups go through ``cls.__dict__``
+        # — NOT ``getattr`` — so that a subclass does not inherit its
+        # parent's completed cache (or mid-expansion flag) via MRO.
+        # Using ``getattr`` here caused ``Sub(Parent).get_filters()`` to
+        # return ``Parent._expanded_filters`` before the subclass had a
+        # chance to expand its own (possibly different) RelatedFilter
+        # declarations or Meta.fields.
+        if cls.__dict__.get("_expanded_filters") is not None:
+            return cls.__dict__["_expanded_filters"]
 
         # RECURSION PROTECTION:
         # If we are already currently expanding this class, return the base filters
         # (native fields) immediately. This stops the infinite loop when
         # Attribute -> Value -> Attribute tries to resolve.
-        if cls._is_expanding_filters:
+        if cls.__dict__.get("_is_expanding_filters", False):
             return super().get_filters()
 
         cls._is_expanding_filters = True
