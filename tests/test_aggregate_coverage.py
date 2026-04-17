@@ -687,7 +687,13 @@ class TestRelatedAggregateInheritance:
         assert SubAgg.related_aggregates["objects"].field_name == "other_path"
 
     def test_abstract_subclass_inherits_related_aggregates(self):
-        """A subclass with no ``Meta.model`` (abstract intermediate) still inherits."""
+        """A subclass with ``Meta.model = None`` (abstract intermediate) still inherits.
+
+        Takes the metaclass's abstract branch (``meta.model is None``) and
+        must still publish the inherited ``RelatedAggregate`` so further
+        subclasses see it — and must call ``bind_aggregateset`` on each
+        inherited entry.
+        """
 
         class ChildAgg(AdvancedAggregateSet):
             class Meta:
@@ -702,12 +708,17 @@ class TestRelatedAggregateInheritance:
                 fields = {"name": ["count"]}
 
         class AbstractMiddleAgg(BaseAgg):
-            # No ``Meta.model`` — goes through the "abstract" metaclass branch
-            # but must still propagate the inherited RelatedAggregate so its
-            # own subclasses see it.
-            pass
+            # Explicitly nullify ``Meta.model`` to force the metaclass's
+            # abstract branch.  Without this override, the class would
+            # inherit ``BaseAgg.Meta`` (which has a model) and take the
+            # normal path instead.
+            class Meta:
+                model = None
 
         assert "objects" in AbstractMiddleAgg.related_aggregates
+        # ``bind_aggregateset`` must have been called so lazy-string
+        # references on inherited RelatedAggregates still resolve.
+        assert hasattr(AbstractMiddleAgg.related_aggregates["objects"], "bound_aggregateset")
 
     @pytest.mark.django_db
     def test_inherited_related_aggregate_is_traversed_at_compute(self):
@@ -739,4 +750,103 @@ class TestRelatedAggregateInheritance:
             "Subclass lost the inherited RelatedAggregate — the metaclass "
             "stripped it.  This is the bug symmetric to the OrderSet one."
         )
-        assert result["objects"]["name"]["count"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Regression: blanket ``.distinct()`` + aggregate-annotated queryset.
+#
+# The orderset's ``.distinct(*fields)`` path used to raise
+# ``NotImplementedError("annotate() + distinct(fields) is not implemented.")``
+# on aggregate-annotated querysets; the fix added ``has_group_by``
+# detection and falls back to Window-emulated distinct-on.
+#
+# ``AdvancedDjangoFilterConnectionField.resolve_queryset`` also applies a
+# blanket ``.distinct()`` (no args) to dedup join duplicates.  Plain
+# ``.distinct()`` is a different Django code path that DOES work with
+# GROUP BY querysets — these tests lock that in so nobody "fixes" it by
+# adding spurious ``has_group_by`` detection or by switching to the
+# field-arg form.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.django_db
+def test_blanket_distinct_on_group_by_queryset_preserves_count():
+    """Plain ``.distinct()`` on a GROUP BY queryset still allows ``.count()``."""
+    from django.db.models import Count
+
+    ot = ObjectType.objects.create(name="grp-count")
+    for i in range(5):
+        Object.objects.create(name=f"o{i}", object_type=ot)
+
+    # Simulate a queryset that arrives at ``resolve_queryset`` line 347
+    # with ``query.group_by`` already set — e.g. from a filterset that
+    # annotated with an aggregate expression.
+    qs = ObjectType.objects.annotate(_obj_count=Count("objectss"))
+    assert qs.query.group_by  # sanity: annotation triggered GROUP BY
+
+    qs_distinct = qs.distinct()
+    # Plain distinct() keeps GROUP BY, but ``.count()`` still works
+    # (Django wraps in a subquery).
+    assert qs_distinct.count() >= 1
+
+
+@pytest.mark.django_db
+def test_blanket_distinct_on_group_by_queryset_allows_subsequent_aggregate():
+    """Plain ``.distinct()`` on a GROUP BY queryset still allows ``.aggregate()``.
+
+    This is the specific path the aggregate pipeline takes after
+    ``resolve_queryset`` stores the queryset on ``qs._aggregate_set``
+    and ``compute()`` eventually runs ``queryset.aggregate(**kwargs)``.
+    """
+    from django.db.models import Count, Sum
+
+    ot = ObjectType.objects.create(name="grp-agg")
+    for i in range(3):
+        Object.objects.create(name=f"a{i}", object_type=ot)
+
+    qs = ObjectType.objects.annotate(_obj_count=Count("objectss"))
+    qs_distinct = qs.distinct()
+
+    # The aggregate pipeline calls .aggregate(**kwargs) on the stored qs.
+    # With plain .distinct() + GROUP BY this should succeed — NOT raise
+    # the ``NotImplementedError`` that ``.distinct(*fields)`` raises.
+    result = qs_distinct.aggregate(total_children=Sum("_obj_count"))
+    assert result["total_children"] is not None
+
+
+@pytest.mark.django_db
+def test_blanket_distinct_with_compute_after_aggregate_annotation():
+    """End-to-end: ``AdvancedAggregateSet.compute()`` on a ``.distinct()``
+    queryset carrying an outer aggregate annotation.
+
+    Mimics the interaction between the connection field's blanket
+    ``.distinct()`` and the aggregate pipeline.  If ``.distinct()``
+    conflicted with ``.aggregate()`` on GROUP BY querysets, the
+    ``Count(f, distinct=True)`` call inside ``_compute_own_fields``
+    would raise.
+    """
+    from django.db.models import Count
+
+    ot1 = ObjectType.objects.create(name="e2e-a")
+    ot2 = ObjectType.objects.create(name="e2e-b")
+    Object.objects.create(name="o-a", object_type=ot1)
+    Object.objects.create(name="o-b", object_type=ot2)
+
+    # Build a queryset with aggregate annotation, then apply blanket
+    # .distinct() — same shape the connection field produces.
+    qs = (
+        ObjectType.objects.filter(name__startswith="e2e-")
+        .annotate(_obj_count=Count("objectss"))
+        .distinct()
+    )
+
+    class NameAgg(AdvancedAggregateSet):
+        class Meta:
+            model = ObjectType
+            fields = {"name": ["count", "min", "max"]}
+
+    result = NameAgg(queryset=qs).compute(local_only=True)
+    assert result["count"] == 2
+    assert result["name"]["count"] == 2
+    assert result["name"]["min"] == "e2e-a"
+    assert result["name"]["max"] == "e2e-b"

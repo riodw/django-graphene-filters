@@ -343,6 +343,16 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             # Apply blanket .distinct() to remove duplicates caused by
             # relationship joins — but SKIP it when *_DISTINCT was used
             # (distinct-on already guarantees uniqueness by a stronger criterion).
+            #
+            # Unlike ``.distinct(*fields)`` (the PostgreSQL DISTINCT ON form
+            # handled in ``AdvancedOrderSet.apply_distinct``), plain
+            # ``.distinct()`` is safe on aggregate-annotated querysets:
+            # Django wraps the DISTINCT select in a subquery for any
+            # subsequent ``.aggregate()`` call, so the later ``count()``
+            # / ``.aggregate(**agg_kwargs)`` calls made by the aggregate
+            # pipeline (via ``qs._aggregate_set`` below) still return
+            # correct results even when ``qs.query.group_by`` is set.
+            # No ``has_group_by`` detection is required here.
             if not has_distinct_on:
                 qs = qs.distinct()
 
