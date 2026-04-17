@@ -834,11 +834,7 @@ def test_blanket_distinct_with_compute_after_aggregate_annotation():
 
     # Build a queryset with aggregate annotation, then apply blanket
     # .distinct() — same shape the connection field produces.
-    qs = (
-        ObjectType.objects.filter(name__startswith="e2e-")
-        .annotate(_obj_count=Count("objectss"))
-        .distinct()
-    )
+    qs = ObjectType.objects.filter(name__startswith="e2e-").annotate(_obj_count=Count("objectss")).distinct()
 
     class NameAgg(AdvancedAggregateSet):
         class Meta:

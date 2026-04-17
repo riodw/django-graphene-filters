@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
-## [Prerelease] — unreleased (targeting 0.7.5)
+## [0.7.5] - 2026-04-17
 
 ### Added
 
@@ -33,6 +33,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ASGI resolvers; thread-sensitive mode preserves `ATOMIC_REQUESTS`
   transaction semantics (see the spec's §6.4 for the trade-offs). Sync
   `compute()` behaviour is unchanged.
+- **`ASYNC_AGGREGATES` setting** — new entry in `DJANGO_GRAPHENE_FILTERS`
+  (default `False`) that controls how
+  `AdvancedDjangoObjectType.resolve_aggregates` dispatches. When `True`,
+  the resolver returns the `acompute()` coroutine so Graphene's async
+  executor awaits it; when `False`, the sync `compute()` is called and
+  a plain `dict` is returned. This is an **explicit opt-in** rather than
+  an event-loop probe — a caller inside `asyncio.run(...)` invoking the
+  schema synchronously would otherwise get back an unawaited coroutine.
+  Both the root-level and nested-connection paths share the same
+  dispatch logic, so flipping the setting covers every aggregate
+  resolver in the schema. `conf.py` documents when to flip it in full.
+
+  ```python
+  # settings.py
+  DJANGO_GRAPHENE_FILTERS = {
+      "ASYNC_AGGREGATES": True,  # ASGI + Graphene async executor only
+  }
+  ```
 - **PostgreSQL-native `stdev` and `variance`** — when
   `settings.IS_POSTGRESQL` is true, these stats route through Django's
   `StdDev(..., sample=True)` / `Variance(..., sample=True)` aggregates
@@ -44,6 +62,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Python on all backends (Django does not ship cross-backend
   `PercentileCont` / `Mode` aggregates; see the spec's §5 open
   questions).
+
+### Changed
+
+- **Root-level aggregate resolution deferred to resolve-time** —
+  `AdvancedDjangoFilterConnectionField.resolve_queryset` previously
+  precomputed root-level aggregates synchronously and attached the
+  result to the queryset as `_aggregate_results`. It now stashes the
+  pre-built aggregate set and the extracted GraphQL selection on the
+  queryset (`_aggregate_set`, `_aggregate_selection`) and defers the
+  actual computation to `resolve_aggregates`. This lets root-level
+  queries participate in the new `ASYNC_AGGREGATES` dispatch on the
+  same footing as nested connections — previously only the nested path
+  could reach `acompute()`. The dead `resolve_connection` override that
+  read the stale `_aggregate_results` attribute was removed.
 
 ### Fixed
 
@@ -59,19 +91,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   construction regardless of field or stat names. ``agg_lookup`` remains
   the source of truth for ``(field, stat) → alias`` so assembly is
   unchanged.
-- **Async resolver dispatch for nested aggregates** — ``acompute()`` was
-  added on ``AdvancedAggregateSet`` in the previous Prerelease entry but
-  no GraphQL resolver actually called it, leaving it dead code in the
-  library's own integration (see ``docs/review.md``). The nested
-  ``resolve_aggregates`` injected onto connection types by
-  ``_inject_aggregates_on_connection`` now detects an active event loop
-  via ``asyncio.get_running_loop()`` and returns the ``acompute()``
-  coroutine for Graphene to await. On WSGI / sync Graphene execution the
-  loop probe raises and the resolver falls back to sync ``compute()``.
-  Root-level aggregate precomputation in
-  ``connection_field.py:resolve_queryset`` remains synchronous —
-  graphene-django's connection-resolve pipeline is sync by design and
-  reworking that is out of scope for this fix.
+- **Async resolver dispatch for aggregates** — `acompute()` was added on
+  `AdvancedAggregateSet` earlier in this release but no resolver
+  actually called it, leaving it dead code in the library's own
+  integration (see `docs/review.md`). Root-level aggregates were also
+  precomputed synchronously before the resolver ran, so even the
+  addition of an async resolver branch couldn't reach them. The initial
+  fix probed `asyncio.get_running_loop()` to decide whether to return a
+  coroutine, but that conflates "event loop exists" with "Graphene is
+  awaiting this resolver" — a sync invocation from inside
+  `asyncio.run(...)` would have received an unawaited coroutine. The
+  dispatch now reads the new explicit `ASYNC_AGGREGATES` setting at
+  call time, and both root-level and nested paths consume the stored
+  `_aggregate_set` / lazy-per-edge set respectively so they share the
+  same sync/async branches.
 - **PostgreSQL `*_DISTINCT` crashes on aggregate-annotated querysets** —
   the PostgreSQL native path called `.distinct(*fields)` on querysets
   that may already have aggregate annotations from earlier filter steps
@@ -82,6 +115,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Window(RowNumber())` emulation when it's truthy — keeping the native
   fast path for simple querysets while handling the aggregate case
   correctly.
+- **`RelatedAggregate` declarations not inherited by subclasses** —
+  symmetric to the `OrderSetMetaclass` fix: `AggregateSetMetaclass`
+  built `related_aggregates` from the current class's `attrs` only,
+  silently stripping every inherited `RelatedAggregate` from base
+  classes. Subclassing an `AdvancedAggregateSet` caused `compute()` /
+  `acompute()` to lose relationship aggregate traversal, and
+  `AggregateArgumentsFactory.build_aggregate_type` would omit the
+  related fields from the GraphQL output type entirely. The metaclass
+  now walks bases in MRO order first, applies the current class's
+  declarations on top, and calls `bind_aggregateset` on the merged set
+  — in both the abstract-base branch and the normal path — so an
+  intermediate abstract class (`Meta.model = None`) also propagates
+  inherited relations to its own subclasses.
 - **`RelatedOrder` declarations not inherited by subclasses** —
   `OrderSetMetaclass` built `related_orders` from the current class's
   `attrs` only, silently stripping every inherited `RelatedOrder` from
@@ -91,6 +137,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   first, then applies the current class's declarations on top
   (matching Python's method resolution semantics — a subclass can still
   override an inherited `RelatedOrder` by redeclaring it).
+- **`AdvancedFilterSet._expanded_filters` cache leaked across subclasses via MRO** —
+  `get_filters()` read the cache with `getattr(cls, "_expanded_filters", None)`
+  which walks the MRO, so a subclass whose parent had already been
+  expanded would silently return the parent's cached dict and skip its
+  own expansion. Subclass-level `RelatedFilter` additions or
+  `Meta.fields` changes never reached the schema or runtime. The cache
+  and the in-progress `_is_expanding_filters` flag are now read via
+  `cls.__dict__` so each class caches strictly for itself — a
+  mid-expansion parent can also no longer short-circuit a subclass that
+  happens to sit in the same MRO chain.
 - **Bare transform lookups omitted from `__all__` filter generation** —
   `lookups_for_field` only emitted expanded sub-lookups for transforms
   (e.g. `date__exact`, `date__lt`) but never the bare transform form
@@ -124,6 +180,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   object.__init__() takes exactly one argument`. The signatures now
   accurately reflect what is accepted: `BaseRelatedOrder(orderset)` and
   `RelatedOrder(orderset, field_name)`.
+
+### Notes
+
+- **Blanket `.distinct()` in `resolve_queryset` is safe on aggregate-annotated
+  querysets.** An investigation confirmed that `connection_field.py`'s
+  plain `qs.distinct()` (no field args) does **not** have the same
+  failure mode as the `.distinct(*fields)` path fixed in
+  `AdvancedOrderSet.apply_distinct`. Django wraps the DISTINCT select
+  in a subquery for any subsequent `.aggregate()` call, so the later
+  `count()` / `.aggregate(**kwargs)` calls made by the aggregate
+  pipeline still return correct results even when
+  `qs.query.group_by` is set. No `has_group_by` gate is required here;
+  regression tests lock the behaviour in.
 
 ## [0.7.4] - 2026-04-04
 
@@ -748,6 +817,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI pipeline** — GitHub Actions testing across Python 3.10-3.14 × Django
   5.1 / 5.2 / 6.0 / latest with coverage uploaded to Coveralls.
 
+[0.7.5]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.5
 [0.7.4]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.4
 [0.7.3]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.3
 [0.7.2]: https://github.com/riodw/django-graphene-filters/releases/tag/v0.7.2
