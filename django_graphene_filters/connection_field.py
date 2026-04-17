@@ -346,31 +346,21 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             if not has_distinct_on:
                 qs = qs.distinct()
 
-            # Compute aggregates from the filtered queryset (only if requested)
+            # Attach the aggregate set to the filtered queryset (only if
+            # requested) so that resolve_aggregates can compute later using
+            # the pre-pagination queryset.  Deferring the .compute() call
+            # lets the resolver dispatch to sync compute() or async
+            # acompute() based on settings.ASYNC_AGGREGATES — keeping the
+            # async path usable for root-level aggregates, not just nested.
             aggregate_class = getattr(connection._meta.node._meta, "aggregate_class", None)
             agg_selection = cls._extract_aggregate_selection(info) if aggregate_class else None
             if aggregate_class and agg_selection is not None:
-                agg_set = aggregate_class(queryset=qs, request=info.context)
-                qs._aggregate_results = agg_set.compute(selection_set=agg_selection)
+                qs._aggregate_set = aggregate_class(queryset=qs, request=info.context)
+                qs._aggregate_selection = agg_selection
 
             return qs
 
         raise ValidationError(filterset.form.errors.as_json())
-
-    @classmethod
-    def resolve_connection(
-        cls,
-        connection: object,
-        args: dict[str, Any],
-        iterable: Any,
-        max_limit: int | None = None,
-    ) -> Any:
-        """Override to attach aggregate results to the connection instance."""
-        result = super().resolve_connection(connection, args, iterable, max_limit)
-        # If aggregates were computed during resolve_queryset, attach them
-        if hasattr(iterable, "_aggregate_results"):
-            result.aggregates = iterable._aggregate_results
-        return result
 
     @staticmethod
     def _extract_aggregate_selection(info: graphene.ResolveInfo) -> Any:

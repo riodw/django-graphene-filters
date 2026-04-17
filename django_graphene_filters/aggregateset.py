@@ -2,14 +2,26 @@
 
 Provides a declarative API for computing aggregate statistics on filtered
 querysets, analogous to `AdvancedFilterSet` / `AdvancedOrderSet`.
+
+Implements the query-consolidation plan in
+``docs/spec-async_and_query_consolidation.md``: stats are classified
+into four registries (``DB_AGGREGATES``, ``PYTHON_STATS``,
+``SPECIAL_STATS``, ``DB_NATIVE_PERCENTILE_STATS``) and executed in
+**plan → execute → assemble** phases so a single request hits the DB
+with one consolidated ``.aggregate()`` call per queryset plus one value
+fetch per Python-stat field (rather than one query per stat per field).
 """
 
+import asyncio
+import itertools
 import logging
 import statistics
 from collections import OrderedDict
+from collections.abc import Callable
 from typing import Any
 
-from django.db.models import Avg, Count, Max, Min, QuerySet, Sum
+from asgiref.sync import sync_to_async
+from django.db.models import Aggregate, Avg, Count, Max, Min, Q, QuerySet, StdDev, Sum, Variance
 
 from .aggregate_types import FIELD_CATEGORIES, VALID_STATS
 from .conf import settings
@@ -19,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Python-level helper functions (used by STAT_REGISTRY)
+# Python-level helper functions
 # ---------------------------------------------------------------------------
 
 
@@ -99,27 +111,141 @@ def models_F(field: str) -> Any:  # noqa: N802
 
 
 # ---------------------------------------------------------------------------
-# Built-in stat registry
+# Python-stat computers operating on pre-fetched values lists.
+# These mirror ``_py_median`` / ``_py_mode`` / ``_py_stdev`` / ``_py_variance``
+# but skip the per-stat DB fetch so a single ``_fetch_values()`` call can be
+# reused across every Python stat for the same field.
 # ---------------------------------------------------------------------------
 
+
+def _py_median_from_values(values: list) -> Any:
+    """Median of a pre-fetched, unsorted values list (or ``None`` if empty)."""
+    if not values:
+        return None
+    return statistics.median(sorted(values))
+
+
+def _py_mode_from_values(values: list) -> Any:
+    """Mode of a pre-fetched values list (``None`` on empty or StatisticsError)."""
+    if not values:
+        return None
+    try:
+        return statistics.mode(values)
+    except statistics.StatisticsError:
+        return None
+
+
+def _py_stdev_from_values(values: list) -> float | None:
+    """Sample standard deviation, rounded to 2 d.p.  ``None`` if < 2 values."""
+    if len(values) <= 1:
+        return None
+    return round(statistics.stdev([float(v) for v in values]), 2)
+
+
+def _py_variance_from_values(values: list) -> float | None:
+    """Sample variance, rounded to 2 d.p.  ``None`` if < 2 values."""
+    if len(values) <= 1:
+        return None
+    return round(statistics.variance([float(v) for v in values]), 2)
+
+
+# ---------------------------------------------------------------------------
+# Stat registries — classified by execution strategy.
+#
+# During ``compute()`` the planner walks the requested (field, stat) pairs
+# and routes each one to exactly one of these buckets.  The result is a
+# single ``.aggregate(**agg_kwargs)`` call for everything in
+# ``DB_AGGREGATES`` (+ ``DB_NATIVE_PERCENTILE_STATS`` on PostgreSQL), one
+# ``_fetch_values()`` call per field that has any ``PYTHON_STATS``
+# requested, and per-stat callables for ``SPECIAL_STATS`` / custom methods.
+# ---------------------------------------------------------------------------
+
+# DB aggregate expressions — contributed to one ``.aggregate(**kwargs)`` call.
+# Each entry is ``(field_name: str) -> Aggregate``.
+DB_AGGREGATES: dict[str, Callable[[str], Aggregate]] = {
+    # Count of DISTINCT non-NULL values — ``COUNT(DISTINCT col)`` excludes
+    # NULL per SQL standard semantics, matching the previous subquery form
+    # ``qs.exclude(field=None).values(field).distinct().count()``.
+    "count": lambda f: Count(f, distinct=True),
+    "min": lambda f: Min(f),
+    "max": lambda f: Max(f),
+    "sum": lambda f: Sum(f),
+    "mean": lambda f: Avg(f),
+    # ``Count("pk", filter=Q(...))`` uses SQL ``FILTER (WHERE …)`` — supported
+    # on PostgreSQL and SQLite ≥ 3.30.  Django emulates on older backends.
+    "true_count": lambda f: Count("pk", filter=Q(**{f: True})),
+    "false_count": lambda f: Count("pk", filter=Q(**{f: False})),
+}
+
+# Python stats — operate on a pre-fetched values list.  Fetch once per field,
+# reuse across every Python stat requested for that field.
+PYTHON_STATS: dict[str, Callable[[list], Any]] = {
+    "median": _py_median_from_values,
+    "mode": _py_mode_from_values,
+    "stdev": _py_stdev_from_values,
+    "variance": _py_variance_from_values,
+}
+
+# Special — stats that don't fit the plain DB or Python mould.  Currently
+# only ``uniques``, which needs its own GROUP BY query to return a list.
+SPECIAL_STATS: dict[str, Callable[[QuerySet, str], Any]] = {
+    "uniques": _uniques,
+}
+
+# PostgreSQL-native expressions for stats that would otherwise require
+# fetching the full values list into Python.  When ``settings.IS_POSTGRESQL``
+# is true these are folded into the consolidated ``.aggregate()`` call and
+# override the Python implementations — removing the
+# ``AGGREGATE_MAX_VALUES`` truncation and the separate DB fetch.
+#
+# Only ``stdev`` and ``variance`` are included here; Django exposes these as
+# ``StdDev`` / ``Variance`` on every backend.  ``median`` and ``mode`` stay
+# in Python — Django does not ship a cross-backend ``PercentileCont`` or
+# ``Mode`` aggregate, and raw-SQL fallbacks aren't worth the complexity for
+# this iteration.
+DB_NATIVE_PERCENTILE_STATS: dict[str, Callable[[str], Aggregate]] = {
+    "stdev": lambda f: StdDev(f, sample=True),
+    "variance": lambda f: Variance(f, sample=True),
+}
+
+
+# Backward-compat alias.  The old monolithic ``STAT_REGISTRY`` was callable
+# per-stat as ``STAT_REGISTRY[name](qs, field) -> value``.  Any third-party
+# code importing it continues to work; new code should not depend on it.
 STAT_REGISTRY: dict[str, Any] = {
-    # DB-level (single aggregate query, efficient)
     "count": lambda qs, field: qs.exclude(**{field: None}).values(field).distinct().count(),
     "min": lambda qs, field: qs.aggregate(v=Min(field))["v"],
     "max": lambda qs, field: qs.aggregate(v=Max(field))["v"],
     "sum": lambda qs, field: qs.aggregate(v=Sum(field))["v"],
     "mean": lambda qs, field: qs.aggregate(v=Avg(field))["v"],
-    # Python-level (fetches values into memory)
     "median": _py_median,
     "mode": _py_mode,
     "stdev": _py_stdev,
     "variance": _py_variance,
-    # Grouped query
     "uniques": _uniques,
-    # Boolean-specific
     "true_count": _bool_true_count,
     "false_count": _bool_false_count,
 }
+
+
+def _alias(counter: int) -> str:
+    """Return a unique ``.aggregate()`` kwarg alias.
+
+    The scheme is counter-based rather than a string encoding of the
+    ``(field, stat)`` pair — string encoding is not injective once
+    either name contains underscores.  For example, with the old
+    ``f"_agg_{field}_{stat}"`` form:
+
+    * ``(field="x_true", stat="count")`` → ``_agg_x_true_count``
+    * ``(field="x",      stat="true_count")`` → ``_agg_x_true_count``
+
+    …both aliases collide, overwriting one entry in the consolidated
+    ``agg_kwargs`` / ``agg_lookup`` and silently returning the wrong
+    value for one of the two stats.  A monotonic counter sidesteps the
+    encoding problem entirely; the reverse mapping from ``(field, stat)``
+    to its alias is recorded in ``agg_lookup`` so assembly stays correct.
+    """
+    return f"_agg_{counter}"
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +341,14 @@ def _get_field_category(model: type, field_name: str) -> str:
 
 
 class AggregateSetMetaclass(type):
-    """Metaclass that validates aggregate configuration at class creation time."""
+    """Metaclass that validates aggregate configuration at class creation time.
+
+    Inherits ``RelatedAggregate`` declarations from base classes (MRO
+    order, later bases win) so that subclassing an ``AdvancedAggregateSet``
+    preserves relationship aggregates.  Declarations on the current class
+    override same-named declarations on bases — matches standard Python
+    attribute lookup.
+    """
 
     def __new__(
         cls: type["AggregateSetMetaclass"],
@@ -226,12 +359,31 @@ class AggregateSetMetaclass(type):
         """Create and validate a new AggregateSet class."""
         new_class = super().__new__(cls, name, bases, attrs)
 
+        # Collect inherited RelatedAggregates from bases (reversed so
+        # later bases override earlier ones — standard MRO semantics),
+        # then overlay the current class's own declarations.  This fixes
+        # the bug where a subclass silently dropped its parent's
+        # ``RelatedAggregate`` attributes because the previous
+        # ``attrs.items()``-only pattern never saw inherited fields.
+        # (Symmetric to the OrderSetMetaclass fix.)
+        related_aggregates: OrderedDict = OrderedDict()
+        for base in reversed(bases):
+            for n, f in getattr(base, "related_aggregates", {}).items():
+                related_aggregates[n] = f
+        for n, f in attrs.items():
+            if isinstance(f, RelatedAggregate):
+                related_aggregates[n] = f
+
         meta = getattr(new_class, "Meta", None)
         if meta is None or not hasattr(meta, "model") or meta.model is None:
-            # Abstract base class or incomplete — skip validation
+            # Abstract base class or incomplete — skip Meta.fields
+            # validation but still publish the inherited related
+            # aggregates so downstream subclasses see them.
             new_class._aggregate_config = OrderedDict()
             new_class._custom_stats = {}
-            new_class.related_aggregates = OrderedDict()
+            new_class.related_aggregates = related_aggregates
+            for f in new_class.related_aggregates.values():
+                f.bind_aggregateset(new_class)
             return new_class
 
         fields = getattr(meta, "fields", {})
@@ -269,11 +421,7 @@ class AggregateSetMetaclass(type):
 
         new_class._aggregate_config = config
         new_class._custom_stats = custom_stats
-
-        # Discover RelatedAggregate declarations on the class
-        new_class.related_aggregates = OrderedDict(
-            [(n, f) for n, f in attrs.items() if isinstance(f, RelatedAggregate)]
-        )
+        new_class.related_aggregates = related_aggregates
         for f in new_class.related_aggregates.values():
             f.bind_aggregateset(new_class)
 
@@ -322,6 +470,12 @@ class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
     def compute(self, selection_set: Any = None, local_only: bool = False) -> dict[str, Any]:
         """Compute aggregate statistics.
 
+        Delegates own-field work to :meth:`_compute_own_fields` (which runs
+        the consolidated DB query + per-field value fetches) and then
+        recurses into ``RelatedAggregate`` children sequentially.  For an
+        async-compatible variant that fans the children out concurrently
+        see :meth:`acompute`.
+
         Args:
             selection_set: Optional GraphQL selection set from ``info``.
                 If provided, only stats actually requested are computed.
@@ -332,43 +486,12 @@ class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
         Returns:
             A dict like ``{"count": 42, "name": {"min": "A", "max": "Z"}, ...}``.
         """
-        result: dict[str, Any] = {"count": self.queryset.count()}
-        requested = self._parse_selection_set(selection_set)
+        result = self._compute_own_fields(selection_set)
 
-        # Compute stats on own fields
-        for field_name, config in self._aggregate_config.items():
-            # Skip fields not requested
-            if requested is not None and field_name not in requested:
-                continue
-
-            # Field-level permission check
-            self._check_field_permission(field_name)
-
-            field_result: dict[str, Any] = {}
-            for stat_name in config["stats"]:
-                # Skip stats not requested
-                if requested is not None:
-                    field_requested = requested.get(field_name)
-                    if field_requested is not None and stat_name not in field_requested:
-                        continue
-
-                # Stat-level permission check
-                self._check_stat_permission(field_name, stat_name)
-
-                # Resolution order:
-                # 1. compute_<field>_<stat>() override on the class
-                # 2. STAT_REGISTRY built-in
-                method = getattr(self, f"compute_{field_name}_{stat_name}", None)
-                if method:
-                    field_result[stat_name] = method(self.queryset)
-                elif stat_name in STAT_REGISTRY:
-                    field_result[stat_name] = STAT_REGISTRY[stat_name](self.queryset, field_name)
-
-            result[field_name] = field_result
-
-        # Compute related aggregates (relationship traversal)
         if local_only:
             return result
+
+        requested = self._parse_selection_set(selection_set)
         for rel_name, rel_agg in self.__class__.related_aggregates.items():
             if requested is not None and rel_name not in requested:
                 continue
@@ -385,6 +508,167 @@ class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
             child_agg = rel_agg.aggregate_class(queryset=child_qs, request=self.request)
             result[rel_name] = child_agg.compute(selection_set=child_selection)
 
+        return result
+
+    async def acompute(
+        self,
+        selection_set: Any = None,
+        local_only: bool = False,
+    ) -> dict[str, Any]:
+        """Async variant of :meth:`compute`.
+
+        Own-field aggregation runs via ``sync_to_async(..., thread_sensitive=True)``
+        so it shares Django's request-scoped connection / transaction (preserving
+        ``ATOMIC_REQUESTS`` semantics).  ``RelatedAggregate`` traversals are
+        scheduled concurrently with :func:`asyncio.gather` — the practical win
+        here is clean integration with async GraphQL resolvers rather than
+        raw parallelism (thread-sensitive mode serialises DB ops on one
+        connection; the speedup comes from overlapping any I/O in custom
+        ``compute_<field>_<stat>`` methods).
+
+        Output is identical to ``compute(selection_set, local_only)``.
+        """
+        result = await sync_to_async(self._compute_own_fields, thread_sensitive=True)(selection_set)
+
+        if local_only:
+            return result
+
+        requested = self._parse_selection_set(selection_set)
+        coros: list = []
+        names: list[str] = []
+        for rel_name, rel_agg in self.__class__.related_aggregates.items():
+            if requested is not None and rel_name not in requested:
+                continue
+            child_selection = self._get_child_selection(selection_set, rel_name)
+            coros.append(self._acompute_related(rel_name, rel_agg, child_selection))
+            names.append(rel_name)
+
+        if coros:
+            child_results = await asyncio.gather(*coros)
+            for name, child_result in zip(names, child_results, strict=True):
+                result[name] = child_result
+
+        return result
+
+    async def _acompute_related(
+        self,
+        rel_name: str,
+        rel_agg: "RelatedAggregate",
+        child_selection: Any,
+    ) -> dict[str, Any]:
+        """Async helper: derive a child queryset and delegate to ``acompute``."""
+        child_qs = await sync_to_async(self.get_child_queryset, thread_sensitive=True)(rel_name, rel_agg)
+        child_agg = rel_agg.aggregate_class(queryset=child_qs, request=self.request)
+        return await child_agg.acompute(selection_set=child_selection)
+
+    def _compute_own_fields(self, selection_set: Any) -> dict[str, Any]:
+        """Compute aggregates for this set's own fields (no related traversal).
+
+        Implements the plan → execute → assemble pipeline documented in
+        ``docs/spec-async_and_query_consolidation.md``:
+
+        * **Plan** — classify every requested ``(field, stat)`` into one of
+          four buckets (DB aggregate, Python stat, special, custom method),
+          record the per-pair routing in ``agg_lookup``.
+        * **Execute** — one consolidated ``.aggregate(**agg_kwargs)`` call
+          for every DB-level stat; one ``_fetch_values()`` per field that
+          has any Python stats; one call each for special + custom stats.
+        * **Assemble** — walk the recorded pairs and pull each value from
+          the right result bucket.
+
+        Permission checks (``check_<field>_permission`` and
+        ``check_<field>_<stat>_permission``) fire in the planning phase
+        before any DB work, preserving current cascade order.
+        """
+        requested = self._parse_selection_set(selection_set)
+        result: dict[str, Any] = {"count": self.queryset.count()}
+
+        # ─────────────────────── Phase 1: PLAN ───────────────────────
+        agg_kwargs: dict[str, Aggregate] = {}
+        agg_lookup: dict[tuple[str, str], str] = {}  # (field, stat) -> alias
+        alias_counter = itertools.count()  # monotonic — guarantees unique aliases
+        py_plan: dict[str, list[str]] = {}  # field -> [stat, ...]
+        special_plan: list[tuple[str, str]] = []
+        custom_plan: list[tuple[str, str, Callable]] = []
+        requested_fields: list[str] = []
+        requested_pairs: list[tuple[str, str]] = []
+
+        for field_name, cfg in self._aggregate_config.items():
+            if requested is not None and field_name not in requested:
+                continue
+            self._check_field_permission(field_name)
+            requested_fields.append(field_name)
+
+            for stat_name in cfg["stats"]:
+                if requested is not None:
+                    fr = requested.get(field_name)
+                    if fr is not None and stat_name not in fr:
+                        continue
+                self._check_stat_permission(field_name, stat_name)
+                requested_pairs.append((field_name, stat_name))
+
+                # Resolution order (preserves prior behaviour):
+                # 1. compute_<field>_<stat>() override
+                # 2. PostgreSQL-native expression (stdev / variance)
+                # 3. Generic DB aggregate
+                # 4. Python-level stat (needs values fetch)
+                # 5. Special-case stat (own query, e.g. uniques)
+                method = getattr(self, f"compute_{field_name}_{stat_name}", None)
+                if method is not None:
+                    custom_plan.append((field_name, stat_name, method))
+                elif (  # pragma: no cover — PG-only path
+                    settings.IS_POSTGRESQL and stat_name in DB_NATIVE_PERCENTILE_STATS
+                ):
+                    alias = _alias(next(alias_counter))
+                    agg_kwargs[alias] = DB_NATIVE_PERCENTILE_STATS[stat_name](field_name)
+                    agg_lookup[(field_name, stat_name)] = alias
+                elif stat_name in DB_AGGREGATES:
+                    alias = _alias(next(alias_counter))
+                    agg_kwargs[alias] = DB_AGGREGATES[stat_name](field_name)
+                    agg_lookup[(field_name, stat_name)] = alias
+                elif stat_name in PYTHON_STATS:
+                    py_plan.setdefault(field_name, []).append(stat_name)
+                elif stat_name in SPECIAL_STATS:
+                    special_plan.append((field_name, stat_name))
+
+        # ──────────────────── Phase 2: EXECUTE ───────────────────────
+        agg_results: dict[str, Any] = self.queryset.aggregate(**agg_kwargs) if agg_kwargs else {}
+
+        py_results: dict[tuple[str, str], Any] = {}
+        for field_name, stat_names in py_plan.items():
+            # One fetch per field — every Python stat for that field shares it.
+            values = _fetch_values(self.queryset, field_name)
+            for stat_name in stat_names:
+                py_results[(field_name, stat_name)] = PYTHON_STATS[stat_name](values)
+
+        special_results: dict[tuple[str, str], Any] = {
+            (f, s): SPECIAL_STATS[s](self.queryset, f) for f, s in special_plan
+        }
+        custom_results: dict[tuple[str, str], Any] = {(f, s): m(self.queryset) for f, s, m in custom_plan}
+
+        # ──────────────────── Phase 3: ASSEMBLE ──────────────────────
+        field_results: dict[str, dict[str, Any]] = {f: {} for f in requested_fields}
+        for field_name, stat_name in requested_pairs:
+            key = (field_name, stat_name)
+            if key in agg_lookup:
+                value = agg_results.get(agg_lookup[key])
+                # Django's StdDev / Variance return raw floats; the Python
+                # path rounds to 2 d.p. — match it for backend parity.
+                # Only reachable on PostgreSQL where the PG-native path
+                # placed stdev/variance into agg_results.
+                if (  # pragma: no cover — PG-only path
+                    stat_name in ("stdev", "variance") and value is not None
+                ):
+                    value = round(value, 2)
+                field_results[field_name][stat_name] = value
+            elif key in py_results:
+                field_results[field_name][stat_name] = py_results[key]
+            elif key in special_results:
+                field_results[field_name][stat_name] = special_results[key]
+            elif key in custom_results:
+                field_results[field_name][stat_name] = custom_results[key]
+
+        result.update(field_results)
         return result
 
     def get_child_queryset(self, rel_name: str, rel_agg: "RelatedAggregate") -> QuerySet:

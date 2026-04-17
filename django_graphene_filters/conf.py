@@ -19,6 +19,7 @@ HAS_TRIGRAM_EXTENSION = "HAS_TRIGRAM_EXTENSION"
 AGGREGATE_MAX_VALUES = "AGGREGATE_MAX_VALUES"
 AGGREGATE_MAX_UNIQUES = "AGGREGATE_MAX_UNIQUES"
 HIDE_FLAT_FILTERS = "HIDE_FLAT_FILTERS"
+ASYNC_AGGREGATES = "ASYNC_AGGREGATES"
 
 # Django settings key constant
 DJANGO_SETTINGS_KEY = "DJANGO_GRAPHENE_FILTERS"
@@ -32,6 +33,70 @@ DEFAULT_SETTINGS = {
     AGGREGATE_MAX_VALUES: 10000,
     AGGREGATE_MAX_UNIQUES: 1000,
     HIDE_FLAT_FILTERS: False,
+    # ---------------------------------------------------------------
+    # ASYNC_AGGREGATES
+    # ---------------------------------------------------------------
+    # Controls how ``AdvancedDjangoObjectType.resolve_aggregates``
+    # dispatches:
+    #
+    #   * ``False`` (default)  → calls ``compute()`` synchronously and
+    #     returns a plain ``dict``.
+    #   * ``True``             → returns the ``acompute()`` coroutine so
+    #     Graphene's async executor awaits it.
+    #
+    # Configure in your project's ``settings.py``::
+    #
+    #     DJANGO_GRAPHENE_FILTERS = {
+    #         "ASYNC_AGGREGATES": True,
+    #     }
+    #
+    # This is an explicit opt-in — we deliberately do NOT probe for a
+    # running event loop because that isn't the same signal as "Graphene
+    # is awaiting this resolver".  A caller inside ``asyncio.run(...)``
+    # invoking the schema synchronously would otherwise get back an
+    # unresolved coroutine object.
+    #
+    # When to set ``ASYNC_AGGREGATES = True``
+    # ----------------------------------------
+    # Flip this on only if ALL of the following are true:
+    #
+    # 1. Your Django app runs on ASGI (e.g. Daphne, Uvicorn, Hypercorn)
+    #    and Graphene 3's async executor is actually awaiting resolvers.
+    #    Running the schema under WSGI or via a sync executor will
+    #    receive coroutine objects that are never awaited.
+    # 2. You benefit from the ``asyncio.gather`` fan-out across
+    #    ``RelatedAggregate`` traversals — typically because you have
+    #    several related aggregates AND either:
+    #      a) meaningful network latency to the DB (e.g. production
+    #         PostgreSQL on a separate host), OR
+    #      b) I/O-bound ``compute_<field>_<stat>()`` methods that call
+    #         out to external services, caches, or queues.
+    # 3. You have tested the path end-to-end — async resolvers, when
+    #    misconfigured, silently leak coroutines into the GraphQL
+    #    response.  Confirm with an integration test that your node's
+    #    ``aggregates`` field returns real values, not a ``coroutine``
+    #    repr.
+    #
+    # When to keep ``ASYNC_AGGREGATES = False``
+    # ------------------------------------------
+    # Keep the default in these cases:
+    #
+    # * WSGI deployments (most Django projects).
+    # * Development against SQLite or an on-box database — thread-
+    #   sensitive ``sync_to_async`` serialises DB ops on one connection,
+    #   so pure-ORM workloads do NOT gain parallelism from the async
+    #   path; the overhead may be a net negative.
+    # * Any part of your codebase invokes the schema synchronously
+    #   (e.g. management commands, cron jobs, fixtures).  These callers
+    #   cannot await the coroutine and would receive unresolved data.
+    # * You rely on strict ``ATOMIC_REQUESTS`` semantics across related
+    #   aggregates — the async path preserves request-scoped connection
+    #   sharing via ``thread_sensitive=True``, but the failure mode under
+    #   misconfiguration is subtler to debug than the sync default.
+    #
+    # See ``docs/spec-async_and_query_consolidation.md`` §6 for the full
+    # design rationale and the thread-sensitivity trade-off.
+    ASYNC_AGGREGATES: False,
 }
 
 

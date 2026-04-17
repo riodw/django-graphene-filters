@@ -19,6 +19,8 @@ from graphene_django.converter import convert_django_field, get_django_field_des
 from graphene_django.fields import DjangoConnectionField, DjangoListField
 from graphene_django.types import DjangoObjectTypeOptions
 
+from . import conf as _conf
+
 logger = logging.getLogger(__name__)
 
 # Epoch fallbacks for auto_now / auto_now_add fields (which report no default).
@@ -57,20 +59,56 @@ def _inject_aggregates_on_connection(
         description="Aggregate statistics",
     )
 
-    # Lazy resolver: uses pre-computed results if available (root-level),
-    # otherwise computes on-the-fly from root.iterable (nested connections).
+    # Resolver dispatch map (evaluated at call time so ``settings`` swaps in
+    # tests propagate correctly):
+    #
+    # 1. ``root.aggregates``               — already a dict, return directly.
+    # 2. ``iterable._aggregate_set``       — root-level connection: the
+    #    ``AdvancedDjangoFilterConnectionField.resolve_queryset`` hook
+    #    stashed a pre-built aggregate set and the extracted selection
+    #    on the queryset so we can run the full ``compute(..)`` (with
+    #    ``RelatedAggregate`` traversal) lazily here — this is what lets
+    #    the root path participate in the async dispatch below.
+    # 3. ``root.iterable`` alone           — nested connection: build an
+    #    aggregate set on the fly, scoped to this edge's queryset, and
+    #    compute with ``local_only=True`` since the GraphQL query
+    #    structure already expresses the nesting.
+    #
+    # Sync vs async: the ``ASYNC_AGGREGATES`` setting is an explicit
+    # opt-in, not an event-loop probe. A caller inside ``asyncio.run(...)``
+    # that invokes the schema synchronously would otherwise get back an
+    # unawaited coroutine; requiring an explicit toggle makes the
+    # resolver's return type deterministic per-deployment.
     def resolve_aggregates(root: Any, info: Any) -> Any:
-        # Path 1: pre-computed by AdvancedDjangoFilterConnectionField
+        # Path 1: pre-computed aggregate dict (legacy / manually attached).
         if hasattr(root, "aggregates"):
             return root.aggregates
-        # Path 2: lazy computation for nested connections.
-        # Use local_only=True to skip RelatedAggregate traversal —
-        # nesting is already handled by the GraphQL query structure.
+
         iterable = getattr(root, "iterable", None)
-        if iterable is not None:
-            agg_set = aggregate_class(queryset=iterable, request=info.context)
-            return agg_set.compute(local_only=True)
-        return None
+        if iterable is None:
+            return None
+
+        # Read through the conf module (``_conf.settings.X``) rather than a
+        # module-level ``from .conf import settings`` alias: ``reload_settings``
+        # rebinds ``conf.settings`` on ``override_settings`` swaps, and a local
+        # alias would still point at the pre-override instance.
+        use_async = bool(_conf.settings.ASYNC_AGGREGATES)
+
+        # Path 2: root-level connection — stored aggregate set carries the
+        # request's GraphQL selection and needs the full RelatedAggregate
+        # fan-out (i.e. NOT ``local_only``).
+        pre_agg_set = getattr(iterable, "_aggregate_set", None)
+        if pre_agg_set is not None:
+            selection = getattr(iterable, "_aggregate_selection", None)
+            if use_async:
+                return pre_agg_set.acompute(selection_set=selection)
+            return pre_agg_set.compute(selection_set=selection)
+
+        # Path 3: nested connection — lazy per-edge computation.
+        agg_set = aggregate_class(queryset=iterable, request=info.context)
+        if use_async:
+            return agg_set.acompute(local_only=True)
+        return agg_set.compute(local_only=True)
 
     connection_type.resolve_aggregates = staticmethod(resolve_aggregates)
     connection_type._aggregate_field_injected = True

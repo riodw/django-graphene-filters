@@ -9,8 +9,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Prerelease] — unreleased (targeting 0.7.5)
 
+### Added
+
+- **Query-consolidated `AdvancedAggregateSet.compute()`** — the per-stat
+  `STAT_REGISTRY` dispatch was replaced by a **plan → execute → assemble**
+  pipeline (see `docs/spec-async_and_query_consolidation.md`). Stats are
+  now classified into four registries — `DB_AGGREGATES`, `PYTHON_STATS`,
+  `SPECIAL_STATS`, and PostgreSQL-only `DB_NATIVE_PERCENTILE_STATS` — and
+  a single `.aggregate(**kwargs)` call carries every DB-level stat for
+  every field in one roundtrip. Python-level stats
+  (`median`/`mode`/`stdev`/`variance`) now share **one**
+  `_fetch_values()` call per field rather than one per stat. Observable
+  effect: a five-stat config on one field drops from ~5 DB queries to 2
+  (root `count()` + consolidated `aggregate()`), with no change to the
+  returned dict shape, selection-set behaviour, permission cascades,
+  custom stats, or `compute_<field>_<stat>()` overrides. The
+  `STAT_REGISTRY` symbol is preserved as a backward-compat alias for
+  any third-party code that imports it.
+- **`acompute()` async variant on `AdvancedAggregateSet`** — returns
+  identical output to `compute()` but runs own-field work via
+  `sync_to_async(..., thread_sensitive=True)` and fans
+  `RelatedAggregate` traversals out with `asyncio.gather`. Intended for
+  ASGI resolvers; thread-sensitive mode preserves `ATOMIC_REQUESTS`
+  transaction semantics (see the spec's §6.4 for the trade-offs). Sync
+  `compute()` behaviour is unchanged.
+- **PostgreSQL-native `stdev` and `variance`** — when
+  `settings.IS_POSTGRESQL` is true, these stats route through Django's
+  `StdDev(..., sample=True)` / `Variance(..., sample=True)` aggregates
+  inside the consolidated `.aggregate()` call instead of fetching the
+  full values list into Python. Removes the `AGGREGATE_MAX_VALUES`
+  truncation for these stats on PostgreSQL — results become exact.
+  Rounding to 2 d.p. is applied in the assemble phase so output stays
+  bit-identical with the SQLite fallback. `median` and `mode` remain in
+  Python on all backends (Django does not ship cross-backend
+  `PercentileCont` / `Mode` aggregates; see the spec's §5 open
+  questions).
+
 ### Fixed
 
+- **Consolidated-aggregate alias collision on underscore boundaries** —
+  the initial consolidation refactor encoded ``.aggregate()`` kwargs as
+  ``f"_agg_{field}_{stat}"``. That form is not injective once either name
+  contains underscores: ``(field="x_true", stat="count")`` and
+  ``(field="x", stat="true_count")`` both resolved to
+  ``_agg_x_true_count``. The second overwrote the first in both
+  ``agg_kwargs`` and ``agg_lookup``, and the assemble phase returned the
+  wrong value (or silently dropped one stat). `_alias()` is now
+  counter-based via ``itertools.count()`` — aliases are unique by
+  construction regardless of field or stat names. ``agg_lookup`` remains
+  the source of truth for ``(field, stat) → alias`` so assembly is
+  unchanged.
+- **Async resolver dispatch for nested aggregates** — ``acompute()`` was
+  added on ``AdvancedAggregateSet`` in the previous Prerelease entry but
+  no GraphQL resolver actually called it, leaving it dead code in the
+  library's own integration (see ``docs/review.md``). The nested
+  ``resolve_aggregates`` injected onto connection types by
+  ``_inject_aggregates_on_connection`` now detects an active event loop
+  via ``asyncio.get_running_loop()`` and returns the ``acompute()``
+  coroutine for Graphene to await. On WSGI / sync Graphene execution the
+  loop probe raises and the resolver falls back to sync ``compute()``.
+  Root-level aggregate precomputation in
+  ``connection_field.py:resolve_queryset`` remains synchronous —
+  graphene-django's connection-resolve pipeline is sync by design and
+  reworking that is out of scope for this fix.
 - **PostgreSQL `*_DISTINCT` crashes on aggregate-annotated querysets** —
   the PostgreSQL native path called `.distinct(*fields)` on querysets
   that may already have aggregate annotations from earlier filter steps

@@ -532,3 +532,130 @@ def test_related_filter_expanded_paths_reach_form():
         f"Keys: {list(fs.form.cleaned_data.keys())}. "
         "The filter data will be silently dropped."
     )
+
+
+# ---------------------------------------------------------------------------
+# Regression: ``_expanded_filters`` cache must be per-class, not inherited.
+#
+# A previous implementation read the cache via ``getattr(cls, ...)`` which
+# walks the MRO — a subclass of a FilterSet whose parent had already been
+# expanded would silently return the parent's cached dict and skip its own
+# expansion.  The fix reads from ``cls.__dict__`` so each class caches
+# independently.
+# ---------------------------------------------------------------------------
+
+
+def test_subclass_does_not_inherit_parent_expanded_filters_cache():
+    """A subclass must run its own expansion, not return the parent's cache."""
+    from django_graphene_filters.filters import RelatedFilter
+
+    class ChildFS(AdvancedFilterSet):
+        class Meta:
+            model = RelatedTestModel
+            fields = {"title": ["exact"]}
+
+    class ParentFS(AdvancedFilterSet):
+        class Meta:
+            model = FilterSetTestModel
+            fields = {"name": ["exact"]}
+
+    # Prime the parent cache.
+    parent_filters = ParentFS.get_filters()
+    assert ParentFS.__dict__.get("_expanded_filters") is parent_filters
+
+    class SubFS(ParentFS):
+        # Add a RelatedFilter that the parent does NOT have.  If the
+        # subclass mistakenly inherits the parent's cache, this expanded
+        # path will be missing from the result.
+        children = RelatedFilter(ChildFS, field_name="children")
+
+        class Meta:
+            model = FilterSetTestModel
+            fields = {"name": ["exact"]}
+
+    # Before SubFS's own get_filters() runs, its __dict__ must NOT carry
+    # the parent's cache.
+    assert "_expanded_filters" not in SubFS.__dict__
+
+    sub_filters = SubFS.get_filters()
+
+    # The subclass's expanded set must include its own RelatedFilter paths.
+    assert "children__title" in sub_filters, (
+        f"Subclass expansion leaked parent's cache: expected 'children__title' in {list(sub_filters.keys())}."
+    )
+    # And the two caches must be distinct objects — the subclass owns its own.
+    assert SubFS.__dict__["_expanded_filters"] is sub_filters
+    assert ParentFS.__dict__["_expanded_filters"] is not sub_filters
+
+
+def test_sibling_subclasses_have_independent_caches():
+    """Two siblings of the same parent cache independently of each other."""
+    from django_graphene_filters.filters import RelatedFilter
+
+    class ChildA(AdvancedFilterSet):
+        class Meta:
+            model = RelatedTestModel
+            fields = {"title": ["exact"]}
+
+    class ChildB(AdvancedFilterSet):
+        class Meta:
+            model = RelatedTestModel
+            fields = {"title": ["icontains"]}
+
+    class ParentBase(AdvancedFilterSet):
+        class Meta:
+            model = FilterSetTestModel
+            fields = {"name": ["exact"]}
+
+    class SubA(ParentBase):
+        children = RelatedFilter(ChildA, field_name="children")
+
+        class Meta:
+            model = FilterSetTestModel
+            fields = {"name": ["exact"]}
+
+    class SubB(ParentBase):
+        children = RelatedFilter(ChildB, field_name="children")
+
+        class Meta:
+            model = FilterSetTestModel
+            fields = {"name": ["exact"]}
+
+    filters_a = SubA.get_filters()
+    filters_b = SubB.get_filters()
+
+    # Each sibling must reach its own child filterset's lookup set —
+    # ChildA only has 'exact', ChildB only has 'icontains'.
+    assert "children__title" in filters_a
+    assert "children__title__icontains" not in filters_a
+
+    assert "children__title__icontains" in filters_b
+    # Under the pre-fix MRO-leak behaviour, SubB would reuse SubA's
+    # cache (or vice versa) if expansion order happened to matter.
+    assert SubA.__dict__["_expanded_filters"] is not SubB.__dict__["_expanded_filters"]
+
+
+def test_fresh_subclass_after_parent_expansion_still_expands():
+    """Defining a subclass AFTER the parent has been expanded still triggers expansion."""
+
+    class ParentCached(AdvancedFilterSet):
+        class Meta:
+            model = FilterSetTestModel
+            fields = {"name": ["exact", "icontains"]}
+
+    # Prime the parent cache.
+    ParentCached.get_filters()
+    assert ParentCached.__dict__.get("_expanded_filters") is not None
+
+    class LateSub(ParentCached):
+        class Meta:
+            model = FilterSetTestModel
+            # Different field set than parent.
+            fields = {"description": ["exact"]}
+
+    # The subclass must expand its own Meta.fields, not reuse the parent's.
+    sub_filters = LateSub.get_filters()
+    assert "description" in sub_filters, (
+        f"LateSub expansion leaked parent's 'name' filters instead of its own "
+        f"'description'.  Keys: {list(sub_filters.keys())}"
+    )

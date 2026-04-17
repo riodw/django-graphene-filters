@@ -626,3 +626,117 @@ def test_field_relation_name_collision_raises():
             class Meta:
                 model = ObjectType
                 fields = {"name": ["count"]}
+
+
+# ---------------------------------------------------------------------------
+# Metaclass inheritance — RelatedAggregate on base classes must propagate
+# to subclasses (symmetric to the OrderSetMetaclass fix).
+# ---------------------------------------------------------------------------
+
+
+class TestRelatedAggregateInheritance:
+    """Verify ``RelatedAggregate`` declarations are inherited from base classes."""
+
+    def test_subclass_inherits_related_aggregates(self):
+        """A subclass preserves its base class's ``RelatedAggregate`` declarations."""
+
+        class ChildAgg(AdvancedAggregateSet):
+            class Meta:
+                model = Object
+                fields = {"name": ["count"]}
+
+        class BaseAgg(AdvancedAggregateSet):
+            objects = RelatedAggregate(ChildAgg, field_name="object_type")
+
+            class Meta:
+                model = ObjectType
+                fields = {"name": ["count"]}
+
+        class SubAgg(BaseAgg):
+            class Meta:
+                model = ObjectType
+                fields = {"name": ["count", "min"]}
+
+        # The subclass should still see the inherited ``objects`` RelatedAggregate.
+        assert "objects" in SubAgg.related_aggregates
+        assert isinstance(SubAgg.related_aggregates["objects"], RelatedAggregate)
+
+    def test_subclass_can_override_related_aggregate(self):
+        """A subclass can override an inherited ``RelatedAggregate`` by redeclaring it."""
+
+        class ChildAgg(AdvancedAggregateSet):
+            class Meta:
+                model = Object
+                fields = {"name": ["count"]}
+
+        class BaseAgg(AdvancedAggregateSet):
+            objects = RelatedAggregate(ChildAgg, field_name="object_type")
+
+            class Meta:
+                model = ObjectType
+                fields = {"name": ["count"]}
+
+        class SubAgg(BaseAgg):
+            # Override with a different field_name.
+            objects = RelatedAggregate(ChildAgg, field_name="other_path")
+
+            class Meta:
+                model = ObjectType
+                fields = {"name": ["count"]}
+
+        assert SubAgg.related_aggregates["objects"].field_name == "other_path"
+
+    def test_abstract_subclass_inherits_related_aggregates(self):
+        """A subclass with no ``Meta.model`` (abstract intermediate) still inherits."""
+
+        class ChildAgg(AdvancedAggregateSet):
+            class Meta:
+                model = Object
+                fields = {"name": ["count"]}
+
+        class BaseAgg(AdvancedAggregateSet):
+            objects = RelatedAggregate(ChildAgg, field_name="object_type")
+
+            class Meta:
+                model = ObjectType
+                fields = {"name": ["count"]}
+
+        class AbstractMiddleAgg(BaseAgg):
+            # No ``Meta.model`` — goes through the "abstract" metaclass branch
+            # but must still propagate the inherited RelatedAggregate so its
+            # own subclasses see it.
+            pass
+
+        assert "objects" in AbstractMiddleAgg.related_aggregates
+
+    @pytest.mark.django_db
+    def test_inherited_related_aggregate_is_traversed_at_compute(self):
+        """A subclass's inherited ``RelatedAggregate`` actually fires during ``compute()``."""
+
+        class ChildAgg(AdvancedAggregateSet):
+            class Meta:
+                model = Object
+                fields = {"name": ["count"]}
+
+        class BaseAgg(AdvancedAggregateSet):
+            objects = RelatedAggregate(ChildAgg, field_name="object_type")
+
+            class Meta:
+                model = ObjectType
+                fields = {"name": ["count"]}
+
+        class SubAgg(BaseAgg):
+            class Meta:
+                model = ObjectType
+                fields = {"name": ["count"]}
+
+        ot = ObjectType.objects.create(name="inherit-compute")
+        Object.objects.create(name="o1", object_type=ot)
+        Object.objects.create(name="o2", object_type=ot)
+
+        result = SubAgg(queryset=ObjectType.objects.filter(pk=ot.pk)).compute()
+        assert "objects" in result, (
+            "Subclass lost the inherited RelatedAggregate — the metaclass "
+            "stripped it.  This is the bug symmetric to the OrderSet one."
+        )
+        assert result["objects"]["name"]["count"] == 2
