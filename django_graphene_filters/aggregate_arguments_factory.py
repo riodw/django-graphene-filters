@@ -20,6 +20,11 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
     # from circular RelatedAggregate references (e.g. ObjectAggregate → ValueAggregate → ObjectAggregate)
     _building: set[type] = set()
 
+    # TODO(spec-base_type_naming.md): drop `input_type_prefix`. Derive
+    # type names from `aggregate_class.__name__`:
+    #   root:      f"{aggregate_class.__name__}Type"
+    #   per-field: f"{aggregate_class.__name__}{pascalcase(field_name)}Type"
+    # See spec §"Naming scheme — Aggregates".
     def __init__(
         self,
         aggregate_class: type[AdvancedAggregateSet],
@@ -34,6 +39,15 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
         self.aggregate_class = aggregate_class
         self.input_type_prefix = input_type_prefix
 
+    # TODO(spec-base_type_naming.md): rework for class-based naming.
+    # - `sub_type_name`: f"{self.aggregate_class.__name__}{pascalcase(field_name)}Type"
+    # - `root_type_name`: f"{self.aggregate_class.__name__}Type"
+    # - For `RelatedAggregate` children, construct the child factory without
+    #   a prefix (`AggregateArgumentsFactory(target_class)`) so it derives
+    #   its own name from `target_class.__name__`. Consider replacing the
+    #   inline `child_factory.build_aggregate_type()` call with a
+    #   `graphene.Field(lambda: self.object_types[target_name])` reference
+    #   to mirror filter/order lazy refs and simplify the `_building` guard.
     def build_aggregate_type(self) -> type[graphene.ObjectType]:
         """Build the root aggregate ObjectType.
 

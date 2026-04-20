@@ -10,6 +10,13 @@ from .filterset import AdvancedFilterSet
 _RESERVED_FACTORY_KEYS = {"filterset_base_class"}
 
 
+# TODO(spec-base_type_naming.md): memoize the dynamic branch below.
+# `custom_filterset_factory` fabricates a new AdvancedFilterSet subclass on
+# every call; two connection fields using the same model without an
+# explicit `filterset_class` would produce two distinct classes sharing the
+# same `__name__` and trip class-based naming's collision check. Cache by
+# `(model, frozenset(fields.items()))` so identical configs resolve to one
+# class object. See spec §"Implementation plan" step 7.
 def get_filterset_class(
     filterset_class: type[AdvancedFilterSet] | None,
     **meta: Any,

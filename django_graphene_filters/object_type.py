@@ -48,6 +48,12 @@ def _inject_aggregates_on_connection(
 
     from .aggregate_arguments_factory import AggregateArgumentsFactory
 
+    # TODO(spec-base_type_naming.md): drop the node-name prefix construction.
+    # Under class-based naming the call becomes
+    # `AggregateArgumentsFactory(aggregate_class)` — the factory derives its
+    # root type name from `aggregate_class.__name__` alone. Root-level and
+    # nested connections then share the same cached `agg_type` via the
+    # `ObjectTypeFactoryMixin` cache.
     node_type_name = node_cls.__name__.replace("Type", "")
     prefix = f"{node_type_name}{aggregate_class.__name__}"
     factory = AggregateArgumentsFactory(aggregate_class, prefix)

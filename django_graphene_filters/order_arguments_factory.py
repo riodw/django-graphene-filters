@@ -29,6 +29,10 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
     # infinite recursion from circular RelatedOrder references.
     _building: set[type] = set()
 
+    # TODO(spec-base_type_naming.md): drop `input_type_prefix`. Derive
+    # `order_input_type_name` from `orderset_class.__name__` so a given
+    # OrderSet always emits the same root type name across all nodes/pages
+    # that reach it. See spec §"Naming scheme".
     def __init__(
         self,
         orderset_class: type,
@@ -50,6 +54,12 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
             ),
         }
 
+    # TODO(spec-base_type_naming.md): switch to class-based naming.
+    # - `type_name` becomes `f"{orderset_class.__name__}InputType"`.
+    # - Drop the `prefix` parameter and recursion prefix accumulation.
+    # - For `RelatedOrder` fields, emit `graphene.InputField(lambda: self.input_object_types[target_name])`
+    #   targeting the related orderset's root type (same pattern used for
+    #   cycle-safe self-reference today at the `_building` guard).
     def create_order_input_type(
         self, orderset_class: type | None = None, prefix: str | None = None
     ) -> type[graphene.InputObjectType]:

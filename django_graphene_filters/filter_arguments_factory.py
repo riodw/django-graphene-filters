@@ -49,6 +49,11 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
     # Tracks which filterset class built each cached type name; used to detect collisions
     _type_filterset_registry: dict[str, type] = {}
 
+    # TODO(spec-base_type_naming.md): drop `input_type_prefix` from the
+    # signature. Derive `filter_input_type_name` from `filterset_class.__name__`
+    # (e.g. `BrandFilter` -> `BrandFilterInputType`) so a given FilterSet
+    # always emits the same root type regardless of which connection field
+    # reached it. See spec §"Naming scheme" and §"Implementation plan" step 2.
     def __init__(
         self,
         filterset_class: type[AdvancedFilterSet],
@@ -146,6 +151,16 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
         self._type_filterset_registry[self.filter_input_type_name] = self.filterset_class
         return self.input_object_types[self.filter_input_type_name]
 
+    # TODO(spec-base_type_naming.md): rework for class-based naming.
+    # - Drop the `prefix` parameter; stop accumulating prefixes on recursion.
+    # - When `root.name` matches a key in `self.filterset_class.related_filters`,
+    #   emit `graphene.InputField(lambda: self.input_object_types[target_name])`
+    #   pointing at the target filterset's root type (same lambda pattern used
+    #   for And/Or/Not above). Do not build a new inline subtree.
+    # - Subtree type names become `f"{self.filterset_class.__name__}{pascalcase(root.name)}FilterInputType"`.
+    #   Detection of RelatedFilter boundaries: cross-check against
+    #   `self.filterset_class.related_filters` because `filterset_to_trees`
+    #   flattens expanded paths and doesn't tag them.
     def create_filter_input_subfield(
         self,
         root: Node,

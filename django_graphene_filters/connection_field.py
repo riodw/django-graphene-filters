@@ -32,6 +32,11 @@ from .order_arguments_factory import OrderArgumentsFactory
 class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
     """Allow you to use advanced filters provided by this library."""
 
+    # TODO(spec-base_type_naming.md): deprecate `filter_input_type_prefix`
+    # and `order_input_type_prefix` kwargs. Emit DeprecationWarning when
+    # passed; ignore the value (class-based naming derives type names from
+    # the bound FilterSet/OrderSet class, so a caller-supplied prefix no
+    # longer has a meaning). Remove both params entirely in 1.1.
     def __init__(
         self,
         type: type[DjangoObjectType] | Callable[[], type[DjangoObjectType]] | str,
@@ -90,6 +95,12 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         if not self._aggregate_type and self.aggregate_class:
             from .aggregate_arguments_factory import AggregateArgumentsFactory
 
+            # TODO(spec-base_type_naming.md): drop the `node_type_name` +
+            # `aggregate_class.__name__` prefix construction. Under
+            # class-based naming the call becomes
+            # `AggregateArgumentsFactory(self.aggregate_class)` and the
+            # factory derives its root name from `aggregate_class.__name__`
+            # alone. Mirrors the change in `_inject_aggregates_on_connection`.
             node_type_name = self.node_type.__name__.replace("Type", "")
             prefix = f"{node_type_name}{self.aggregate_class.__name__}"
             factory = AggregateArgumentsFactory(self.aggregate_class, prefix)
@@ -105,6 +116,11 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         """Return the provided AdvancedOrderSet class, if any."""
         return self._provided_orderset_class or getattr(self.node_type._meta, "orderset_class", None)
 
+    # TODO(spec-base_type_naming.md): remove this property. Under class-based
+    # naming `OrderArgumentsFactory` derives its type name from
+    # `orderset_class.__name__` alone — no node prefix, no caller override.
+    # The `ordering_args` property below will be updated to call the factory
+    # without a prefix once the factory signature changes.
     @property
     def order_input_type_prefix(self) -> str:
         """Return a prefix for the order input type name."""
@@ -170,6 +186,10 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         """Return the provided AdvancedFilterSet class, if any."""
         return self._provided_filterset_class or self.node_type._meta.filterset_class
 
+    # TODO(spec-base_type_naming.md): remove this property. Under class-based
+    # naming `FilterArgumentsFactory` derives its type name from
+    # `filterset_class.__name__` alone. `filtering_args` below will construct
+    # the factory without a prefix once the factory signature changes.
     @property
     def filter_input_type_prefix(self) -> str:
         """Return a prefix for the filter input type name."""

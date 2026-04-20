@@ -329,6 +329,13 @@ LOOKUP_PREFIXES = {
 class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
     """Allow you to use advanced filters."""
 
+    # TODO(spec-base_type_naming.md): add a `type_name_for(field_name=None)`
+    # classmethod. Returns `f"{cls.__name__}InputType"` when `field_name`
+    # is None, else `f"{cls.__name__}{pascalcase(field_name)}FilterInputType"`.
+    # `FilterArgumentsFactory` calls this instead of computing names from a
+    # prefix + traversal path. Symmetric helpers live on `AdvancedOrderSet`
+    # and `AdvancedAggregateSet`.
+
     # Cache for expanded filters
     _expanded_filters = None
     # Flag to prevent infinite recursion in get_filters

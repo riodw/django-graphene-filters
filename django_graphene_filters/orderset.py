@@ -46,6 +46,10 @@ class OrderSetMetaclass(type):
 class AdvancedOrderSet(metaclass=OrderSetMetaclass):
     """Base class for advanced relationship sorting with permission checks."""
 
+    # TODO(spec-base_type_naming.md): add a `type_name_for()` classmethod
+    # returning `f"{cls.__name__}InputType"`. `OrderArgumentsFactory` calls
+    # this instead of stitching `prefix + pascalcase(field_name)`.
+
     def __init__(
         self,
         data: list | None = None,

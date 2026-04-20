@@ -165,13 +165,40 @@ Passing either param emits a `DeprecationWarning`.
 
 1. **Add a helper on each base class** — `AdvancedFilterSet.type_name_for(field_name: str | None = None) -> str`, and symmetric helpers on `AdvancedOrderSet` / `AdvancedAggregateSet`. Defaults to `f"{cls.__name__}FilterInputType"` (or the equivalent per-kind suffix). Honours an optional `Meta.type_name_override` / `Meta.type_name_prefix` escape hatch.
 2. **Rewrite each factory** to call the helper instead of building names from a prefix + path:
-   - `FilterArgumentsFactory.create_filter_input_subfield` — detect `RelatedFilter` nodes (present in `cls.related_filters`) and emit a `lambda: self.input_object_types[target_cls.type_name_for()]` reference rather than recursing into an inline tree.
-   - `OrderArgumentsFactory.create_order_input_type` — same, keyed off `cls.related_orders`.
-   - `AggregateArgumentsFactory.build_aggregate_type` — already keys related children off `cls.related_aggregates`; switch their naming + lambda references.
+   - `FilterArgumentsFactory.create_filter_input_subfield` — detect `RelatedFilter` boundaries by cross-referencing the current tree node against `self.filterset_class.related_filters`. **This matters**: `filterset_to_trees()` flattens expanded paths (`brand__name__exact` becomes a linear chain of `Node`s), so the tree structure alone can't tell you which nodes are relation hops. When a top-level tree node's name matches a key in `related_filters`, emit `graphene.InputField(lambda: self.input_object_types[target_cls.type_name_for()])` targeting the related filterset's root type — same lambda pattern used today for `and`/`or`/`not`. Do not recurse into an inline subtree for that branch.
+   - `OrderArgumentsFactory.create_order_input_type` — simpler because `orderset_class.get_fields()` already surfaces `RelatedOrder` entries explicitly. Replace the inline recursive build with a lambda reference to the target orderset's root type. The existing `_building` cycle guard becomes redundant and can be dropped (lambda-resolution-at-call-time handles cycles the same way `SearchQueryInputType` resolves its own `and`/`or`/`not` fields).
+   - `AggregateArgumentsFactory.build_aggregate_type` — already iterates `cls.related_aggregates` explicitly; switch the child-factory construction to pass no prefix (target class supplies the name) and consider replacing the inline build with a lambda-ref `graphene.Field(lambda: self.object_types[target_cls.type_name_for()])` for symmetry. The `_building` guard can likewise retire.
 3. **Drop the `{node_type_name}{class.__name__}` prefix seeds** in `connection_field.py` and `object_type.py`. The factories no longer accept a prefix at all; they derive from the bound class.
 4. **Tighten collision detection** — see above. Registry lives on each factory class.
 5. **Update tests** — every test that asserts a generated type name must be updated. Grep `FilterInputType`, `OrderInputType`, `AggregateType` in `examples/**` and any test fixtures.
 6. **Remove / deprecate the `*_input_type_prefix` params** on `AdvancedDjangoFilterConnectionField`. Emit `DeprecationWarning` if passed.
+7. **Memoize dynamic FilterSet generation** in `filterset_factories.get_filterset_class`. Today `custom_filterset_factory` fabricates a new `AdvancedFilterSet` subclass on every call — two connection fields on the same model (without an explicit `filterset_class`) end up with two distinct classes sharing the same `__name__`, which would trip the class-based naming's collision check. Cache by `(model, frozenset(fields.items()))` so identical configs return the same class object.
+
+---
+
+## TODO index — where each change is tagged in the code
+
+Every pending change is flagged inline with `# TODO(spec-base_type_naming.md)`. Grep for `TODO\(spec-base_type_naming` to enumerate from the repo root.
+
+| File | Tag | What the TODO marks |
+| --- | --- | --- |
+| `filter_arguments_factory.py` | `__init__` | Drop `input_type_prefix` param; derive `filter_input_type_name` from `filterset_class.__name__`. |
+| `filter_arguments_factory.py` | `create_filter_input_subfield` | Drop prefix accumulation; detect `RelatedFilter` nodes via `self.filterset_class.related_filters` and emit lambda refs instead of inline subtrees. |
+| `order_arguments_factory.py` | `__init__` | Drop `input_type_prefix` param; derive `order_input_type_name` from `orderset_class.__name__`. |
+| `order_arguments_factory.py` | `create_order_input_type` | Class-based `type_name`; lambda refs for `RelatedOrder`; retire the `_building` guard. |
+| `aggregate_arguments_factory.py` | `__init__` | Drop `input_type_prefix` param; derive root + per-field names from `aggregate_class.__name__`. |
+| `aggregate_arguments_factory.py` | `build_aggregate_type` | Class-based root + sub-type names; child factory constructed without a prefix; optional lambda refs for `RelatedAggregate`. |
+| `connection_field.py` | `__init__` | Deprecate `filter_input_type_prefix` and `order_input_type_prefix` kwargs — `DeprecationWarning` + no-op, remove in 1.1. |
+| `connection_field.py` | `aggregate_type` property | Drop node-name prefix construction; construct factory with only `aggregate_class`. |
+| `connection_field.py` | `order_input_type_prefix` property | Remove entirely. |
+| `connection_field.py` | `filter_input_type_prefix` property | Remove entirely. |
+| `object_type.py` | `_inject_aggregates_on_connection` | Drop node-name prefix so nested and root aggregate types hit the same cache entry. |
+| `filterset.py` | `AdvancedFilterSet` | Add `type_name_for(field_name=None)` classmethod. |
+| `orderset.py` | `AdvancedOrderSet` | Add `type_name_for()` classmethod. |
+| `aggregateset.py` | `AdvancedAggregateSet` | Add `type_name_for(field_name=None)` classmethod. |
+| `filterset_factories.py` | `get_filterset_class` | Memoize the dynamic `custom_filterset_factory` branch by `(model, frozenset(fields.items()))`. |
+
+12 tags across 9 files. Implementing each tagged TODO (top-to-bottom or dependency-order starting with the base-class helpers) lands the whole rename.
 
 ---
 
@@ -198,7 +225,11 @@ With stable names in the schema, the frontend can:
 
 ## Open questions
 
-1. **Suffix choice for filter per-field types** — `{ClassName}{FieldName}FilterInputType` vs. `{ClassName}{FieldName}LookupInputType`. The former is consistent with the root's `FilterInputType` suffix; the latter is arguably more precise ("this is a lookup operator bag"). *Default: `FilterInputType` — fewer moving parts.*
+1. **Suffix for filter per-field types**. Three candidates:
+   - `{Class}{Field}FilterInputType` — e.g. `BrandFilterNameFilterInputType`. Keeps the historical `FilterInputType` suffix on the operator bag. "Filter" appears twice in the final string (once from the class name, once from the suffix) but the doubling parallels today's naming and preserves the visual cue that this is an operator-level input type.
+   - `{Class}{Field}InputType` — e.g. `BrandFilterNameInputType`. Terser and uniform with the root (`BrandFilterInputType`), but drops the "this is a filter" signal from the leaf type.
+   - `{Class}{Field}LookupInputType` — e.g. `BrandFilterNameLookupInputType`. Most semantically precise but introduces a new concept ("Lookup") into the naming vocabulary.
+   *Default: option A (`FilterInputType`). It's the smallest delta from today's pattern, matches graphene-django idioms, and avoids inventing new noun suffixes.*
 2. **Second-order win: extract leaf lookup types across classes** — if both `BrandFilter.name` and `ObjectFilter.name` declare identical lookup sets on a CharField, they could share a `CharFieldFilterInputType` (the django-filter built-in style). Real savings only if many classes use identical configs. **Defer to a follow-up spec** — not blocking for 1.0.
 3. **`Meta.type_name_override`** — should this exist at all? If class names are always unique in practice (they already have to be unique within a module), we can drop it and reduce API surface. *Lean: drop it. Reintroduce only if a concrete need appears.*
 4. **Do we rename the generated `Trimmed{FilterSet}` class** in `connection_field._get_trimmed_filterset_class`? It's internal only and never reaches the schema. **No.**

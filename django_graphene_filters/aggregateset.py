@@ -442,6 +442,10 @@ class AggregateSetMetaclass(type):
 # ---------------------------------------------------------------------------
 
 
+# TODO(spec-base_type_naming.md): add a `type_name_for(field_name=None)`
+# classmethod on `AdvancedAggregateSet`. Returns `f"{cls.__name__}Type"`
+# (root) or `f"{cls.__name__}{pascalcase(field_name)}Type"` (per-field).
+# `AggregateArgumentsFactory` calls this instead of stitching an input prefix.
 class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
     """Declarative aggregate statistics on a filtered queryset.
 
