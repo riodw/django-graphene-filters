@@ -7,6 +7,217 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 <!--next-version-placeholder-->
 
+## [1.0.0] - 2026-04-21
+
+**Breaking release.** GraphQL input/output type names are now derived
+from the declaring `AdvancedFilterSet` / `AdvancedOrderSet` /
+`AdvancedAggregateSet` class name alone — no node-name prefix, no
+traversal-path accumulation. Clients that hard-code generated type names
+must regenerate; the schema SDL is self-describing and clients recompile
+from the current output.
+
+See `docs/spec-base_type_naming.md` for the full design, and
+`docs/spec-remove-legacy-backward-compat.md` for the companion cleanup.
+
+### Breaking Changes
+
+- **Class-based GraphQL type naming** — every auto-generated type is now
+  named after the declaring class rather than the traversal path. A
+  `BrandFilter` reached from two different connections resolves to the
+  same `BrandFilterInputType` both times, enabling Apollo / Pinia cache
+  dedup. Concrete deltas:
+  - `ToolToolFilterBrandNameFilterInputType` → `BrandFilterNameFilterInputType`
+  - `ToolMetricToolMetricFilterToolBrandNameFilterInputType` → `BrandFilterNameFilterInputType`
+  - `ToolToolOrderInputType` → `ToolOrderInputType`
+  - `ObjectObjectAggregateAggregateType` → `ObjectAggregateType`
+- **Removed `filter_input_type_prefix` / `order_input_type_prefix` kwargs**
+  on `AdvancedDjangoFilterConnectionField`. Type names derive from the
+  bound FilterSet / OrderSet class; the prefix kwargs no longer have a
+  meaning. The previously-planned one-minor-version `DeprecationWarning`
+  grace period was skipped — no external consumers.
+- **Removed `input_type_prefix` parameter** from
+  `FilterArgumentsFactory`, `OrderArgumentsFactory`, and
+  `AggregateArgumentsFactory` `__init__`. Type names are derived from
+  `filterset_class.type_name_for()` / `orderset_class.type_name_for()` /
+  `aggregate_class.type_name_for()`.
+- **Removed `OrderArgumentsFactory.create_order_input_type()`** (the
+  legacy recursive helper). The public entry point is the `.arguments`
+  property; emitted GraphQL types are cached in
+  `OrderArgumentsFactory.input_object_types` keyed by
+  `OrderSet.type_name_for()`.
+- **Removed `FilterSetMetaclass.expand_auto_filter` and the `AutoFilter`
+  class.** `AutoFilter` was a `django-rest-framework-filters`-era
+  placeholder filter; every supported usage goes through `RelatedFilter`
+  instead. `AdvancedFilterSet.get_filters()`'s dispatch inside the
+  metaclass is now a single `expand_related_filter` call.
+- **Removed `STAT_REGISTRY` backward-compat alias** and its singular
+  callable helpers (`_py_median`, `_py_mode`, `_py_stdev`, `_py_variance`,
+  `_bool_true_count`, `_bool_false_count`). The 0.7.5 consolidation
+  refactor made these unreachable. `DB_AGGREGATES` / `PYTHON_STATS` /
+  `SPECIAL_STATS` / `DB_NATIVE_PERCENTILE_STATS` are the only stat
+  registries going forward.
+- **Removed `setup_filterset` wrap in `get_filterset_class`** for
+  `AdvancedFilterSet` subclasses. Non-Advanced classes are no longer
+  supported — passing one raises `TypeError` at the connection-field
+  init, which validated subclasses upfront already.
+- **`RelatedFilter(X, field_name="foo")` plus `Meta.fields = {"foo":
+  ["in"]}` is no longer supported.** Under class-based naming the field
+  becomes a lambda ref to the target's root type; the direct `foo.in`
+  lookup is silently dropped. Filter via the nested target filterset
+  instead (e.g. `role: { name: { in: [...] } }`).
+- **Collision detection is strict-raise, not warn.** Two distinct
+  classes claiming the same `type_name` now trigger
+  `TypeError("Class-based naming collision: ...")` at schema build.
+  Under class-based naming a collision is a bug, not a user-input issue.
+
+### Added
+
+- **`type_name_for(field_path=None)` classmethod** on
+  `AdvancedFilterSet`, `AdvancedOrderSet`, `AdvancedAggregateSet` —
+  produced by the new `ClassBasedTypeNameMixin` in `mixins.py`. Each
+  base set sets `_root_type_suffix` and `_field_type_suffix` class
+  attributes; the mixin handles both simple field names and
+  `LOOKUP_SEP`-separated nested paths (`created__date__year` →
+  `CreatedDateYear`).
+- **`utils.raise_on_type_name_collision`** — shared strict-raise
+  collision guard consumed by all three argument factories. Error
+  message names both modules + qualnames:
+  `TypeError("Class-based naming collision: GraphQL type '{type_name}'
+  is already registered by '{prior.__module__}.{prior.__qualname__}'
+  but now '{cls.__module__}.{cls.__qualname__}' is trying to claim
+  the same name. Rename one of the {kind} classes.")`.
+- **BFS + lambda-ref factory pattern** — `FilterArgumentsFactory`,
+  `OrderArgumentsFactory`, and `AggregateArgumentsFactory` each walk
+  the root class plus every reachable related-* descendant, build one
+  GraphQL type per class, and emit lambda refs at
+  `RelatedFilter` / `RelatedOrder` / `RelatedAggregate` boundaries.
+  Replaces the previous inline-subtree + `_building` cycle-guard
+  approach. Cycles resolve naturally at schema-finalize time.
+- **`_dynamic_filterset_cache`** in `filterset_factories.py` —
+  memoizes dynamically-generated `AdvancedFilterSet` subclasses (from
+  the `filterset_class=None` auto-generation path triggered by
+  `filter_fields` on a node type) by `(model, fields_key, extra)`.
+  Without this, two connection fields on the same model would fabricate
+  two distinct classes sharing the same `__name__` and trip the
+  collision check.
+- **`GrapheneFilterSetMixin` is a direct base of `AdvancedFilterSet`.**
+  Previously the mixin was applied only at the top level via
+  graphene-django's `setup_filterset` wrapper, which produced a
+  divergent `Graphene{X}Filter` class name relative to nested
+  `RelatedFilter` traversals. Now every `AdvancedFilterSet` subclass
+  carries `FILTER_DEFAULTS` (the `GlobalIDFilter` overrides on FKs /
+  PKs) uniformly, and the wrapper is skipped.
+- **`utils.raise_on_type_name_collision`, `ClassBasedTypeNameMixin`,
+  `_bound_class_property_pair` helper** and the shared
+  `QuerySetProxy._combine` method consolidate near-duplicate code
+  across filter / order / aggregate factories and the connection field
+  — three "provided vs resolved class" property pairs collapse into a
+  single helper; three per-factory `_check_collision` methods become
+  one utility function; three per-class `type_name_for` classmethods
+  become one mixin.
+
+### Changed
+
+- **`compute()` and `acompute()` in `AdvancedAggregateSet`** share the
+  new `_related_plan(selection_set)` helper that returns
+  `(rel_name, rel_agg, child_selection)` triples. Selection-set gating
+  and iteration order now live in a single place, guaranteeing sync
+  and async outputs stay byte-identical.
+- **`AdvancedDjangoFilterConnectionField`** gained a
+  `_bound_class_property_pair(kind)` helper that generates both
+  `provided_<kind>_class` and `<kind>_class` properties for
+  `aggregate` and `orderset` from the instance-layout contract
+  (`_provided_<kind>_class` + `_<kind>_class`). `filterset_class`
+  retains its custom logic because it calls `get_filterset_class`.
+  Fixes a latent inconsistency where `provided_filterset_class` used
+  direct attribute access while the other two used `getattr(_meta,
+  ..., None)`.
+- **`QuerySetProxy.filter_` and `exclude_`** collapsed to one-line
+  delegates over a shared `_combine(negate, *args, **kwargs)` helper.
+
+### Removed
+
+- `filter_input_type_prefix` and `order_input_type_prefix` kwargs on
+  the connection field.
+- `input_type_prefix` kwarg on all three argument factories.
+- `OrderArgumentsFactory.create_order_input_type`.
+- `FilterSetMetaclass.expand_auto_filter` and the `AutoFilter` class.
+- `STAT_REGISTRY` alias + singular `_py_*` / `_bool_*` helpers.
+- `setup_filterset` wrapping in `get_filterset_class` (for
+  `AdvancedFilterSet` subclasses).
+- Redundant `if ag_class in seen: continue` / `if fs_class in seen:
+  continue` / `if os_class in seen: continue` pop-time cycle guards
+  — the enqueue-time `target not in seen` gate handles cycles
+  identically.
+- Paranoid `f.__class__.__name__.endswith("RelatedFilter")` double-check
+  in `_get_trimmed_filterset_class` — `isinstance(f, BaseRelatedFilter)`
+  already covers it.
+- Unreachable `TypeError` gate in `filterset_factories.get_filterset_class`
+  — `AdvancedDjangoFilterConnectionField.__init__` validates the
+  subclass upstream with a clearer message.
+- Orphaned docstring references to `rest_framework_filters` and the
+  stale "DEFER EXPANSION" comment in `FilterSetMetaclass.__new__`.
+
+### Fixed
+
+- **`ForeignKey + __in` crash under `GrapheneFilterSetMixin` documented
+  as a known pitfall.** Adding the mixin to `AdvancedFilterSet` surfaced
+  an upstream graphene-django quirk: `GRAPHENE_FILTER_SET_OVERRIDES`
+  maps `ForeignKey → GlobalIDFilter` (singular `GlobalIDFormField`),
+  which cannot handle a list value when `lookup_expr="in"`. The
+  resulting error is a cryptic `TypeError: argument should be a
+  bytes-like object or ASCII string, not 'list'` from `base64`. The
+  library does not ship a workaround beyond filtering via the nested
+  target filterset; `docs/fix-graphene-django-AdvancedFilterSet.md`
+  drafts the upstream fix (promote `GlobalIDFilter` →
+  `GlobalIDMultipleChoiceFilter` when `lookup_expr in ("in", "range")`).
+- **Latent `provided_filterset_class` inconsistency** — used direct
+  attribute access (`self.node_type._meta.filterset_class`) while the
+  aggregate / orderset counterparts used `getattr(..., None)`. All
+  three now route through the same `_bound_class_property_pair` helper
+  with uniform safe `getattr` semantics.
+- **Mixed nested / top-level FilterSet schema divergence** — the old
+  `setup_filterset` wrap produced `Graphene{X}FilterInputType` at
+  top-level while nested `RelatedFilter` traversals used the raw user
+  class's name `{X}FilterInputType`. Two different types for the same
+  logical FilterSet defeated class-based cache dedup. Now a single
+  canonical type name applies everywhere.
+
+### Coverage & Tests
+
+- **100% line + branch coverage** across all 20 modules; enforced by
+  `uv run coverage report --fail-under=100`.
+- **13 new tests** in `tests/test_coverage_gaps.py` closing specific
+  branches: `RelatedAggregate(None, ...)` skip, `HIDE_FLAT_FILTERS=True`
+  branch, `RelatedFilter(None, ...)` drop, trigram-child routing, non-leaf
+  field-name recursion, `_get_fields` empty-target branch, dict and raw
+  cache-key paths in `_make_cache_key`, NOT subquery `None` return,
+  async aggregate pre-agg-set dispatch, and two `DISTINCT ON` edge
+  cases on `AdvancedOrderSet`.
+- **Test-layer pruning** — deleted tests for the removed `AutoFilter`,
+  `STAT_REGISTRY`, singular `_py_*` / `_bool_*` helpers, the old
+  prefix properties / kwargs, and the old collision-warning semantics.
+  Rewrote `test_user_profile_role_o2m` to filter by scalar role name
+  (avoiding the graphene-django `FK + __in` pitfall).
+- **Stale line-number comments** (~30 sites across 8 test files)
+  replaced with intent-first docstrings — `"``get_filter_fields``
+  explicitly adds ``'search'`` to the returned dict"` instead of
+  `"Test get_filter_fields explicitly adds 'search' (Lines 458-460)."`.
+
+### Docs
+
+- `docs/spec-base_type_naming.md` — full design for class-based naming,
+  migration plan, and open questions.
+- `docs/spec-remove-legacy-backward-compat.md` — single-consumer
+  library rationale, file-by-file checklist for the cleanup pass, and
+  non-goals.
+- `docs/fix-graphene-django-AdvancedFilterSet.md` — upstream-PR brief
+  for the graphene-django `FK + __in` + `GlobalIDFilter` singular-field
+  limitation.
+- `AGENTS.md` — new sections on class-based naming consequences,
+  testing conventions, known graphene-django pitfalls, and a
+  refactoring / cleanup playbook.
+
 ## [0.7.5] - 2026-04-17
 
 ### Added
