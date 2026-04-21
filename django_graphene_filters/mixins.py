@@ -4,7 +4,9 @@ from typing import Any, cast
 
 import graphene
 from django.db import models
+from django.db.models.constants import LOOKUP_SEP
 from django.utils.module_loading import import_string
+from stringcase import pascalcase
 
 
 def get_concrete_field_names(model: type[models.Model]) -> list[str]:
@@ -20,6 +22,34 @@ def get_concrete_field_names(model: type[models.Model]) -> list[str]:
     virtual fields.
     """
     return [f.name for f in model._meta.get_fields() if hasattr(f, "column")]
+
+
+class ClassBasedTypeNameMixin:
+    """Contribute a ``type_name_for()`` classmethod for class-based GraphQL naming.
+
+    Subclasses set two class attributes:
+
+    * ``_root_type_suffix`` — appended to ``cls.__name__`` for the root type
+      (e.g. ``"InputType"``, ``"Type"``).
+    * ``_field_type_suffix`` — appended after a pascal-cased field path for
+      per-field operator bags (e.g. ``"FilterInputType"``, ``"Type"``).
+
+    The single implementation handles both simple field names (``"name"``)
+    and ``LOOKUP_SEP``-separated nested paths (``"created__date__year"``).
+    See ``docs/spec-base_type_naming.md`` for the naming spec.
+    """
+
+    _root_type_suffix: str = "InputType"
+    _field_type_suffix: str = "InputType"
+
+    @classmethod
+    def type_name_for(cls, field_path: str | None = None) -> str:
+        """Return the GraphQL type name for this class or a sub-field path."""
+        if field_path is None:
+            return f"{cls.__name__}{cls._root_type_suffix}"
+        parts = field_path.split(LOOKUP_SEP)
+        pascal = "".join(pascalcase(p) for p in parts)
+        return f"{cls.__name__}{pascal}{cls._field_type_suffix}"
 
 
 class LazyRelatedClassMixin:

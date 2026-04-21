@@ -1,9 +1,11 @@
-"""Utilities for field lookup and transform discovery.
+"""Utilities for field lookup, transform discovery, and class-based naming.
 
 Functions
 ---------
 - ``lookups_for_field``: All valid lookup expressions for a model field.
 - ``lookups_for_transform``: Subsequent lookups for a given transform.
+- ``raise_on_type_name_collision``: Guard shared by the three argument
+  factories to enforce class-based GraphQL naming.
 
 Usage
 -----
@@ -19,6 +21,37 @@ from django.db.models.constants import LOOKUP_SEP
 from django.db.models.expressions import Expression
 from django.db.models.fields import Field
 from django.db.models.lookups import Transform
+
+
+def raise_on_type_name_collision(
+    type_name: str,
+    cls: type,
+    registry: dict[str, type],
+    kind: str,
+) -> None:
+    """Raise ``TypeError`` if ``type_name`` is already claimed by a different class.
+
+    Shared by ``FilterArgumentsFactory`` / ``OrderArgumentsFactory`` /
+    ``AggregateArgumentsFactory`` to enforce class-based GraphQL naming
+    (see ``docs/spec-base_type_naming.md``): two distinct Python classes
+    with the same ``__name__`` would otherwise silently overwrite each
+    other's schema.
+
+    Args:
+        type_name: The GraphQL type name being claimed.
+        cls: The Python class claiming the name on this call.
+        registry: Factory-level ``name -> declaring_class`` map.
+        kind: Human-readable label (``"filterset"`` / ``"orderset"`` /
+            ``"aggregateset"``) used in the error message.
+    """
+    prior = registry.get(type_name)
+    if prior is not None and prior is not cls:
+        raise TypeError(
+            f"Class-based naming collision: GraphQL type '{type_name}' is already "
+            f"registered by '{prior.__module__}.{prior.__qualname__}' but now "
+            f"'{cls.__module__}.{cls.__qualname__}' is trying to claim "
+            f"the same name. Rename one of the {kind} classes."
+        )
 
 
 def lookups_for_field(model_field: Field) -> list[str]:

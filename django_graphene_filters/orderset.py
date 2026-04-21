@@ -8,7 +8,7 @@ from typing import Any
 from graphene.utils.str_converters import to_snake_case
 
 from . import orders
-from .mixins import get_concrete_field_names
+from .mixins import ClassBasedTypeNameMixin, get_concrete_field_names
 
 
 class OrderSetMetaclass(type):
@@ -43,18 +43,19 @@ class OrderSetMetaclass(type):
         return new_class
 
 
-class AdvancedOrderSet(metaclass=OrderSetMetaclass):
-    """Base class for advanced relationship sorting with permission checks."""
+class AdvancedOrderSet(ClassBasedTypeNameMixin, metaclass=OrderSetMetaclass):
+    """Base class for advanced relationship sorting with permission checks.
 
-    @classmethod
-    def type_name_for(cls) -> str:
-        """Return the GraphQL input type name for this orderset.
+    ``ClassBasedTypeNameMixin`` supplies ``type_name_for()`` — returning
+    ``{cls.__name__}InputType`` for the root.  See
+    ``docs/spec-base_type_naming.md``.
+    """
 
-        Class-based naming: every orderset maps to one stable type name
-        derived from ``cls.__name__`` — no node prefix, no traversal-path
-        accumulation. See ``docs/spec-base_type_naming.md``.
-        """
-        return f"{cls.__name__}InputType"
+    # Suffixes consumed by ``ClassBasedTypeNameMixin.type_name_for``.  Defaults
+    # (``"InputType"`` for both) already match the OrderSet naming convention;
+    # declared here for visibility.
+    _root_type_suffix = "InputType"
+    _field_type_suffix = "InputType"
 
     def __init__(
         self,

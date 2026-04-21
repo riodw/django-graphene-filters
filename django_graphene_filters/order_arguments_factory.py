@@ -13,6 +13,7 @@ from typing import cast
 import graphene
 
 from .mixins import InputObjectTypeFactoryMixin
+from .utils import raise_on_type_name_collision
 
 
 class OrderDirection(graphene.Enum):
@@ -60,7 +61,12 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
         subsequent calls for the same OrderSet hit the cache.
         """
         self._ensure_built()
-        self._check_collision(self.order_input_type_name, self.orderset_class)
+        raise_on_type_name_collision(
+            self.order_input_type_name,
+            self.orderset_class,
+            self._type_orderset_registry,
+            "orderset",
+        )
         input_object_type = self.input_object_types[self.order_input_type_name]
         return {
             "orderBy": graphene.Argument(
@@ -86,7 +92,12 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
             if target_name not in self.input_object_types:
                 self._build_class_type(os_class)
             else:
-                self._check_collision(target_name, os_class)
+                raise_on_type_name_collision(
+                    target_name,
+                    os_class,
+                    self._type_orderset_registry,
+                    "orderset",
+                )
 
             # Enqueue every RelatedOrder target reachable from this orderset.
             # ``None`` targets are skipped — users may declare
@@ -96,17 +107,6 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
                 target = rel_order.orderset
                 if target is not None and target not in seen:
                     pending.append(target)
-
-    def _check_collision(self, type_name: str, os_class: type) -> None:
-        """Raise if ``type_name`` is already registered for a different class."""
-        prior = self._type_orderset_registry.get(type_name)
-        if prior is not None and prior is not os_class:
-            raise TypeError(
-                f"Class-based naming collision: GraphQL type '{type_name}' is already "
-                f"registered by '{prior.__module__}.{prior.__qualname__}' but now "
-                f"'{os_class.__module__}.{os_class.__qualname__}' is trying to claim "
-                "the same name. Rename one of the orderset classes."
-            )
 
     def _build_class_type(self, os_class: type) -> None:
         """Build the root ``InputObjectType`` for ``os_class`` and cache it.

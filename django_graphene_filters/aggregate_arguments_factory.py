@@ -16,6 +16,7 @@ import graphene
 from .aggregate_types import STAT_TYPES
 from .aggregateset import AdvancedAggregateSet
 from .mixins import ObjectTypeFactoryMixin
+from .utils import raise_on_type_name_collision
 
 
 class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
@@ -77,7 +78,12 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
             The root aggregate ObjectType class.
         """
         self._ensure_built()
-        self._check_collision(self.aggregate_type_name, self.aggregate_class)
+        raise_on_type_name_collision(
+            self.aggregate_type_name,
+            self.aggregate_class,
+            self._type_aggregate_registry,
+            "aggregateset",
+        )
         return self.object_types[self.aggregate_type_name]
 
     def _ensure_built(self) -> None:
@@ -97,7 +103,12 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
             if target_name not in self.object_types:
                 self._build_class_type(ag_class)
             else:
-                self._check_collision(target_name, ag_class)
+                raise_on_type_name_collision(
+                    target_name,
+                    ag_class,
+                    self._type_aggregate_registry,
+                    "aggregateset",
+                )
 
             # Enqueue every RelatedAggregate target reachable from this aggregateset.
             # ``None`` targets are skipped — users may declare
@@ -107,17 +118,6 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
                 target = rel_agg.aggregate_class
                 if target is not None and target not in seen:
                     pending.append(target)
-
-    def _check_collision(self, type_name: str, ag_class: type) -> None:
-        """Raise if ``type_name`` is already registered for a different class."""
-        prior = self._type_aggregate_registry.get(type_name)
-        if prior is not None and prior is not ag_class:
-            raise TypeError(
-                f"Class-based naming collision: GraphQL type '{type_name}' is already "
-                f"registered by '{prior.__module__}.{prior.__qualname__}' but now "
-                f"'{ag_class.__module__}.{ag_class.__qualname__}' is trying to claim "
-                "the same name. Rename one of the aggregateset classes."
-            )
 
     def _build_class_type(self, ag_class: type[AdvancedAggregateSet]) -> None:
         """Build the root ``ObjectType`` for ``ag_class`` and cache it.

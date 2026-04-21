@@ -30,6 +30,7 @@ from .input_types import (
     TrigramFilterInputType,
 )
 from .mixins import InputObjectTypeFactoryMixin
+from .utils import raise_on_type_name_collision
 
 
 class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
@@ -80,7 +81,12 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
         subsequent calls for the same FilterSet hit the cache.
         """
         self._ensure_built()
-        self._check_collision(self.filter_input_type_name, self.filterset_class)
+        raise_on_type_name_collision(
+            self.filter_input_type_name,
+            self.filterset_class,
+            self._type_filterset_registry,
+            "filterset",
+        )
         input_object_type = self.input_object_types[self.filter_input_type_name]
         return {
             settings.FILTER_KEY: graphene.Argument(
@@ -107,7 +113,12 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
                 # Build this filterset's root type.
                 self._build_class_type(fs_class)
             else:
-                self._check_collision(target_name, fs_class)
+                raise_on_type_name_collision(
+                    target_name,
+                    fs_class,
+                    self._type_filterset_registry,
+                    "filterset",
+                )
 
             # Enqueue every RelatedFilter target reachable from this filterset.
             # ``None`` targets are skipped — users may declare
@@ -117,17 +128,6 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
                 target = rel_filter.filterset
                 if target is not None and target not in seen:
                     pending.append(target)
-
-    def _check_collision(self, type_name: str, fs_class: type[AdvancedFilterSet]) -> None:
-        """Raise if ``type_name`` is already registered for a different class."""
-        prior = self._type_filterset_registry.get(type_name)
-        if prior is not None and prior is not fs_class:
-            raise TypeError(
-                f"Class-based naming collision: GraphQL type '{type_name}' is already "
-                f"registered by '{prior.__module__}.{prior.__qualname__}' but now "
-                f"'{fs_class.__module__}.{fs_class.__qualname__}' is trying to claim "
-                "the same name. Rename one of the filterset classes."
-            )
 
     def _build_class_type(self, fs_class: type[AdvancedFilterSet]) -> None:
         """Build the root ``InputObjectType`` for ``fs_class`` and cache it."""
