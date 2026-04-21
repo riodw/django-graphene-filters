@@ -417,6 +417,26 @@ class AdvancedAggregateSet(ClassBasedTypeNameMixin, metaclass=AggregateSetMetacl
         self.queryset = queryset
         self.request = request
 
+    def _related_plan(
+        self,
+        selection_set: Any,
+    ) -> list[tuple[str, RelatedAggregate, Any]]:
+        """Return ``(rel_name, rel_agg, child_selection)`` triples to iterate.
+
+        Shared by :meth:`compute` and :meth:`acompute`.  Honours the
+        GraphQL selection set so unrequested ``RelatedAggregate`` entries
+        are skipped uniformly across both paths; iteration order follows
+        ``related_aggregates`` (an ``OrderedDict``) so sync and async
+        outputs stay deterministic and byte-identical.
+        """
+        requested = self._parse_selection_set(selection_set)
+        plan: list[tuple[str, RelatedAggregate, Any]] = []
+        for rel_name, rel_agg in self.__class__.related_aggregates.items():
+            if requested is not None and rel_name not in requested:
+                continue
+            plan.append((rel_name, rel_agg, self._get_child_selection(selection_set, rel_name)))
+        return plan
+
     def compute(self, selection_set: Any = None, local_only: bool = False) -> dict[str, Any]:
         """Compute aggregate statistics.
 
@@ -441,20 +461,11 @@ class AdvancedAggregateSet(ClassBasedTypeNameMixin, metaclass=AggregateSetMetacl
         if local_only:
             return result
 
-        requested = self._parse_selection_set(selection_set)
-        for rel_name, rel_agg in self.__class__.related_aggregates.items():
-            if requested is not None and rel_name not in requested:
-                continue
-
+        for rel_name, rel_agg, child_selection in self._related_plan(selection_set):
             # Derive the child queryset by following the relationship.
             # Uses get_child_queryset() which consumers can override for
             # custom visibility scoping (e.g. is_private filtering).
             child_qs = self.get_child_queryset(rel_name, rel_agg)
-
-            # Extract the sub-selection set for this related aggregate
-            child_selection = self._get_child_selection(selection_set, rel_name)
-
-            # Delegate to the child aggregate class
             child_agg = rel_agg.aggregate_class(queryset=child_qs, request=self.request)
             result[rel_name] = child_agg.compute(selection_set=child_selection)
 
@@ -483,20 +494,14 @@ class AdvancedAggregateSet(ClassBasedTypeNameMixin, metaclass=AggregateSetMetacl
         if local_only:
             return result
 
-        requested = self._parse_selection_set(selection_set)
-        coros: list = []
-        names: list[str] = []
-        for rel_name, rel_agg in self.__class__.related_aggregates.items():
-            if requested is not None and rel_name not in requested:
-                continue
-            child_selection = self._get_child_selection(selection_set, rel_name)
-            coros.append(self._acompute_related(rel_name, rel_agg, child_selection))
-            names.append(rel_name)
+        plan = self._related_plan(selection_set)
+        if not plan:
+            return result
 
-        if coros:
-            child_results = await asyncio.gather(*coros)
-            for name, child_result in zip(names, child_results, strict=True):
-                result[name] = child_result
+        coros = [self._acompute_related(rel_name, rel_agg, sel) for rel_name, rel_agg, sel in plan]
+        child_results = await asyncio.gather(*coros)
+        for (rel_name, _rel_agg, _sel), child_result in zip(plan, child_results, strict=True):
+            result[rel_name] = child_result
 
         return result
 

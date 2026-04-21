@@ -95,37 +95,27 @@ class QuerySetProxy(ObjectProxy):
         """
         return iter([self.__wrapped__, self.q])
 
-    def filter_(self, *args, **kwargs) -> "QuerySetProxy":
-        """Override the 'filter' method of QuerySet.
+    def _combine(self, negate: bool, *args, **kwargs) -> "QuerySetProxy":
+        """Shared body for :meth:`filter_` and :meth:`exclude_`.
 
-        Args:
-            args, kwargs: Arguments passed to the filter.
-
-        Returns:
-            Updated QuerySetProxy instance.
+        Builds a ``Q`` from the arguments (or reuses it when the single
+        positional arg is already a ``Q``) and folds it into ``self.q``,
+        negated when ``negate`` is ``True``.
         """
         if len(kwargs) == 0 and len(args) == 1 and isinstance(args[0], models.Q):
             q = args[0]
         else:
             q = models.Q(*args, **kwargs)
-        self.q &= q  # Update existing Q object
+        self.q &= ~q if negate else q
         return self
+
+    def filter_(self, *args, **kwargs) -> "QuerySetProxy":
+        """Override the 'filter' method of QuerySet — folds the Q into ``self.q``."""
+        return self._combine(False, *args, **kwargs)
 
     def exclude_(self, *args, **kwargs) -> "QuerySetProxy":
-        """Override the 'exclude' method of QuerySet.
-
-        Args:
-            args, kwargs: Arguments passed to the exclude.
-
-        Returns:
-            Updated QuerySetProxy instance.
-        """
-        if len(kwargs) == 0 and len(args) == 1 and isinstance(args[0], models.Q):
-            q = args[0]
-        else:
-            q = models.Q(*args, **kwargs)
-        self.q &= ~q  # Update existing Q object using negation
-        return self
+        """Override the 'exclude' method of QuerySet — folds ``~Q`` into ``self.q``."""
+        return self._combine(True, *args, **kwargs)
 
 
 def is_full_text_search_lookup_expr(lookup_expr: str) -> bool:

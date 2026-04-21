@@ -29,6 +29,41 @@ from .input_data_factories import tree_input_type_to_data
 from .order_arguments_factory import OrderArgumentsFactory
 
 
+def _bound_class_property_pair(kind: str) -> tuple[property, property]:
+    """Generate ``(provided_<kind>_class, <kind>_class)`` property pair.
+
+    The two properties share an instance layout across the three
+    bound-class kinds (``aggregate``, ``orderset``, ``filterset``):
+
+    * ``provided_<kind>_class`` — returns the caller-supplied override on
+      the field, falling back to ``node_type._meta.<kind>_class`` (or
+      ``None`` if the meta attribute is absent).
+    * ``<kind>_class`` — returns the memoized resolved class, filling
+      from ``provided_<kind>_class`` on first access.
+
+    Instance layout contract: ``_provided_<kind>_class`` (caller override)
+    and ``_<kind>_class`` (cache) must both be initialised in ``__init__``
+    (either by this class or by the parent ``DjangoFilterConnectionField``).
+    """
+    provided_ivar = f"_provided_{kind}_class"
+    cache_ivar = f"_{kind}_class"
+    meta_key = f"{kind}_class"
+
+    def provided_getter(self: Any) -> Any | None:
+        return getattr(self, provided_ivar) or getattr(self.node_type._meta, meta_key, None)
+
+    def resolved_getter(self: Any) -> Any | None:
+        cached = getattr(self, cache_ivar, None)
+        if cached is None:
+            cached = provided_getter(self)
+            setattr(self, cache_ivar, cached)
+        return cached
+
+    provided_getter.__doc__ = f"Return the provided ``{kind}_class``, if any."
+    resolved_getter.__doc__ = f"Return the memoized ``{kind}_class``."
+    return property(provided_getter), property(resolved_getter)
+
+
 class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
     """Allow you to use advanced filters provided by this library."""
 
@@ -64,20 +99,14 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             )
 
     # -----------------------------------------------------------------
-    # Aggregate support
+    # Bound-class properties — aggregate / orderset follow the generic
+    # "caller override or node-meta default, memoized" pattern; filterset
+    # extends it with ``get_filterset_class`` auto-generation below.
     # -----------------------------------------------------------------
 
-    @property
-    def provided_aggregate_class(self) -> Any | None:
-        """Return the provided AdvancedAggregateSet class, if any."""
-        return self._provided_aggregate_class or getattr(self.node_type._meta, "aggregate_class", None)
-
-    @property
-    def aggregate_class(self) -> Any | None:
-        """Return the AdvancedAggregateSet class to use for aggregation."""
-        if not self._aggregate_class:
-            self._aggregate_class = self.provided_aggregate_class
-        return self._aggregate_class
+    provided_aggregate_class, aggregate_class = _bound_class_property_pair("aggregate")
+    provided_orderset_class, orderset_class = _bound_class_property_pair("orderset")
+    provided_filterset_class, _ = _bound_class_property_pair("filterset")
 
     @property
     def aggregate_type(self) -> type[graphene.ObjectType] | None:
@@ -93,22 +122,6 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
             factory = AggregateArgumentsFactory(self.aggregate_class)
             self._aggregate_type = factory.build_aggregate_type()
         return self._aggregate_type
-
-    # -----------------------------------------------------------------
-    # Orderset support (existing)
-    # -----------------------------------------------------------------
-
-    @property
-    def provided_orderset_class(self) -> Any | None:
-        """Return the provided AdvancedOrderSet class, if any."""
-        return self._provided_orderset_class or getattr(self.node_type._meta, "orderset_class", None)
-
-    @property
-    def orderset_class(self) -> Any | None:
-        """Return the AdvancedOrderSet class to use for ordering."""
-        if not self._orderset_class:
-            self._orderset_class = self.provided_orderset_class
-        return self._orderset_class
 
     @property
     def ordering_args(self) -> dict:
@@ -153,13 +166,15 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         self._base_args = args
 
     @property
-    def provided_filterset_class(self) -> type[AdvancedFilterSet] | None:
-        """Return the provided AdvancedFilterSet class, if any."""
-        return self._provided_filterset_class or self.node_type._meta.filterset_class
-
-    @property
     def filterset_class(self) -> type[AdvancedFilterSet]:
-        """Return the AdvancedFilterSet class to use for filtering."""
+        """Return the AdvancedFilterSet class to use for filtering.
+
+        Unlike the generic ``_bound_class_property_pair`` resolution used
+        for aggregate / orderset, filtersets get a dynamic subclass built
+        via ``get_filterset_class(..., model=..., fields=...)`` so the
+        caller can provide either an explicit ``filterset_class`` or rely
+        on ``filter_fields`` on the node type's ``Meta``.
+        """
         if not self._filterset_class:
             fields = self._fields or self.node_type._meta.filter_fields
             meta = {"model": self.model, "fields": fields}
