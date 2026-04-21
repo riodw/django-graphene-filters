@@ -4,7 +4,6 @@ Use the `AdvancedDjangoFilterConnectionField` class from this
 module instead of the `DjangoFilterConnectionField` from graphene-django.
 """
 
-import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from typing import Any
@@ -40,35 +39,11 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         order_by: Any = None,
         extra_filter_meta: dict[str, Any] | None = None,
         filterset_class: type[AdvancedFilterSet] | None = None,
-        filter_input_type_prefix: str | None = None,
         orderset_class: Any | None = None,
-        order_input_type_prefix: str | None = None,
         aggregate_class: Any | None = None,
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        # ``filter_input_type_prefix`` and ``order_input_type_prefix`` are vestigial
-        # under class-based naming (see ``docs/spec-base_type_naming.md``): type names
-        # now derive from the bound FilterSet/OrderSet class alone.  We keep the kwargs
-        # for one minor version so existing consumers don't break at import time, but
-        # emit a DeprecationWarning and ignore the value.  Both params are removed in 1.1.
-        if filter_input_type_prefix is not None:
-            warnings.warn(
-                "`filter_input_type_prefix` is ignored under class-based naming and will "
-                "be removed in 1.1. GraphQL type names are derived from the FilterSet "
-                "class name. See docs/spec-base_type_naming.md.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-        if order_input_type_prefix is not None:
-            warnings.warn(
-                "`order_input_type_prefix` is ignored under class-based naming and will "
-                "be removed in 1.1. GraphQL type names are derived from the OrderSet "
-                "class name. See docs/spec-base_type_naming.md.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-
         self._provided_orderset_class = orderset_class
         self._orderset_class = None
         self._ordering_args = None
@@ -131,7 +106,6 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
     @property
     def orderset_class(self) -> Any | None:
         """Return the AdvancedOrderSet class to use for ordering."""
-        # TODO: Implement optional creation/factory if needed
         if not self._orderset_class:
             self._orderset_class = self.provided_orderset_class
         return self._orderset_class
@@ -243,17 +217,13 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         trimmed_filters = OrderedDict()
 
         for name, f in full_filters.items():
-            # Check if this filter is an "expanded" child of a RelatedFilter.
-            # E.g. "values__value" is a child of "values".
+            # Skip expanded children of RelatedFilters (e.g. ``values__value`` is a
+            # child of ``values``) so they only appear under the nested ``filter``
+            # argument, not at the schema root.
             is_expanded_child = any(
                 name.startswith(f"{rel_name}{LOOKUP_SEP}") for rel_name in related_filters
             )
-
-            # Keep the filter if it's not an expanded child and NOT a RelatedFilter itself
-            # We check both isinstance and class name for robustness
-            if not is_expanded_child and not (
-                isinstance(f, BaseRelatedFilter) or f.__class__.__name__.endswith("RelatedFilter")
-            ):
+            if not is_expanded_child and not isinstance(f, BaseRelatedFilter):
                 trimmed_filters[name] = f
 
         # Create a dynamic class with the cleaned filters

@@ -9,7 +9,6 @@ pattern — so a given AggregateSet always resolves to the same root type
 regardless of which connection reached it.
 """
 
-import warnings
 from typing import cast
 
 import graphene
@@ -33,28 +32,14 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
     # with stale caches).  Strict raise, not warn.
     _type_aggregate_registry: dict[str, type] = {}
 
-    def __init__(
-        self,
-        aggregate_class: type[AdvancedAggregateSet],
-        input_type_prefix: str | None = None,
-    ) -> None:
+    def __init__(self, aggregate_class: type[AdvancedAggregateSet]) -> None:
         """Initialize the factory.
 
         Args:
             aggregate_class: The ``AdvancedAggregateSet`` class to convert.
-            input_type_prefix: **Deprecated.** Ignored under class-based
-                naming — the type name is derived from
-                ``aggregate_class.type_name_for()``.  Emits a
-                :class:`DeprecationWarning` if non-``None``. Removed in 1.1.
+                The generated GraphQL type name derives from
+                ``aggregate_class.type_name_for()``.
         """
-        if input_type_prefix is not None:
-            warnings.warn(
-                "AggregateArgumentsFactory `input_type_prefix` is ignored under class-based "
-                "naming and will be removed in 1.1. The generated type name is now derived "
-                "from `aggregate_class.type_name_for()`.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         self.aggregate_class = aggregate_class
         self.aggregate_type_name = aggregate_class.type_name_for()
 
@@ -98,15 +83,14 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
     def _ensure_built(self) -> None:
         """BFS-build ``self.aggregate_class`` and all related-aggregate descendants.
 
-        Cycles (A → B → A) are handled naturally: an aggregateset already in
-        ``seen`` is skipped, and lambda refs resolve once the BFS finishes.
+        Cycles (A → B → A) are handled naturally: the enqueue-time
+        ``target not in seen`` gate stops cycles from looping.  Lambda refs
+        resolve once the BFS finishes.
         """
         pending: list[type[AdvancedAggregateSet]] = [self.aggregate_class]
         seen: set[type[AdvancedAggregateSet]] = set()
         while pending:
             ag_class = pending.pop()
-            if ag_class in seen:
-                continue
             seen.add(ag_class)
 
             target_name = ag_class.type_name_for()
@@ -116,6 +100,9 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
                 self._check_collision(target_name, ag_class)
 
             # Enqueue every RelatedAggregate target reachable from this aggregateset.
+            # ``None`` targets are skipped — users may declare
+            # ``RelatedAggregate(None, ...)`` as a placeholder that drops out of
+            # the emitted schema rather than raising.
             for rel_agg in getattr(ag_class, "related_aggregates", {}).values():
                 target = rel_agg.aggregate_class
                 if target is not None and target not in seen:
@@ -164,6 +151,8 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
         # RelatedAggregate children → lambda ref to the target's root type.
         # The BFS in ``_ensure_built`` guarantees the target type is in
         # ``self.object_types`` by the time graphene resolves the lambda.
+        # ``None`` targets (from ``RelatedAggregate(None, ...)`` placeholders)
+        # are skipped so the field simply isn't emitted.
         for rel_name, rel_agg in getattr(ag_class, "related_aggregates", {}).items():
             target_class = rel_agg.aggregate_class
             if target_class is None:

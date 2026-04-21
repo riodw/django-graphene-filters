@@ -8,7 +8,6 @@ pattern used by ``FilterArgumentsFactory`` — so a given OrderSet always
 resolves to the same root type regardless of which connection reached it.
 """
 
-import warnings
 from typing import cast
 
 import graphene
@@ -41,28 +40,14 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
     # with stale caches).  Strict raise, not warn.
     _type_orderset_registry: dict[str, type] = {}
 
-    def __init__(
-        self,
-        orderset_class: type,
-        input_type_prefix: str | None = None,
-    ) -> None:
+    def __init__(self, orderset_class: type) -> None:
         """Initialize the factory.
 
         Args:
             orderset_class: The ``AdvancedOrderSet`` class to convert.
-            input_type_prefix: **Deprecated.** Ignored under class-based
-                naming — the type name is derived from
-                ``orderset_class.type_name_for()``.  Emits a
-                :class:`DeprecationWarning` if non-``None``. Removed in 1.1.
+                The generated GraphQL type name derives from
+                ``orderset_class.type_name_for()``.
         """
-        if input_type_prefix is not None:
-            warnings.warn(
-                "OrderArgumentsFactory `input_type_prefix` is ignored under class-based "
-                "naming and will be removed in 1.1. The generated type name is now derived "
-                "from `orderset_class.type_name_for()`.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         self.orderset_class = orderset_class
         self.order_input_type_name = orderset_class.type_name_for()
 
@@ -87,15 +72,14 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
     def _ensure_built(self) -> None:
         """BFS-build ``self.orderset_class`` and all related-order descendants.
 
-        Cycles (A → B → A) are handled naturally: an orderset already in
-        ``seen`` is skipped, and lambda refs resolve once the BFS finishes.
+        Cycles (A → B → A) are handled naturally: the enqueue-time
+        ``target not in seen`` gate stops cycles from looping.  Lambda refs
+        resolve once the BFS finishes.
         """
         pending: list[type] = [self.orderset_class]
         seen: set[type] = set()
         while pending:
             os_class = pending.pop()
-            if os_class in seen:
-                continue
             seen.add(os_class)
 
             target_name = os_class.type_name_for()
@@ -105,6 +89,9 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
                 self._check_collision(target_name, os_class)
 
             # Enqueue every RelatedOrder target reachable from this orderset.
+            # ``None`` targets are skipped — users may declare
+            # ``RelatedOrder(None, ...)`` as a placeholder that drops out of
+            # the emitted schema rather than raising.
             for rel_order in getattr(os_class, "related_orders", {}).values():
                 target = rel_order.orderset
                 if target is not None and target not in seen:

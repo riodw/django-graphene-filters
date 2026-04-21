@@ -50,35 +50,6 @@ def _fetch_values(qs: QuerySet, field: str, limit: int | None = None) -> list:
     return values
 
 
-def _py_median(qs: QuerySet, field: str) -> Any:
-    """Compute median using Python's statistics module."""
-    data = sorted(_fetch_values(qs, field))
-    return statistics.median(data) if len(data) >= 1 else None
-
-
-def _py_mode(qs: QuerySet, field: str) -> Any:
-    """Compute mode using Python's statistics module."""
-    data = _fetch_values(qs, field)
-    if not data:
-        return None
-    try:
-        return statistics.mode(data)
-    except statistics.StatisticsError:
-        return None
-
-
-def _py_stdev(qs: QuerySet, field: str) -> float | None:
-    """Compute standard deviation using Python's statistics module."""
-    data = [float(v) for v in _fetch_values(qs, field)]
-    return round(statistics.stdev(data), 2) if len(data) > 1 else None
-
-
-def _py_variance(qs: QuerySet, field: str) -> float | None:
-    """Compute variance using Python's statistics module."""
-    data = [float(v) for v in _fetch_values(qs, field)]
-    return round(statistics.variance(data), 2) if len(data) > 1 else None
-
-
 def _uniques(qs: QuerySet, field: str) -> list[dict[str, Any]]:
     """Return unique values with their counts."""
     max_uniques = getattr(settings, "AGGREGATE_MAX_UNIQUES", 1000)
@@ -90,16 +61,6 @@ def _uniques(qs: QuerySet, field: str) -> list[dict[str, Any]]:
         .order_by("_agg_val")[:max_uniques]
     )
     return [{"value": str(row["_agg_val"]), "count": row["_agg_count"]} for row in rows]
-
-
-def _bool_true_count(qs: QuerySet, field: str) -> int:
-    """Count rows where the boolean field is True."""
-    return qs.filter(**{field: True}).count()
-
-
-def _bool_false_count(qs: QuerySet, field: str) -> int:
-    """Count rows where the boolean field is False."""
-    return qs.filter(**{field: False}).count()
 
 
 # Lazy import to avoid circular — only needed by _uniques
@@ -206,25 +167,6 @@ SPECIAL_STATS: dict[str, Callable[[QuerySet, str], Any]] = {
 DB_NATIVE_PERCENTILE_STATS: dict[str, Callable[[str], Aggregate]] = {
     "stdev": lambda f: StdDev(f, sample=True),
     "variance": lambda f: Variance(f, sample=True),
-}
-
-
-# Backward-compat alias.  The old monolithic ``STAT_REGISTRY`` was callable
-# per-stat as ``STAT_REGISTRY[name](qs, field) -> value``.  Any third-party
-# code importing it continues to work; new code should not depend on it.
-STAT_REGISTRY: dict[str, Any] = {
-    "count": lambda qs, field: qs.exclude(**{field: None}).values(field).distinct().count(),
-    "min": lambda qs, field: qs.aggregate(v=Min(field))["v"],
-    "max": lambda qs, field: qs.aggregate(v=Max(field))["v"],
-    "sum": lambda qs, field: qs.aggregate(v=Sum(field))["v"],
-    "mean": lambda qs, field: qs.aggregate(v=Avg(field))["v"],
-    "median": _py_median,
-    "mode": _py_mode,
-    "stdev": _py_stdev,
-    "variance": _py_variance,
-    "uniques": _uniques,
-    "true_count": _bool_true_count,
-    "false_count": _bool_false_count,
 }
 
 

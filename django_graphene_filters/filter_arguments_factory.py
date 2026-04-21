@@ -9,7 +9,6 @@ connection reached it.  Apollo and any name-keyed schema cache dedupe the
 shared types across pages.
 """
 
-import warnings
 from collections.abc import Callable, Sequence
 from typing import cast
 
@@ -61,28 +60,14 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
     # ran twice with stale caches).  Strict raise, not warn.
     _type_filterset_registry: dict[str, type] = {}
 
-    def __init__(
-        self,
-        filterset_class: type[AdvancedFilterSet],
-        input_type_prefix: str | None = None,
-    ) -> None:
+    def __init__(self, filterset_class: type[AdvancedFilterSet]) -> None:
         """Initialize the factory.
 
         Args:
             filterset_class: The ``AdvancedFilterSet`` class to convert.
-            input_type_prefix: **Deprecated.** Ignored under class-based
-                naming — the type name is derived from
-                ``filterset_class.type_name_for()``.  Emits a
-                :class:`DeprecationWarning` if non-``None``. Removed in 1.1.
+                The generated GraphQL type name derives from
+                ``filterset_class.type_name_for()``.
         """
-        if input_type_prefix is not None:
-            warnings.warn(
-                "FilterArgumentsFactory `input_type_prefix` is ignored under class-based "
-                "naming and will be removed in 1.1. The generated type name is now derived "
-                "from `filterset_class.type_name_for()`.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
         self.filterset_class = filterset_class
         self.filter_input_type_name = filterset_class.type_name_for()
 
@@ -107,15 +92,14 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
     def _ensure_built(self) -> None:
         """BFS-build ``self.filterset_class`` and all related-filter descendants.
 
-        Cycles (A → B → A) are handled naturally: a filterset already in
-        ``seen`` is skipped, and lambda refs resolve once the BFS finishes.
+        Cycles (A → B → A) are handled naturally: the enqueue-time
+        ``target not in seen`` gate stops cycles from looping.  Lambda refs
+        resolve once the BFS finishes.
         """
         pending: list[type[AdvancedFilterSet]] = [self.filterset_class]
         seen: set[type[AdvancedFilterSet]] = set()
         while pending:
             fs_class = pending.pop()
-            if fs_class in seen:
-                continue
             seen.add(fs_class)
 
             target_name = fs_class.type_name_for()
@@ -126,6 +110,9 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
                 self._check_collision(target_name, fs_class)
 
             # Enqueue every RelatedFilter target reachable from this filterset.
+            # ``None`` targets are skipped — users may declare
+            # ``RelatedFilter(None, ...)`` as a placeholder that drops out of
+            # the emitted schema rather than raising.
             for rel_filter in getattr(fs_class, "related_filters", {}).values():
                 target = rel_filter.filterset
                 if target is not None and target not in seen:
@@ -185,18 +172,17 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
 
         * **Full-text search postfix** (``full_text_search`` / ``search_query`` /
           ``trigram``) → routed through ``SPECIAL_FILTER_INPUT_TYPES_FACTORIES``.
-        * **RelatedFilter boundary with no direct lookups** (name matches a key
-          in ``cls.related_filters`` and its subtree contains only nested chains)
+        * **RelatedFilter boundary** (name matches a key in ``cls.related_filters``)
           → lambda reference to the target filterset's root type.  The subtree
           under this root is intentionally *not* rendered — the target's own
-          schema owns those fields.
-        * **RelatedFilter boundary mixed with direct lookups** (e.g. ``role =
-          RelatedFilter(...)`` plus ``Meta.fields = {"role": ["in"]}``) → fall
-          back to an inline per-path subfield so the direct leaf lookups
-          (``role.in``) stay queryable.  The lambda-ref optimisation is
-          dropped in this case — preserves functionality at the cost of
-          Apollo cache dedup for that specific field.
+          schema owns those fields (Apollo cache dedup).
         * **Simple field** (everything else) → per-field operator bag type.
+
+        Note: declaring both ``RelatedFilter(...)`` and a direct leaf lookup
+        on the same field name in ``Meta.fields`` (e.g. ``role: ["in"]``) is
+        not supported — the lambda ref wins and the direct leaf is silently
+        dropped from the schema.  Filter via the nested target filterset
+        instead.
         """
         fields: dict[str, graphene.InputField] = {}
         related_filters = getattr(fs_class, "related_filters", {})
@@ -210,20 +196,14 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
             rel_filter = related_filters.get(root.name)
             if rel_filter is not None and isinstance(rel_filter, BaseRelatedFilter):
                 target_fs = rel_filter.filterset
-                # Pure RelatedFilter traversal — no direct leaves at this level.
-                # Emit a lambda ref to the target filterset's root type so the
-                # same target resolves to the same GraphQL type across all
-                # connection fields that reach it (Apollo cache dedup).
-                has_direct_leaf = any(child.height == 0 for child in root.children)
-                if target_fs is not None and not has_direct_leaf:
+                if target_fs is not None:
                     target_name = target_fs.type_name_for()
                     fields[root.name] = graphene.InputField(
                         lambda tn=target_name: self.input_object_types[tn],
                         description=f"`{pascalcase(root.name)}` field",
                     )
-                    continue
-                # Mixed case (RelatedFilter + direct lookups): fall through
-                # to the inline per-path subfield builder below.
+                # ``RelatedFilter(None, ...)`` placeholder — drop the field.
+                continue
 
             fields[root.name] = self._build_path_subfield(fs_class, root, root.name)
 

@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 from django import forms
 from django.db import models
 from django.db.models import Q
-from django_filters import Filter
 
 from django_graphene_filters.filterset import (
     AdvancedFilterSet,
@@ -106,7 +105,6 @@ def test_construct_search_with_prefix():
         class Meta:
             model = FilterSetTestModel
             fields = ["name"]
-            filter_input_type_prefix = "MyPrefix"
 
     fs = MyFS(queryset=FilterSetTestModel.objects.none())
     # This hits internal logic of construct_search
@@ -208,20 +206,6 @@ def test_get_filters_cache_written_after_first_call():
     assert first_result is second_result is third_result
 
 
-def test_get_filters_with_auto_filter():
-    from django_graphene_filters.filters import AutoFilter
-
-    class AutoFS(AdvancedFilterSet):
-        name = AutoFilter(lookups=["exact"])
-
-        class Meta:
-            model = FilterSetTestModel
-            fields = []
-
-    filters_dict = AutoFS.get_filters()
-    assert "name" in filters_dict
-
-
 def test_advanced_filter_set_unbound_form():
     class UnboundFS(AdvancedFilterSet):
         class Meta:
@@ -281,15 +265,6 @@ def test_get_fields_empty_lookups():
 
     res = EmptyLookupsFS.get_fields()
     assert "name" in res
-
-
-def test_expand_auto_filter_exception():
-    mock_f = MagicMock(spec=Filter)
-    mock_f.field_name = "name"
-    mock_f.lookups = ["exact"]
-    with patch("django_filters.filterset.BaseFilterSet.get_filters", side_effect=TypeError):
-        res = FilterSetMetaclass.expand_auto_filter(SimpleFilterSet, "bad", mock_f)
-        assert res == {}
 
 
 def test_metaclass_filter_fields_already_fields():

@@ -18,12 +18,10 @@ from django_graphene_filters.connection_field import AdvancedDjangoFilterConnect
 from django_graphene_filters.filter_arguments_factory import FilterArgumentsFactory
 from django_graphene_filters.filters import (
     AnnotatedFilter,
-    AutoFilter,
     SearchQueryFilter,
 )
 from django_graphene_filters.filterset import (
     AdvancedFilterSet,
-    FilterSetMetaclass,
     QuerySetProxy,
 )
 from django_graphene_filters.input_data_factories import validate_search_query
@@ -101,7 +99,7 @@ def test_special_filter_input_type_factory():
         mock_settings.IS_POSTGRESQL = True
         mock_settings.HAS_TRIGRAM_EXTENSION = False
 
-        factory = FilterArgumentsFactory(SpecialFS, "MiscSpecial")
+        factory = FilterArgumentsFactory(SpecialFS)
 
         # This should trigger the special filter handling
         args = factory.arguments
@@ -116,7 +114,7 @@ def test_get_field_with_in_lookup():
             model = ObjectType
             fields = {"name": ["in"]}
 
-    factory = FilterArgumentsFactory(InFS, "In")
+    factory = FilterArgumentsFactory(InFS)
 
     # Get the filters
     filters = InFS.get_filters()
@@ -152,25 +150,6 @@ def test_queryset_proxy_callable_return_non_queryset():
             raising=False,
         )
         assert proxy.custom_method() == "string_result"
-
-
-def test_expand_auto_filter_generates_new_filter():
-    """Test expand_auto_filter when it actually generates a new filter (Line 340)."""
-
-    class AutoFS(AdvancedFilterSet):
-        class Meta:
-            model = ObjectType
-            fields = []
-
-    f = AutoFilter(field_name="name", lookups=["exact"])
-    mock_filter = MagicMock()
-    with patch(
-        "django_filters.filterset.FilterSet.get_filters",
-        return_value={"name": mock_filter},
-    ):
-        expanded = FilterSetMetaclass.expand_auto_filter(AutoFS, "name_alt", f)
-        assert "name_alt" in expanded
-        assert expanded["name_alt"] is not None
 
 
 def test_get_filter_fields_adds_search():
@@ -281,7 +260,7 @@ def test_filter_arguments_factory_get_field_no_formfield():
             model = ObjectType
             fields = ["name"]
 
-    factory = FilterArgumentsFactory(DummyFS, "Prefix")
+    factory = FilterArgumentsFactory(DummyFS)
     f_obj = Filter(field_name="name", lookup_expr="exact")
 
     with patch("django_graphene_filters.filter_arguments_factory.get_model_field") as mock_get_field:

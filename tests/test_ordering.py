@@ -799,25 +799,6 @@ class TestConnectionFieldOrdering:
         assert field.provided_orderset_class is ChildOrderSet
         assert "orderBy" in field.ordering_args
 
-    def test_order_input_type_prefix_kwarg_is_deprecated(self):
-        """Passing the legacy ``order_input_type_prefix`` kwarg emits DeprecationWarning.
-
-        Under class-based naming (``docs/spec-base_type_naming.md``) the kwarg is
-        ignored — the emitted GraphQL type name derives from
-        ``orderset_class.type_name_for()`` regardless of what the caller passes.
-        Replaces the previous ``test_custom_order_input_type_prefix`` which asserted
-        on the removed ``order_input_type_prefix`` property.
-        """
-        with pytest.warns(DeprecationWarning, match="order_input_type_prefix"):
-            field = AdvancedDjangoFilterConnectionField(
-                IntegrationNode,
-                order_input_type_prefix="Custom",
-            )
-        order_arg_type = field.ordering_args["orderBy"].type.of_type.of_type
-        # The generated type name comes from the OrderSet class, not the ignored kwarg.
-        assert order_arg_type.__name__ == ParentOrderSet.type_name_for()
-        assert "Custom" not in order_arg_type.__name__
-
     def test_order_input_type_name_is_class_based(self):
         """The order input type name derives from the OrderSet class, not the node.
 

@@ -18,13 +18,7 @@ from django_graphene_filters.aggregate_arguments_factory import AggregateArgumen
 from django_graphene_filters.aggregateset import (
     AdvancedAggregateSet,
     RelatedAggregate,
-    _bool_false_count,
-    _bool_true_count,
     _fetch_values,
-    _py_median,
-    _py_mode,
-    _py_stdev,
-    _py_variance,
 )
 from django_graphene_filters.connection_field import AdvancedDjangoFilterConnectionField
 from django_graphene_filters.mixins import ObjectTypeFactoryMixin
@@ -33,79 +27,6 @@ from django_graphene_filters.object_type import _inject_aggregates_on_connection
 # ---------------------------------------------------------------------------
 # aggregateset.py — python-level stat helpers
 # ---------------------------------------------------------------------------
-
-
-@pytest.mark.django_db
-def test_py_median():
-    """Cover _py_median (lines 43-44)."""
-    ot = ObjectType.objects.create(name="med")
-    Object.objects.create(name="a1", object_type=ot)
-    Object.objects.create(name="a2", object_type=ot)
-    Object.objects.create(name="a3", object_type=ot)
-    result = _py_median(Object.objects.all(), "id")
-    assert result is not None
-
-
-@pytest.mark.django_db
-def test_py_mode_statistics_error():
-    """Cover _py_mode StatisticsError branch (lines 54-55)."""
-    # Empty queryset → no data → returns None
-    result = _py_mode(Object.objects.none(), "id")
-    assert result is None
-
-
-@pytest.mark.django_db
-def test_py_stdev():
-    """Cover _py_stdev (lines 60-61)."""
-    ot = ObjectType.objects.create(name="sd")
-    Object.objects.create(name="s1", object_type=ot)
-    Object.objects.create(name="s2", object_type=ot)
-    Object.objects.create(name="s3", object_type=ot)
-    result = _py_stdev(Object.objects.all(), "id")
-    assert result is not None
-
-
-@pytest.mark.django_db
-def test_py_stdev_insufficient_data():
-    """Cover _py_stdev returning None for single data point (line 61 else branch)."""
-    ot = ObjectType.objects.create(name="single")
-    result = _py_stdev(ObjectType.objects.filter(pk=ot.pk), "id")
-    assert result is None
-
-
-@pytest.mark.django_db
-def test_py_variance():
-    """Cover _py_variance (lines 66-67)."""
-    ot = ObjectType.objects.create(name="var")
-    Object.objects.create(name="v1", object_type=ot)
-    Object.objects.create(name="v2", object_type=ot)
-    Object.objects.create(name="v3", object_type=ot)
-    result = _py_variance(Object.objects.all(), "id")
-    assert result is not None
-
-
-@pytest.mark.django_db
-def test_py_variance_insufficient_data():
-    """Cover _py_variance returning None for single data point (line 67 else branch)."""
-    ot = ObjectType.objects.create(name="single_var")
-    result = _py_variance(ObjectType.objects.filter(pk=ot.pk), "id")
-    assert result is None
-
-
-@pytest.mark.django_db
-def test_bool_true_count():
-    """Cover _bool_true_count (line 85)."""
-    ObjectType.objects.create(name="pub", is_private=False)
-    ObjectType.objects.create(name="priv", is_private=True)
-    assert _bool_true_count(ObjectType.objects.all(), "is_private") == 1
-
-
-@pytest.mark.django_db
-def test_bool_false_count():
-    """Cover _bool_false_count (line 90)."""
-    ObjectType.objects.create(name="pub2", is_private=False)
-    ObjectType.objects.create(name="priv2", is_private=True)
-    assert _bool_false_count(ObjectType.objects.all(), "is_private") == 1
 
 
 @pytest.mark.django_db
@@ -397,6 +318,49 @@ def test_resolve_aggregates_no_iterable():
     assert result is None
 
 
+@pytest.mark.django_db
+def test_resolve_aggregates_lazy_computation_on_nested_connection():
+    """Nested-connection resolver builds a fresh aggregate set per edge and calls
+    ``compute(local_only=True)``.
+
+    Covers the third dispatch branch in ``_inject_aggregates_on_connection``'s
+    resolver: no ``root.aggregates`` (pre-computed), no
+    ``iterable._aggregate_set`` (root-level stash) — just a plain queryset
+    attached as ``root.iterable``.  The resolver instantiates the aggregate
+    class on the fly and runs ``compute`` with ``local_only=True`` because
+    the GraphQL query structure expresses the nesting.
+    """
+    from django_graphene_filters.object_type import _inject_aggregates_on_connection
+
+    class LazyAgg(AdvancedAggregateSet):
+        class Meta:
+            model = ObjectType
+            fields = {"name": ["count"]}
+
+    class LazyConnection:
+        _meta = MagicMock()
+        _meta.fields = {}
+
+    _inject_aggregates_on_connection(ObjectType, LazyAgg, LazyConnection)
+
+    ObjectType.objects.create(name="lazy_a")
+    ObjectType.objects.create(name="lazy_b")
+
+    # Simulate a nested-connection root: has ``iterable`` but no
+    # ``_aggregate_set`` and no ``aggregates`` — the two short-circuit
+    # branches above the lazy path must miss.
+    root = type("R", (), {"iterable": ObjectType.objects.all()})()
+    info = type("I", (), {"context": None})()
+
+    result = LazyConnection.resolve_aggregates(root, info)
+
+    # Root total row count.
+    assert result["count"] == 2
+    # Own-field stats still compute under ``local_only=True`` — only
+    # ``RelatedAggregate`` fan-out is skipped.
+    assert result["name"]["count"] == 2
+
+
 # ---------------------------------------------------------------------------
 # aggregate_arguments_factory.py — circular reference branch
 # ---------------------------------------------------------------------------
@@ -416,7 +380,7 @@ def test_aggregate_factory_circular_reference():
     CircularAgg.self_ref._aggregate_class = CircularAgg
     CircularAgg.related_aggregates = OrderedDict([("self_ref", CircularAgg.self_ref)])
 
-    factory = AggregateArgumentsFactory(CircularAgg, "Circular")
+    factory = AggregateArgumentsFactory(CircularAgg)
     # Should not raise / infinite loop
     result = factory.build_aggregate_type()
     assert result is not None
@@ -429,7 +393,7 @@ def test_aggregate_factory_circular_reference():
 
 @pytest.mark.django_db
 def test_compute_boolean_stats():
-    """Cover boolean stat computation via compute() (true_count, false_count via STAT_REGISTRY)."""
+    """Cover boolean stat computation via compute() (true_count / false_count via DB_AGGREGATES)."""
 
     class BoolAgg(AdvancedAggregateSet):
         class Meta:
@@ -446,8 +410,8 @@ def test_compute_boolean_stats():
 
 
 @pytest.mark.django_db
-def test_compute_numeric_stats_via_registry():
-    """Cover STAT_REGISTRY fallback for median/stdev/variance (line 346->330 branch)."""
+def test_compute_numeric_python_stats():
+    """Median / stdev / variance route through PYTHON_STATS (consolidated values fetch)."""
 
     class NumericAgg(AdvancedAggregateSet):
         class Meta:
@@ -463,18 +427,6 @@ def test_compute_numeric_stats_via_registry():
     assert result["id"]["median"] is not None
     assert result["id"]["stdev"] is not None
     assert result["id"]["variance"] is not None
-
-
-@pytest.mark.django_db
-def test_py_mode_statistics_error_raised():
-    """Cover _py_mode except StatisticsError branch (lines 54-55) by mocking."""
-    import statistics as stats_mod
-
-    ot = ObjectType.objects.create(name="mode_err")
-    Object.objects.create(name="me1", object_type=ot)
-    with patch.object(stats_mod, "mode", side_effect=stats_mod.StatisticsError("no mode")):
-        result = _py_mode(Object.objects.all(), "id")
-    assert result is None
 
 
 def test_metaclass_custom_compute_method_passes_validation():
@@ -493,8 +445,8 @@ def test_metaclass_custom_compute_method_passes_validation():
 
 
 @pytest.mark.django_db
-def test_compute_custom_stat_not_in_registry():
-    """Cover compute() branch where stat is in custom_stats but not in STAT_REGISTRY (line 346->330)."""
+def test_compute_custom_stat_without_compute_method_silently_skipped():
+    """A custom stat with no ``compute_<field>_<stat>`` method is silently skipped."""
 
     class NoComputeCustomAgg(AdvancedAggregateSet):
         class Meta:
@@ -505,7 +457,7 @@ def test_compute_custom_stat_not_in_registry():
     ObjectType.objects.create(name="custom_no_compute")
     agg = NoComputeCustomAgg(queryset=ObjectType.objects.all())
     result = agg.compute()
-    # weird_stat has no compute_ method and is not in STAT_REGISTRY → silently skipped
+    # weird_stat has no compute_ method and isn't a built-in → silently skipped.
     assert "weird_stat" not in result["name"]
 
 

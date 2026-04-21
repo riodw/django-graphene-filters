@@ -7,12 +7,10 @@ Covers the behavioural guarantees spelled out in
    ``.aggregate(**kwargs)`` call, not one-per-stat.
 2. **Memoization** — ``_fetch_values()`` runs once per field that has any
    Python stats, regardless of how many Python stats that field requests.
-3. **Semantic parity** — the new path returns the same dict shape and
-   values as the old monolithic ``STAT_REGISTRY`` path.
+3. **Semantic parity** — the DB and Python paths return the same dict shape
+   and values the library has always produced.
 4. **Async** — ``acompute()`` returns byte-identical output to
    ``compute()`` for the same selection.
-5. **Backward compat** — the ``STAT_REGISTRY`` alias remains importable
-   and callable per-stat.
 """
 
 import asyncio
@@ -28,7 +26,6 @@ from django_graphene_filters.aggregateset import (
     DB_NATIVE_PERCENTILE_STATS,
     PYTHON_STATS,
     SPECIAL_STATS,
-    STAT_REGISTRY,
     AdvancedAggregateSet,
     RelatedAggregate,
     _alias,
@@ -658,15 +655,3 @@ def test_resolve_aggregates_uses_precomputed_when_present():
 
     result = resolve(root, info)
     assert result is sentinel
-
-
-def test_stat_registry_alias_preserved_for_backward_compat():
-    """`STAT_REGISTRY` remains importable and callable (qs, field) → value."""
-    assert "count" in STAT_REGISTRY
-    assert "min" in STAT_REGISTRY
-    assert "median" in STAT_REGISTRY
-    assert "uniques" in STAT_REGISTRY
-    assert "true_count" in STAT_REGISTRY
-    # Every entry is still a 2-arg callable.
-    for name, fn in STAT_REGISTRY.items():
-        assert callable(fn), f"STAT_REGISTRY['{name}'] should be callable"

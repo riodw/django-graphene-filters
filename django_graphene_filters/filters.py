@@ -166,48 +166,27 @@ class BaseRelatedFilter(LazyRelatedClassMixin):
 class RelatedFilter(BaseRelatedFilter, ModelChoiceFilter):
     """A specialized filter class for related models.
 
-    This filter allows for filtering across relationships by utilizing another FilterSet
-    class defined for the related model.
+    A ``ModelChoiceFilter`` that enables filtering across relationships by
+    delegating to another FilterSet defined for the related model.  Example::
 
-    A `ModelChoiceFilter` that enables filtering across relationships.
-    Take the following example:
-
-        class ManagerFilter(filters.FilterSet):
+        class ManagerFilter(AdvancedFilterSet):
             class Meta:
                 model = Manager
-                fields = {'name': ['exact', 'in', 'startswith']}
+                fields = {"name": ["exact", "icontains"]}
 
-        class DepartmentFilter(filters.FilterSet):
-            manager = RelatedFilter(ManagerFilter, queryset=managers)
+        class DepartmentFilter(AdvancedFilterSet):
+            manager = RelatedFilter(ManagerFilter, field_name="manager")
 
             class Meta:
                 model = Department
-                fields = {'name': ['exact', 'in', 'startswith']}
+                fields = {"name": ["exact", "icontains"]}
 
-    In the above, the `DepartmentFilter` can traverse the `manager`
-    relationship with the `__` lookup seperator, accessing the filters of the
-    `ManagerFilter` class. For example, the above would enable calls like:
-
-        /api/managers?name=john%20doe
-        /api/departments?manager__name=john%20doe
-
-    Related filters function similarly to auto filters in that they can generate
-    per-lookup filters. However, unlike auto filters, related filters are
-    functional and not just placeholders. They will not be replaced by a
-    generated `exact` filter.
+    The ``DepartmentFilter`` traverses the ``manager`` relationship using the
+    ``__`` lookup separator, e.g. ``manager__name__icontains``.
 
     Attributes:
-        filterset: The `FilterSet` that is traversed by this relationship.
+        filterset: The ``FilterSet`` that is traversed by this relationship.
             May be a class, an absolute import path, or the name of a class
             located in the same module as the origin filterset.
-        lookups: A list of lookups to generate per-lookup filters for. This
-            functions similarly to the `AutoFilter.lookups` argument.
+        lookups: A list of lookups to generate per-lookup filters for.
     """
-
-
-class AutoFilter(BaseRelatedFilter, Filter):
-    """A placeholder filter that is expanded into multiple filters based on lookups."""
-
-    def __init__(self, lookups: list[str] | None = None, **kwargs) -> None:
-        # AutoFilter doesn't need a filterset class initially
-        super().__init__(filterset=None, lookups=lookups, **kwargs)

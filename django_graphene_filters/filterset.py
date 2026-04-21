@@ -155,19 +155,16 @@ def is_regular_lookup_expr(lookup_expr: str) -> bool:
 class FilterSetMetaclass(filterset.FilterSetMetaclass):
     """Custom metaclass for creating FilterSet classes.
 
-    Extends the behavior of the FilterSetMetaclass from the
-    `rest_framework_filters` package. It specifically enriches the creation
-    of FilterSet classes with additional attributes and logic to deal with
-    related filters and auto-filters based on lookup methods.
+    Extends django-filter's ``FilterSetMetaclass`` by discovering
+    ``BaseRelatedFilter`` declarations and binding them to the new class.
+    Actual expansion of related filters into per-lookup ORM paths is
+    deferred to ``AdvancedFilterSet.get_filters()`` so that classes with
+    circular ``RelatedFilter`` references (e.g. ``ObjectFilter ↔ ValueFilter``)
+    can be defined in the same module.
 
     Attributes:
-        related_filters (OrderedDict): Stores filters that are of type
-            BaseRelatedFilter.
-
-    Methods:
-        expand_auto_filter: Resolves an `AutoFilter` or `BaseRelatedFilter`
-            into individual filters based on supported lookup methods.
-
+        related_filters (OrderedDict): Filters on the new class that are
+            instances of ``BaseRelatedFilter``.
     """
 
     def __new__(
@@ -205,15 +202,12 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
             ]
         )
 
-        # Bind filters to the new class
-        # See: :meth:`rest_framework_filters.filters.RelatedFilter.bind`
+        # Bind each related filter to the new class so lazy string references
+        # (e.g. ``RelatedFilter("ValueFilter")``) can resolve using the owning
+        # class's module as a fallback import path.  Expansion itself is
+        # deferred to ``AdvancedFilterSet.get_filters()``.
         for f in new_class.related_filters.values():
             f.bind_filterset(new_class)
-
-        # DEFER EXPANSION:
-        # We removed the immediate expansion loop here to allow for
-        # circular dependencies in the same file. Expansion now happens
-        # in AdvancedFilterSet.get_filters().
 
         return new_class
 
@@ -256,70 +250,9 @@ class FilterSetMetaclass(filterset.FilterSetMetaclass):
 
         return expanded
 
-    @classmethod
-    def expand_auto_filter(
-        cls: type["FilterSetMetaclass"],
-        new_class: "FilterSetMetaclass",
-        filter_name: str,
-        f: filters.BaseRelatedFilter,
-    ) -> dict[str, "Filter"]:
-        """Resolve an `AutoFilter` or `BaseRelatedFilter` into individual filters based on lookup methods.
 
-        This method name is slightly inaccurate since it handles both
-        :class:`rest_framework_filters.filters.AutoFilter` and
-        :class:`rest_framework_filters.filters.BaseRelatedFilter`, as well as
-        their subclasses, which all support per-lookup filter generation.
-
-        Args:
-            new_class: The `FilterSetMetaclass` class to generate filters for.
-            filter_name (str): The attribute name of the filter on the `FilterSet`.
-            f: The filter instance to expand.
-
-        Returns:
-            Dict[str, Filter]: A dictionary of expanded filters.
-        """
-        expanded = OrderedDict()
-
-        # Make deep copies to avoid modifying original attributes
-        # get reference to opts/declared filters so originals aren't modified
-        orig_meta, orig_declared = new_class._meta, new_class.declared_filters
-        new_class._meta = copy.deepcopy(new_class._meta)
-        new_class.declared_filters = {}
-
-        # Use meta.fields to generate auto filters
-        new_class._meta.fields = {f.field_name: f.lookups or []}
-
-        try:
-            # We call super().get_filters() to use standard django-filter generation
-            # We cannot call new_class.get_filters() here if we override it below
-            # so we might need a workaround or assume AutoFilter is simple.
-
-            # Since AdvancedFilterSet overrides get_filters, we need to be careful.
-            # However, expand_auto_filter is legacy/compatibility.
-            # We rely on the fact that super().get_filters() calculates based on meta.fields.
-            gen_filters = super(AdvancedFilterSet, new_class).get_filters()
-
-            for gen_name, gen_f in gen_filters.items():
-                # get_filters() generates param names from the model field name, so
-                # Replace the model field name with the attribute name from the FilterSet
-                gen_name = gen_name.replace(f.field_name, filter_name, 1)
-
-                # do not overwrite declared filters
-                # Add to expanded filters if it's not an explicitly declared filter
-                if gen_name not in orig_declared:
-                    expanded[gen_name] = gen_f
-        except (TypeError, KeyError):
-            # TypeError: field doesn't exist on model (e.g. reverse relation)
-            # KeyError: field name not found in generated filters
-            pass
-
-        # restore reference to original attributes (opts/declared filters)
-        new_class._meta, new_class.declared_filters = orig_meta, orig_declared
-
-        return expanded
-
-
-# Define the lookup prefixes, similar to DRF
+# Lookup prefixes for ``construct_search`` — single-char shortcuts that map
+# plain field names like ``^name`` to ORM lookups like ``name__istartswith``.
 LOOKUP_PREFIXES = {
     "^": "istartswith",
     "=": "iexact",
@@ -471,13 +404,9 @@ class AdvancedFilterSet(GrapheneFilterSetMixin, filterset.BaseFilterSet, metacla
 
             # 2. Expand RelatedFilters (Lazily)
             if cls._meta.model is not None:
-                # We use the Metaclass helper methods
                 related_filters_val = getattr(cls, "related_filters", OrderedDict())
                 for name, f in related_filters_val.items():
-                    if isinstance(f, filters.RelatedFilter):
-                        expanded = cls.__class__.expand_related_filter(cls, name, f)
-                    else:
-                        expanded = cls.__class__.expand_auto_filter(cls, name, f)
+                    expanded = cls.__class__.expand_related_filter(cls, name, f)
                     all_filters.update(expanded)
 
             # 3. Add Full Text Search filters

@@ -156,6 +156,6 @@ def test_arg_factory_basic_props():
             model = FinalCoverageModel
             fields = {"name": ["exact", "icontains"]}
 
-    factory = FilterArgumentsFactory(DummyFS, "Test")
+    factory = FilterArgumentsFactory(DummyFS)
     res = factory.arguments  # Access as property, not method
     assert len(res) > 0

@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 
 from django.db import models
 
-from django_graphene_filters.filters import AutoFilter
 from django_graphene_filters.filterset import AdvancedFilterSet
 from django_graphene_filters.input_data_factories import (
     create_search_config,
@@ -166,24 +165,6 @@ def test_search_config_with_is_field():
     from django.db.models import F
 
     assert isinstance(result, F)
-
-
-def test_expand_auto_filter_exception():
-    """Test that exception during auto-filter expansion is handled gracefully."""
-    from django_graphene_filters.filterset import FilterSetMetaclass
-
-    class TestFS(AdvancedFilterSet):
-        class Meta:
-            model = Push98Model
-            fields = []
-
-    # Create an AutoFilter that will cause an exception when expanded
-    auto_filter = AutoFilter(lookups=["exact"], field_name="nonexistent_field")
-
-    # The expand_auto_filter should handle the exception gracefully
-    result = FilterSetMetaclass.expand_auto_filter(TestFS, "test_filter", auto_filter)
-    # Should return empty dict on exception
-    assert isinstance(result, dict)
 
 
 def test_get_filters_recursion_protection():

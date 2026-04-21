@@ -475,34 +475,6 @@ def test_converter_non_connection_type():
         mock_cls.assert_called_once_with(_type, required=True, description=None)
 
 
-def test_resolve_aggregates_lazy_computation():
-    """object_type.py: lazy computation for nested connections (no stored agg set)."""
-    from django_graphene_filters.object_type import _inject_aggregates_on_connection
-
-    agg_class = MagicMock()
-    agg_class.__name__ = "TestAgg"
-    agg_instance = MagicMock()
-    agg_class.return_value = agg_instance
-    agg_instance.compute.return_value = {"count": 5}
-
-    node_cls = MagicMock()
-    node_cls.__name__ = "TestNode"
-
-    class TestConn:
-        _meta = MagicMock()
-        _meta.fields = {}
-
-    _inject_aggregates_on_connection(node_cls, agg_class, TestConn)
-
-    # root has iterable but no aggregates attr.  Constrain ``iterable`` so
-    # MagicMock does NOT auto-create ``_aggregate_set`` — otherwise the
-    # root-level path (which short-circuits before the lazy-nested branch)
-    # would fire and this test would never exercise the nested branch.
-    root = MagicMock(spec=["iterable"])
-    root.iterable = MagicMock(spec=[])
-    info = MagicMock()
-
-    result = TestConn.resolve_aggregates(root, info)
-    assert result == {"count": 5}
-    agg_class.assert_called_once_with(queryset=root.iterable, request=info.context)
-    agg_instance.compute.assert_called_once_with(local_only=True)
+# ``test_resolve_aggregates_lazy_computation`` lives in ``test_aggregate_coverage.py``
+# alongside ``test_resolve_aggregates_no_iterable`` and the root-level stash tests —
+# see ``test_resolve_aggregates_lazy_computation_on_nested_connection`` there.

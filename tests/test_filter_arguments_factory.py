@@ -35,7 +35,7 @@ def test_factory_special_filter():
             model = FactModel
             fields = []
 
-    factory = FilterArgumentsFactory(SpecialFS, "Special")
+    factory = FilterArgumentsFactory(SpecialFS)
     args = factory.arguments
     assert "filter" in args
 
@@ -124,7 +124,7 @@ def test_same_class_registered_twice_is_idempotent():
 
 
 def test_get_field_model_formfield():
-    factory = FilterArgumentsFactory(FactFilterSet, "Fact")
+    factory = FilterArgumentsFactory(FactFilterSet)
     f_obj = MagicMock()
     f_obj.lookup_expr = "exact"
     f_obj.field_name = "name"

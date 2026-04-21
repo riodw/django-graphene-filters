@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from graphene_django.filter.filterset import custom_filterset_factory, setup_filterset
+from graphene_django.filter.filterset import custom_filterset_factory
 from graphene_django.filter.utils import replace_csv_filters
 
 from .filterset import AdvancedFilterSet
@@ -16,13 +16,6 @@ _RESERVED_FACTORY_KEYS = {"filterset_base_class"}
 # ``FilterArgumentsFactory``.  Caching here guarantees identical configs resolve
 # to the same class object.  See ``docs/spec-base_type_naming.md``.
 _dynamic_filterset_cache: dict[Any, type[AdvancedFilterSet]] = {}
-
-# Memoizes ``setup_filterset`` wrappers keyed by the input user class.  Without
-# this, every connection field that references the same user FilterSet would
-# build its own ``Graphene{X}Filter`` wrapper class — distinct objects with the
-# same ``__name__`` — tripping class-based naming's collision check in
-# ``FilterArgumentsFactory``.
-_setup_filterset_cache: dict[type, type[AdvancedFilterSet]] = {}
 
 
 def _make_cache_key(safe_meta: dict[str, Any]) -> Any:
@@ -71,28 +64,15 @@ def get_filterset_class(
     Returns:
         A FilterSet class based on the provided parameters.
     """
-    # If a base FilterSet class is provided, set it up for use with graphene.
-    # ``AdvancedFilterSet`` subclasses already inherit ``GrapheneFilterSetMixin``
-    # (for ``FILTER_DEFAULTS`` — the GlobalIDFilter overrides on FKs/PKs), so
-    # ``setup_filterset`` would only create a redundant ``Graphene{X}Filter``
-    # wrapper with a divergent ``__name__``.  Under class-based naming
-    # (see ``docs/spec-base_type_naming.md``) that divergence would produce
-    # two GraphQL input types for the same logical FilterSet — one at
-    # top-level (``Graphene{X}FilterInputType``) and one at nested
-    # ``RelatedFilter`` traversals (``{X}FilterInputType``).  We skip the
-    # wrap entirely for ``AdvancedFilterSet`` subclasses.  Non-Advanced
-    # filtersets (legacy path) still go through ``setup_filterset``, memoized
-    # so repeated calls reuse the same wrapper.
-    if filterset_class:
-        if isinstance(filterset_class, type) and issubclass(filterset_class, AdvancedFilterSet):
-            graphene_filterset_class = filterset_class
-        else:
-            cached_wrapper = _setup_filterset_cache.get(filterset_class)
-            if cached_wrapper is not None:
-                graphene_filterset_class = cached_wrapper
-            else:
-                graphene_filterset_class = setup_filterset(filterset_class)
-                _setup_filterset_cache[filterset_class] = graphene_filterset_class
+    # If a base FilterSet class is provided, use it directly.  ``AdvancedFilterSet``
+    # subclasses inherit ``GrapheneFilterSetMixin`` for ``FILTER_DEFAULTS`` (the
+    # GlobalIDFilter overrides on FKs/PKs), so graphene-django's ``setup_filterset``
+    # wrapper is unnecessary — it would only produce a divergent
+    # ``Graphene{X}Filter`` class name that breaks class-based naming (see
+    # ``docs/spec-base_type_naming.md``).  ``AdvancedDjangoFilterConnectionField``
+    # validates the subclass upfront; this function trusts its caller.
+    if filterset_class is not None:
+        graphene_filterset_class = filterset_class
     # If no base class is provided, create a custom FilterSet class based on `AdvancedFilterSet`
     else:
         # Strip reserved keys to prevent keyword collisions with
