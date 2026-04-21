@@ -31,7 +31,7 @@ from django_graphene_filters.object_type import _inject_aggregates_on_connection
 
 @pytest.mark.django_db
 def test_fetch_values_safety_limit():
-    """Cover _fetch_values safety limit warning (line 32)."""
+    """``_fetch_values`` honours the ``AGGREGATE_MAX_VALUES`` safety limit."""
     ot = ObjectType.objects.create(name="limit")
     for i in range(5):
         Object.objects.create(name=f"obj{i}", object_type=ot)
@@ -47,7 +47,7 @@ def test_fetch_values_safety_limit():
 
 
 def test_related_aggregate_bind_already_bound():
-    """Cover bind_aggregateset no-op when already bound (line 166->exit)."""
+    """``bind_aggregateset`` is a no-op when the aggregateset is already bound."""
     ra = RelatedAggregate(AdvancedAggregateSet, field_name="test")
     ra.bind_aggregateset(ObjectType)
     # Second call should be a no-op
@@ -56,7 +56,7 @@ def test_related_aggregate_bind_already_bound():
 
 
 def test_related_aggregate_class_setter():
-    """Cover aggregate_class setter (line 180)."""
+    """``aggregate_class`` setter writes through to the backing field."""
     ra = RelatedAggregate(AdvancedAggregateSet, field_name="test")
     ra.aggregate_class = ObjectType
     assert ra._aggregate_class is ObjectType
@@ -68,7 +68,7 @@ def test_related_aggregate_class_setter():
 
 
 def test_get_field_category_nonexistent_field():
-    """Cover ValueError when field doesn't exist (lines 203-204)."""
+    """``_get_field_category`` raises ValueError when the field doesn't exist."""
     with pytest.raises(ValueError, match="does not exist"):
 
         class BadFieldAgg(AdvancedAggregateSet):
@@ -78,7 +78,7 @@ def test_get_field_category_nonexistent_field():
 
 
 def test_get_field_category_unsupported_type():
-    """Cover ValueError when field type is unrecognised (line 209)."""
+    """``_get_field_category`` raises ValueError when the field type is unrecognised."""
     with patch(
         "django_graphene_filters.aggregateset.FIELD_CATEGORIES",
         {},
@@ -97,7 +97,7 @@ def test_get_field_category_unsupported_type():
 
 
 def test_metaclass_invalid_stat_for_category():
-    """Cover metaclass ValueError for invalid stat (lines 249-251)."""
+    """Metaclass raises ValueError when a stat isn't valid for the field's category."""
     with pytest.raises(ValueError, match="not valid for field"):
 
         class BadStatAgg(AdvancedAggregateSet):
@@ -113,7 +113,7 @@ def test_metaclass_invalid_stat_for_category():
 
 @pytest.mark.django_db
 def test_compute_field_permission_check():
-    """Cover _check_field_permission call (line 421)."""
+    """``_check_field_permission`` fires during compute planning."""
 
     class PermAgg(AdvancedAggregateSet):
         class Meta:
@@ -131,7 +131,7 @@ def test_compute_field_permission_check():
 
 @pytest.mark.django_db
 def test_compute_stat_permission_check():
-    """Cover _check_stat_permission call (line 427)."""
+    """``_check_stat_permission`` fires during compute planning."""
 
     class StatPermAgg(AdvancedAggregateSet):
         class Meta:
@@ -148,7 +148,7 @@ def test_compute_stat_permission_check():
 
 
 def test_parse_selection_set_no_sub_selections():
-    """Cover _parse_selection_set when a selection has no sub-selections (line 453)."""
+    """``_parse_selection_set`` emits an empty set when a selection has no sub-selections."""
     # Simulate a selection with no selection_set (e.g. a scalar field)
     sel = MagicMock()
     sel.name.value = "some_field"
@@ -162,13 +162,13 @@ def test_parse_selection_set_no_sub_selections():
 
 
 def test_get_child_selection_none_input():
-    """Cover _get_child_selection with None selection_set (line 464)."""
+    """``_get_child_selection`` returns None when given a ``None`` parent."""
     result = AdvancedAggregateSet._get_child_selection(None, "test")
     assert result is None
 
 
 def test_get_child_selection_field_not_found():
-    """Cover _get_child_selection when field name doesn't match (line 468)."""
+    """``_get_child_selection`` returns None when the field name isn't present."""
     sel = MagicMock()
     sel.name.value = "other_field"
     parent = MagicMock()
@@ -184,7 +184,7 @@ def test_get_child_selection_field_not_found():
 
 
 def test_connection_field_provided_aggregate_class():
-    """Cover provided_aggregate_class property (line 73)."""
+    """``provided_aggregate_class`` returns the explicit override when given."""
     from graphene_django import DjangoObjectType as GDjangoObjectType
 
     class TempNode(GDjangoObjectType):
@@ -203,7 +203,7 @@ def test_connection_field_provided_aggregate_class():
 
 
 def test_connection_field_aggregate_class_property():
-    """Cover aggregate_class property caching (lines 78-80)."""
+    """``aggregate_class`` caches the resolved class on first access."""
     from graphene_django import DjangoObjectType as GDjangoObjectType
 
     class TempNode2(GDjangoObjectType):
@@ -225,7 +225,7 @@ def test_connection_field_aggregate_class_property():
 
 
 def test_connection_field_aggregate_type_property():
-    """Cover aggregate_type property (lines 85-95)."""
+    """``aggregate_type`` builds and caches the aggregate ObjectType."""
     from graphene_django import DjangoObjectType as GDjangoObjectType
 
     class TempNode3(GDjangoObjectType):
@@ -247,7 +247,7 @@ def test_connection_field_aggregate_type_property():
 
 
 def test_extract_aggregate_selection_exception():
-    """Cover _extract_aggregate_selection except branch (lines 372-373)."""
+    """``_extract_aggregate_selection`` swallows AttributeError / TypeError."""
     info = MagicMock()
     # Make field_nodes iteration raise TypeError
     info.field_nodes = None
@@ -261,7 +261,7 @@ def test_extract_aggregate_selection_exception():
 
 
 def test_object_type_factory_mixin_cache_hit():
-    """Cover create_object_type cache hit (line 95)."""
+    """``create_object_type`` returns the cached class on repeat calls with the same name."""
     # Clear cache first to avoid collision with other tests
     name = "TestCachedCoverageType"
     ObjectTypeFactoryMixin.object_types.pop(name, None)
@@ -278,7 +278,7 @@ def test_object_type_factory_mixin_cache_hit():
 
 
 def test_inject_aggregates_already_injected():
-    """Cover early return when connection already has _aggregate_field_injected (line 35)."""
+    """``_inject_aggregates_on_connection`` early-returns when already injected."""
 
     class FakeConnection:
         _aggregate_field_injected = True
@@ -296,7 +296,7 @@ def test_inject_aggregates_already_injected():
 
 
 def test_resolve_aggregates_no_iterable():
-    """Cover resolve_aggregates returning None when no iterable (line 63)."""
+    """``resolve_aggregates`` returns None when the root has no ``iterable``."""
     from django_graphene_filters.object_type import _inject_aggregates_on_connection
 
     class FakeAgg(AdvancedAggregateSet):
@@ -367,7 +367,7 @@ def test_resolve_aggregates_lazy_computation_on_nested_connection():
 
 
 def test_aggregate_factory_circular_reference():
-    """Cover the circular reference skip (line 133->128 branch)."""
+    """``AggregateArgumentsFactory`` handles a self-referential ``RelatedAggregate``."""
 
     class CircularAgg(AdvancedAggregateSet):
         self_ref = RelatedAggregate("CircularAgg", field_name="object_type")
@@ -430,7 +430,7 @@ def test_compute_numeric_python_stats():
 
 
 def test_metaclass_custom_compute_method_passes_validation():
-    """Cover metaclass branch where compute_<field>_<stat> exists (line 250->246)."""
+    """Metaclass accepts unknown stats when a ``compute_<field>_<stat>`` method exists."""
 
     # This should NOT raise — the compute_ method validates the unknown stat.
     class ComputeMethodAgg(AdvancedAggregateSet):
@@ -462,7 +462,7 @@ def test_compute_custom_stat_without_compute_method_silently_skipped():
 
 
 def test_build_stat_fields_skips_unknown_stat():
-    """Cover _build_stat_fields loop-back when stat not in custom_stats or category_types (line 133->128)."""
+    """``_build_stat_fields`` silently skips stats absent from custom + category maps."""
     fields = AggregateArgumentsFactory._build_stat_fields(
         category="text",
         stat_names=["count", "unknown_stat_xyz"],
@@ -474,7 +474,7 @@ def test_build_stat_fields_skips_unknown_stat():
 
 
 def test_extract_aggregate_selection_no_aggregates_field():
-    """Cover _extract_aggregate_selection loop that doesn't find 'aggregates' (line 368->367)."""
+    """``_extract_aggregate_selection`` returns None when no ``aggregates`` selection is present."""
     info = MagicMock()
     field_node = MagicMock()
     sel = MagicMock()
@@ -487,7 +487,7 @@ def test_extract_aggregate_selection_no_aggregates_field():
 
 @pytest.mark.django_db
 def test_get_child_queryset_m2m_distinct():
-    """Cover get_child_queryset applying .distinct() for M2M (line 396)."""
+    """``get_child_queryset`` applies ``.distinct()`` on the derived child queryset."""
     from django.contrib.auth.models import Group, User
 
     class GroupAgg(AdvancedAggregateSet):
@@ -514,7 +514,7 @@ def test_get_child_queryset_m2m_distinct():
 
 
 def test_extract_aggregate_selection_field_node_no_selection_set():
-    """Cover _extract_aggregate_selection with field_node.selection_set falsy (line 365->364)."""
+    """``_extract_aggregate_selection`` returns None when a field node lacks a selection set."""
     info = MagicMock()
     field_node = MagicMock()
     field_node.selection_set = None  # no selection_set on this field_node
@@ -525,7 +525,7 @@ def test_extract_aggregate_selection_field_node_no_selection_set():
 
 @pytest.mark.django_db
 def test_compute_local_only_skips_related_aggregates():
-    """Cover aggregateset.py line 353: local_only=True early return skips related traversal."""
+    """``local_only=True`` skips the RelatedAggregate traversal entirely."""
 
     class ChildAgg(AdvancedAggregateSet):
         class Meta:
@@ -730,8 +730,8 @@ def test_blanket_distinct_on_group_by_queryset_preserves_count():
     for i in range(5):
         Object.objects.create(name=f"o{i}", object_type=ot)
 
-    # Simulate a queryset that arrives at ``resolve_queryset`` line 347
-    # with ``query.group_by`` already set — e.g. from a filterset that
+    # Simulate a queryset that arrives at ``resolve_queryset`` with
+    # ``query.group_by`` already set — e.g. from a filterset that
     # annotated with an aggregate expression.
     qs = ObjectType.objects.annotate(_obj_count=Count("objectss"))
     assert qs.query.group_by  # sanity: annotation triggered GROUP BY

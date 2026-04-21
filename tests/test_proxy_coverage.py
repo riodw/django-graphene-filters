@@ -65,8 +65,7 @@ def test_get_fields_none_field():
 
 
 def test_queryset_proxy_iterator_real():
-    """Test that iterating over QuerySetProxy yields the expected items."""
-    # Hit __iter__ line 100-107
+    """Iterating over a ``QuerySetProxy`` yields ``[wrapped_qs, q]``."""
     qs = CoverageModel.objects.none()
     proxy = QuerySetProxy(qs)
     # The current implementation returns [wrapped, q]

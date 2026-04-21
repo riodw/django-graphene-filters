@@ -153,7 +153,7 @@ def test_queryset_proxy_callable_return_non_queryset():
 
 
 def test_get_filter_fields_adds_search():
-    """Test get_filter_fields explicitly adds 'search' (Lines 458-460)."""
+    """``get_filter_fields`` explicitly adds ``'search'`` to the returned dict."""
 
     class SearchFieldsFS(AdvancedFilterSet):
         class Meta:
@@ -167,7 +167,7 @@ def test_get_filter_fields_adds_search():
 
 
 def test_construct_search_with_prefix():
-    """Test construct_search with field name that HAS a special prefix (Line 471)."""
+    """``construct_search`` maps special prefixes (``^=$``) to ORM lookups."""
 
     class SearchFS(AdvancedFilterSet):
         class Meta:
@@ -182,7 +182,7 @@ def test_construct_search_with_prefix():
 
 @pytest.mark.django_db
 def test_search_logic_full_flow():
-    """Test the full search logic via .qs property (Lines 481-493, 502)."""
+    """Full search flow via ``.qs`` property with ``search_fields`` declared."""
 
     class SearchLogicFS(AdvancedFilterSet):
         class Meta:
@@ -202,7 +202,7 @@ def test_search_logic_full_flow():
 
 
 def test_find_filter_rsplit():
-    """Test find_filter with LOOKUP_SEP (Line 562)."""
+    """``find_filter`` resolves keys containing ``LOOKUP_SEP``."""
 
     class SplitFS(AdvancedFilterSet):
         class Meta:
@@ -216,7 +216,7 @@ def test_find_filter_rsplit():
 
 
 def test_create_special_filters_skips_existing():
-    """Test that create_special_filters skips filters already in base_filters (Line 667 branch)."""
+    """``create_special_filters`` skips filters already present in ``base_filters``."""
 
     class SpecialFS(AdvancedFilterSet):
         class Meta:
@@ -231,7 +231,7 @@ def test_create_special_filters_skips_existing():
 
 
 def test_create_special_filters_with_field_name():
-    """Test create_special_filters with a field name (Line 663)."""
+    """``create_special_filters`` prefixes the output filter name with ``field_name``."""
 
     class SpecialFS(AdvancedFilterSet):
         class Meta:
@@ -243,17 +243,17 @@ def test_create_special_filters_with_field_name():
 
 
 def test_reload_settings_other_key():
-    """Test reload_settings with a key other than DJANGO_SETTINGS_KEY (conf.py line 100 branch)."""
+    """``reload_settings`` tolerates keys other than ``DJANGO_SETTINGS_KEY`` (no-op)."""
     reload_settings("OTHER_KEY", {"FOO": "BAR"})
 
 
 def test_validate_search_query_success():
-    """Test validate_search_query with a valid input (input_data_factories.py line 303 branch)."""
+    """``validate_search_query`` accepts an input dict with a ``value``."""
     validate_search_query({"value": "something"})
 
 
 def test_filter_arguments_factory_get_field_no_formfield():
-    """Test get_field when model field has no formfield() method (filter_arguments_factory.py line 222 branch)."""
+    """``get_field`` tolerates a model field without a ``formfield()`` method."""
 
     class DummyFS(AdvancedFilterSet):
         class Meta:

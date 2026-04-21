@@ -23,9 +23,9 @@ class FactFilterSet(AdvancedFilterSet):
 
 
 def test_factory_special_filter():
-    # We want to trigger line 148: if root.name in self.SPECIAL_FILTER_INPUT_TYPES_FACTORIES:
-    # Roots come from filterset_to_trees.
-    # We need a filter where field_name starts with a special postfix.
+    # Exercise the ``SPECIAL_FILTER_INPUT_TYPES_FACTORIES`` routing: a declared
+    # filter whose name matches one of the full-text-search postfixes must
+    # emit the corresponding special input field instead of a regular operator bag.
     from django_graphene_filters.filters import SearchQueryFilter
 
     class SpecialFS(AdvancedFilterSet):
@@ -41,7 +41,7 @@ def test_factory_special_filter():
 
 
 def test_create_input_object_type_cache():
-    # Call twice to hit line 188
+    # Call twice to exercise the cache-hit path.
     FilterArgumentsFactory.input_object_types = {}  # Reset
     t1 = FilterArgumentsFactory.create_input_object_type("CachedType", {"f": graphene.String()})
     t2 = FilterArgumentsFactory.create_input_object_type("CachedType", {"f": graphene.String()})

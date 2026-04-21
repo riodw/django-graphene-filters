@@ -31,19 +31,18 @@ def test_queryset_proxy_misc():
     """Test miscellaneous QuerySetProxy behaviors like count, model access, and iteration."""
     qs = FinalCoverageModel.objects.none()
     proxy = QuerySetProxy(qs)
-    # Line 96: return result (non-QuerySet)
+    # Callable attribute returning a non-QuerySet value — returned verbatim.
     assert proxy.count() == 0
-    # Line 79 (now fixed/different): non-callable attr
+    # Non-callable attribute access — returned via wrapt's ObjectProxy fallback.
     assert proxy.model == FinalCoverageModel
-    # Line 100-107: __iter__
+    # __iter__ yields [wrapped_qs, q].
     items = list(proxy)
     assert len(items) == 2
 
 
 def test_tree_form_logic():
-    """Test the validation logic and error handling of TreeFormMixin."""
+    """Validation logic and error handling for ``TreeFormMixin``."""
 
-    # Targets TreeFormMixin and TreeFilterForm (lines 386, 445, 450, 458, 471, 481-493, 502)
     class LeafForm(forms.Form):
         name = forms.CharField()
 
@@ -56,29 +55,26 @@ def test_tree_form_logic():
             fields = ["name"]
 
     fs = TreeFS(queryset=FinalCoverageModel.objects.none())
-    # Line 386: hit hasattr(self, "_form")
+    # Exercise the ``_form`` cache path by accessing ``fs.form`` twice.
     _ = fs.form
     _ = fs.form
 
-    # Manually build a TreeForm to hit init/clean/property
+    # Manually build a TreeForm to exercise init / clean / property.
     TreeForm = type("TreeForm", (LeafForm, AdvancedFilterSet.TreeFormMixin), {})
     form = TreeForm(data={}, and_forms=[leaf], not_form=leaf)
     fs._form = form
 
-    # Line 445: loops over and_forms
+    # Error aggregation loops over ``and_forms``.
     assert "name" in fs.errors["and"]["and_0"]
-    # Line 450: not_form check
+    # ``not_form`` errors appear under the NOT_KEY.
     assert "name" in fs.errors["not"]
-    # Line 471: not_form property
+    # ``not_form`` is exposed on the built form instance.
     assert fs.form.not_form == leaf
-
-    # Line 458-461: form validation is already tested above
 
 
 def test_find_filter_fallback_loop():
-    """Test that find_filter falls back to iterating values if key lookup fails."""
+    """``find_filter`` falls back to iterating filter values when key lookup fails."""
 
-    # Hit line 572-573
     class FallbackFS(AdvancedFilterSet):
         class Meta:
             model = FinalCoverageModel
@@ -95,8 +91,7 @@ def test_find_filter_fallback_loop():
 
 
 def test_create_filters_pg_trigram_loop():
-    """Test creation of full text search filters when Trigram extension is enabled."""
-    # Hit line 631 and 667
+    """Full-text search filter creation when the Trigram extension is enabled."""
     mock_settings = MagicMock()
     mock_settings.IS_POSTGRESQL = True
     mock_settings.HAS_TRIGRAM_EXTENSION = True
@@ -107,28 +102,28 @@ def test_create_filters_pg_trigram_loop():
             fields = {"name": ["full_text_search"]}
 
     with patch("django_graphene_filters.filterset.settings", mock_settings):
-        # 667: field_name is None for SearchQueryFilter/SearchRankFilter
+        # SearchQueryFilter / SearchRankFilter use ``field_name=None`` in the
+        # create_special_filters call; Trigram iterates per field name.
         res = FullFS.create_full_text_search_filters(OrderedDict())
         assert "name__trigram" in str(res.keys())
 
 
 def test_filters_gaps():
-    """Test miscellaneous edge cases for AnnotatedFilter and RelatedFilter."""
-    # AnnotatedFilter line 73: empty values
+    """Miscellaneous edge cases for ``AnnotatedFilter`` and ``RelatedFilter``."""
+    # AnnotatedFilter with an empty value returns the queryset unchanged.
     f = AnnotatedFilter(field_name="name", lookup_expr="exact")
     result = f.filter(FinalCoverageModel.objects.none(), [])
     # Check that it returns a QuerySet (comparison of QuerySets doesn't work with ==)
     assert hasattr(result, "model") and result.model == FinalCoverageModel
 
-    # RelatedFilter setter 190
+    # RelatedFilter ``filterset`` setter writes through to ``_filterset``.
     rf = RelatedFilter(filterset="path")
     rf.filterset = "new_path"
     assert rf._filterset == "new_path"
 
 
 def test_conf_extension_checks():
-    """Test the PostgreSQL Trigram extension check and settings reload."""
-    # conf.py 47-51, 100-101
+    """``check_pg_trigram_extension`` detection + ``reload_settings`` round-trip."""
     mock_cursor = MagicMock()
     mock_cursor.fetchone.return_value = [1]
     with patch(

@@ -12,8 +12,7 @@ class FactoryModel(models.Model):
 
 
 def test_get_filterset_class_from_meta():
-    # Case where filterset_class is None
-    # Hit line 31
+    # Case where filterset_class is None — the dynamic factory branch fires.
     fs_class = get_filterset_class(None, model=FactoryModel, fields=["name"])
     assert issubclass(fs_class, AdvancedFilterSet)
     assert fs_class._meta.model == FactoryModel

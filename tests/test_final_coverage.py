@@ -59,7 +59,7 @@ def test_no_ordering_args_when_orderset_absent():
 
 
 def test_resolve_queryset_with_orderset_application():
-    """Test connection_field.py lines 287-288: branch where orderset is applied."""
+    """Exercise the branch where an orderset is applied via resolve_queryset."""
 
     class SimpleOS(AdvancedOrderSet):
         class Meta:
@@ -95,8 +95,7 @@ def test_resolve_queryset_with_orderset_application():
         mock_fs_class = MagicMock(return_value=filterset)
         mock_get_fs.return_value = mock_fs_class
 
-        # Triggering resolve_queryset
-        # Need orderset_class and order_arg to be truthy to hit 287-288
+        # Triggering resolve_queryset with a truthy orderset_class and order_arg.
         args = {"orderBy": [{"name": "asc"}]}
         field.resolve_queryset(connection, [], info, args, {}, mock_fs_class)
 
@@ -110,7 +109,7 @@ def test_resolve_queryset_with_orderset_application():
 
 
 def test_lazy_related_class_mixin_raise_path_not_provided():
-    """Test mixins.py line 31: raise ImportError when bound_class is None."""
+    """``resolve_lazy_class`` raises ImportError when ``bound_class`` is None."""
     mixin = LazyRelatedClassMixin()
     # Path that doesn't exist to trigger ImportError
     with pytest.raises(ImportError):
@@ -123,7 +122,7 @@ def test_lazy_related_class_mixin_raise_path_not_provided():
 
 
 def test_advanced_django_object_type_init_with_meta_branch():
-    """Test object_type.py lines 27: branch where _meta is provided."""
+    """Exercise the branch where ``_meta`` is passed in explicitly."""
 
     class Dummy:
         pass
@@ -176,7 +175,7 @@ def test_order_arguments_factory_target_orderset_none_skip():
 
 
 def test_orderset_check_permissions_target_class_none_skip():
-    """Test orderset.py line 74 skip: target_class is None."""
+    """``check_permissions`` skips a related-order entry whose target class is None."""
 
     class MissingTargetOS(AdvancedOrderSet):
         rel = RelatedOrder(None, field_name="rel")
@@ -187,7 +186,7 @@ def test_orderset_check_permissions_target_class_none_skip():
 
 
 def test_orderset_get_flat_orders_target_orderset_none_skip():
-    """Test orderset.py line 96 skip: target_orderset is None."""
+    """``get_flat_orders`` skips a mapping value whose target orderset is None."""
 
     class MissingTargetOS2(AdvancedOrderSet):
         rel = RelatedOrder(None, field_name="rel")
@@ -205,7 +204,7 @@ def test_orderset_get_flat_orders_target_orderset_none_skip():
 
 
 def test_filterset_check_permissions_target_class_none_skip():
-    """Test filterset.py line 382 skip: target_class is None."""
+    """``check_permissions`` skips a related-filter entry whose target class is None."""
 
     class FSMissingRel(AdvancedFilterSet):
         rel = RelatedFilter(None, field_name="rel")
@@ -219,7 +218,7 @@ def test_filterset_check_permissions_target_class_none_skip():
 
 
 def test_filterset_collect_filter_fields_non_list_branch():
-    """Test filterset.py line 393 skip: 'and' value is not a list."""
+    """``_collect_filter_fields`` skips an ``and`` value that isn't a list."""
 
     class FSCollect(AdvancedFilterSet):
         class Meta:
@@ -234,7 +233,7 @@ def test_filterset_collect_filter_fields_non_list_branch():
 
 
 def test_filterset_collect_filter_fields_related_target_none_skip():
-    """Test filterset.py line 410 skip: target_class is None."""
+    """``_collect_filter_fields`` skips a related-filter entry whose target is None."""
 
     class FSRelMissing(AdvancedFilterSet):
         rel = RelatedFilter(None, field_name="rel")
@@ -251,7 +250,7 @@ def test_filterset_collect_filter_fields_related_target_none_skip():
 
 
 def test_filterset_collect_filter_fields_related_child_f_none_skip():
-    """Test filterset.py line 412 skip: child_f is None."""
+    """``_collect_filter_fields`` skips a related-filter key whose child filter is missing."""
 
     class ChildFS(AdvancedFilterSet):
         class Meta:
@@ -273,12 +272,12 @@ def test_filterset_collect_filter_fields_related_child_f_none_skip():
 
 
 # ---------------------------------------------------------------------------
-# Branch coverage: filters.py line 187->189
+# Branch coverage: RelatedFilter.get_queryset assert path
 # ---------------------------------------------------------------------------
 
 
 def test_related_filter_get_queryset_assert_when_no_model():
-    """Test filters.py line 187->189: assert fires when auto-derive fails (no model)."""
+    """Assert fires when auto-derive fails (the target filterset has no model)."""
 
     class EmptyFS(AdvancedFilterSet):
         class Meta:
@@ -298,12 +297,12 @@ def test_related_filter_get_queryset_assert_when_no_model():
 
 
 # ---------------------------------------------------------------------------
-# Branch coverage: filterset.py line 568->565
+# Branch coverage: _apply_related_queryset_constraints
 # ---------------------------------------------------------------------------
 
 
 def test_apply_related_queryset_constraints_no_explicit_qs():
-    """Test filterset.py line 568->565: loop completes with no explicit querysets."""
+    """Loop completes unchanged when no RelatedFilter has an explicit queryset."""
 
     class FSNoExplicit(AdvancedFilterSet):
         # RelatedFilter WITHOUT explicit queryset — _has_explicit_queryset is False
@@ -321,7 +320,7 @@ def test_apply_related_queryset_constraints_no_explicit_qs():
 
 
 def test_apply_related_queryset_constraints_explicit_but_none():
-    """Test filterset.py line 568->565: _has_explicit_queryset=True but queryset is None."""
+    """``_has_explicit_queryset`` True but the queryset itself is None — queryset stays unchanged."""
 
     class FSExplicitNone(AdvancedFilterSet):
         rel = RelatedFilter("tests.test_final_coverage.FSExplicitNone", field_name="name")
@@ -342,12 +341,12 @@ def test_apply_related_queryset_constraints_explicit_but_none():
 
 
 # ---------------------------------------------------------------------------
-# Branch coverage: orderset.py line 123->133
+# Branch coverage: OrderSet.get_fields with __all__ and no Meta.model
 # ---------------------------------------------------------------------------
 
 
 def test_orderset_get_fields_all_no_model():
-    """Test orderset.py line 123->133: __all__ with no Meta.model."""
+    """``get_fields`` returns empty when ``Meta.fields == '__all__'`` and no model."""
 
     class OSNoModel(AdvancedOrderSet):
         class Meta:
@@ -364,7 +363,7 @@ def test_orderset_get_fields_all_no_model():
 
 
 def test_converter_type_not_registered():
-    """object_type.py line 249: early return when _type is None."""
+    """Converter early-returns None when the registry has no type for the model."""
     from django_graphene_filters.object_type import _convert_field_to_list_or_connection
 
     field = MagicMock(spec=models.ManyToOneRel)
@@ -378,7 +377,7 @@ def test_converter_type_not_registered():
 
 
 def test_converter_m2m_field_description_branch():
-    """object_type.py line 252: ManyToManyField takes description from field.help_text."""
+    """``ManyToManyField`` takes its description from ``field.help_text`` directly."""
     from django_graphene_filters.object_type import _convert_field_to_list_or_connection
 
     field = MagicMock(spec=models.ManyToManyField)
@@ -411,7 +410,7 @@ def _make_reverse_rel_field():
 
 
 def test_converter_non_advanced_type_falls_back_to_django_filter_connection():
-    """object_type.py lines 266-268: non-AdvancedDjangoObjectType with filter_fields."""
+    """Non-``AdvancedDjangoObjectType`` targets fall back to ``DjangoFilterConnectionField``."""
     from django_graphene_filters.object_type import _convert_field_to_list_or_connection
 
     field = _make_reverse_rel_field()
@@ -434,7 +433,7 @@ def test_converter_non_advanced_type_falls_back_to_django_filter_connection():
 
 
 def test_converter_connection_without_filter_fields():
-    """object_type.py line 270: connection type without filter_fields → DjangoConnectionField."""
+    """Connection type without ``filter_fields`` → ``DjangoConnectionField``."""
     from django_graphene_filters.object_type import _convert_field_to_list_or_connection
 
     field = _make_reverse_rel_field()
@@ -456,7 +455,7 @@ def test_converter_connection_without_filter_fields():
 
 
 def test_converter_non_connection_type():
-    """object_type.py line 272: non-connection type → DjangoListField."""
+    """Non-connection target type → ``DjangoListField``."""
     from django_graphene_filters.object_type import _convert_field_to_list_or_connection
 
     field = _make_reverse_rel_field()

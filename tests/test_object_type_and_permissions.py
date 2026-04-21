@@ -15,7 +15,7 @@ from django_graphene_filters.permissions import apply_cascade_permissions
 
 @pytest.mark.django_db
 class TestMakeSentinelFallback:
-    """Cover object_type.py lines 82-85: fallback sets FK IDs to 0."""
+    """``_make_sentinel`` fallback path: FK IDs default to 0 when no source PK."""
 
     def test_no_source_pk_sets_fk_to_zero(self):
         """_make_sentinel() with no source_pk hits the fallback branch."""
@@ -35,7 +35,7 @@ class TestMakeSentinelFallback:
         assert sentinel.pk == 0
 
     def test_source_pk_found_copies_fk_ids(self):
-        """_make_sentinel(source_pk) with existing row copies real FK IDs (lines 79-81)."""
+        """``_make_sentinel(source_pk)`` copies real FK IDs from the existing row."""
         ot = ObjectType.objects.create(name="test_ot")
         obj = Object.objects.create(name="test_obj", object_type=ot)
         sentinel = ObjectNode._make_sentinel(source_pk=obj.pk)
@@ -54,23 +54,23 @@ class TestMakeSentinelFallback:
 
 @pytest.mark.django_db
 class TestGetNodeEdgeCases:
-    """Cover object_type.py lines 110-111, 113-114, 123-132, 133."""
+    """Edge cases for ``AdvancedDjangoObjectType.get_node``."""
 
     def test_get_node_id_zero_returns_sentinel(self):
-        """get_node(info, 0) returns a sentinel (line 110-111)."""
+        """``get_node(info, 0)`` returns a sentinel (FK fallback chain)."""
         info = MagicMock()
         result = ObjectNode.get_node(info, 0)
         assert result is not None
         assert result.pk == 0
 
     def test_get_node_id_none_returns_none(self):
-        """get_node(info, None) returns None (line 113-114)."""
+        """``get_node(info, None)`` returns None."""
         info = MagicMock()
         result = ObjectNode.get_node(info, None)
         assert result is None
 
     def test_get_node_nonexistent_row_returns_none(self):
-        """get_node for a pk that never existed returns None (line 133)."""
+        """``get_node`` returns None for a pk that never existed in the table."""
         info = MagicMock()
         result = ObjectNode.get_node(info, 999999)
         assert result is None
@@ -83,7 +83,7 @@ class TestGetNodeEdgeCases:
         assert result.pk == 0
 
     def test_get_node_hidden_row_returns_sentinel(self):
-        """get_node for a row hidden by get_queryset returns sentinel (lines 123-132)."""
+        """``get_node`` returns a sentinel for a row hidden by ``get_queryset``."""
         ot = ObjectType.objects.create(name="hidden_ot", is_private=False)
         obj = Object.objects.create(name="hidden_obj", object_type=ot, is_private=True)
 
@@ -103,7 +103,7 @@ class TestGetNodeEdgeCases:
 
 
 class TestApplyCascadePermissions:
-    """Cover permissions.py lines 103-104 and 117-118."""
+    """Tests for ``apply_cascade_permissions`` cycle detection and field filtering."""
 
     def test_cycle_detection_breaks_infinite_loop(self):
         from django_graphene_filters.permissions import _cascade_seen
@@ -127,7 +127,7 @@ class TestApplyCascadePermissions:
         assert result is qs
 
     def test_skips_fk_with_no_registered_graphene_type(self):
-        """FK targets not registered in the graphene registry are skipped (line 78-79)."""
+        """FK targets not registered in the graphene registry are skipped."""
         from unittest.mock import patch
 
         info = MagicMock()

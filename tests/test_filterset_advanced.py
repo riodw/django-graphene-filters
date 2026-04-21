@@ -378,7 +378,7 @@ def test_tree_form_mixin_errors_nesting():
 
 
 def test_full_text_search_warnings():
-    # Hit line 622
+    # Exercises the "full text search unavailable on non-PostgreSQL vendor" warning.
     mock_settings = MagicMock()
     mock_settings.IS_POSTGRESQL = False
 
@@ -396,7 +396,7 @@ def test_full_text_search_warnings():
 
 
 def test_trigram_search_warnings():
-    # Hit line 637
+    # Exercises the "pg_trgm extension missing" warning on PostgreSQL.
     mock_settings = MagicMock()
     mock_settings.IS_POSTGRESQL = True
     mock_settings.HAS_TRIGRAM_EXTENSION = False
