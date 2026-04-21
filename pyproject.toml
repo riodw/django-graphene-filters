@@ -1,7 +1,7 @@
 # https://packaging.python.org/en/latest/guides/writing-pyproject-toml/
 [project]
 name = "django-graphene-filters"
-version = "0.7.5"
+version = "1.0.0"
 description = "Advanced auto related filters for Graphene Django"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -14,7 +14,7 @@ maintainers = [
 ]
 keywords = ["django", "graphene", "filters", "related"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
