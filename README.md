@@ -1,4 +1,4 @@
-# ![Graphene Logo](http://graphene-python.org/favicon.png) Django Graphene Filters (Beta)
+# ![Graphene Logo](http://graphene-python.org/favicon.png) Django Graphene Filters
 
 [![build][build-image]][build-url] [![pypi][pypi-image]][pypi-url] [![coveralls][coveralls-image]][coveralls-url] [![license][license-image]][license-url] [![changelog][changelog-image]][changelog-url]
 
@@ -13,7 +13,23 @@
 [changelog-image]: https://img.shields.io/badge/changelog-CHANGELOG.md-blue
 [changelog-url]: https://github.com/riodw/django-graphene-filters/blob/master/CHANGELOG.md
 
-This package contains Advanced auto related filters for [graphene-django](https://github.com/graphql-python/graphene-django).
+Production-stable advanced auto-related **filtering, ordering, aggregation, and
+permission-aware connection fields** for [graphene-django](https://github.com/graphql-python/graphene-django).
+
+Key features:
+
+- **Nested AND / OR / NOT filter trees** with relation traversal via `RelatedFilter`.
+- **`AdvancedOrderSet`** with nested `RelatedOrder`, `DISTINCT ON` support
+  (PostgreSQL native + emulated fallback), and window-function ordering.
+- **`AdvancedAggregateSet`** with `RelatedAggregate`, sync + async (`acompute`)
+  paths, and a shared registry of DB / Python / special stats.
+- **Class-based GraphQL type naming** — one stable GraphQL type per declared
+  `FilterSet` / `OrderSet` / `AggregateSet` class, enabling Apollo / Pinia cache
+  dedup across reused relations.
+- **PostgreSQL full-text search** via `SearchQuery`, `SearchRank`, and `Trigram`
+  (auto-detected; gracefully no-ops off-Postgres).
+- **Per-field permission checks** and **cascade FK visibility** via
+  `apply_cascade_permissions` + sentinel nodes with an `isRedacted: Boolean!` field.
 
 #### This package takes inspiration from:
 
