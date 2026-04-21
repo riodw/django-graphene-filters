@@ -24,6 +24,8 @@ from django_filters import Filter, filterset
 from django_filters.conf import settings as django_settings
 from django_filters.utils import get_model_field
 from graphene import String  # GraphQL String type
+from graphene_django.filter.filterset import GrapheneFilterSetMixin
+from stringcase import pascalcase
 from wrapt import ObjectProxy
 
 from . import filters, utils
@@ -326,20 +328,42 @@ LOOKUP_PREFIXES = {
 }
 
 
-class AdvancedFilterSet(filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
-    """Allow you to use advanced filters."""
+class AdvancedFilterSet(GrapheneFilterSetMixin, filterset.BaseFilterSet, metaclass=FilterSetMetaclass):
+    """Allow you to use advanced filters.
 
-    # TODO(spec-base_type_naming.md): add a `type_name_for(field_name=None)`
-    # classmethod. Returns `f"{cls.__name__}InputType"` when `field_name`
-    # is None, else `f"{cls.__name__}{pascalcase(field_name)}FilterInputType"`.
-    # `FilterArgumentsFactory` calls this instead of computing names from a
-    # prefix + traversal path. Symmetric helpers live on `AdvancedOrderSet`
-    # and `AdvancedAggregateSet`.
+    Mixes in ``GrapheneFilterSetMixin`` directly so that graphene-django's
+    ``FILTER_DEFAULTS`` (which maps FK / PK filters to ``GlobalIDFilter``) is
+    available without wrapping the class via ``setup_filterset``.  This lets
+    class-based naming (see ``docs/spec-base_type_naming.md``) use each
+    user-declared class's ``__name__`` directly — top-level connection uses
+    and nested ``RelatedFilter`` traversals resolve to the same GraphQL type
+    rather than a ``Graphene{X}Filter`` wrapper vs. the raw user class.
+    """
 
     # Cache for expanded filters
     _expanded_filters = None
     # Flag to prevent infinite recursion in get_filters
     _is_expanding_filters = False
+
+    @classmethod
+    def type_name_for(cls, field_path: str | None = None) -> str:
+        """Return the GraphQL input type name for this filterset or a sub-field path.
+
+        Class-based naming: every generated type name derives from
+        ``cls.__name__`` alone — no node-name prefix, no traversal-path
+        accumulation. ``FilterArgumentsFactory`` calls this instead of
+        stitching prefixes. See ``docs/spec-base_type_naming.md``.
+
+        * ``field_path=None`` → root input: ``f"{cls.__name__}InputType"``.
+        * ``field_path="name"`` → operator bag: ``f"{cls.__name__}NameFilterInputType"``.
+        * ``field_path="created__date"`` → nested transform bag:
+          ``f"{cls.__name__}CreatedDateFilterInputType"``.
+        """
+        if field_path is None:
+            return f"{cls.__name__}InputType"
+        parts = field_path.split(LOOKUP_SEP)
+        pascal = "".join(pascalcase(p) for p in parts)
+        return f"{cls.__name__}{pascal}FilterInputType"
 
     def __init__(
         self,

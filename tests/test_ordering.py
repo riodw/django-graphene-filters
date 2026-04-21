@@ -578,36 +578,88 @@ def test_order_direction_values():
 
 
 class TestOrderArgumentsFactory:
+    """Tests for the public ``OrderArgumentsFactory`` API under class-based naming.
+
+    See ``docs/spec-base_type_naming.md``: the legacy ``create_order_input_type``
+    recursive helper and ``input_type_prefix`` parameter are gone.  The public
+    entry point is ``.arguments``; emitted GraphQL types are cached in
+    ``OrderArgumentsFactory.input_object_types`` keyed by
+    ``OrderSet.type_name_for()``.
+    """
+
     def test_arguments_contains_order_by(self):
-        factory = OrderArgumentsFactory(ParentOrderSet, "Test")
+        factory = OrderArgumentsFactory(ParentOrderSet)
         args = factory.arguments
         assert "orderBy" in args
         assert isinstance(args["orderBy"], graphene.Argument)
 
-    def test_create_order_input_type_flat_fields(self):
-        factory = OrderArgumentsFactory(ChildOrderSet, "Child")
-        input_type = factory.create_order_input_type()
-        # The generated type should have a 'title' field
-        fields = input_type._meta.fields
-        assert "title" in fields
+    def test_flat_orderset_root_type_exposes_declared_fields(self):
+        """An OrderSet with only flat Meta.fields produces a root type with those fields.
 
-    def test_create_order_input_type_with_related(self):
-        factory = OrderArgumentsFactory(ParentOrderSet, "Parent")
-        input_type = factory.create_order_input_type()
-        fields = input_type._meta.fields
+        Replaces the previous ``test_create_order_input_type_flat_fields`` which
+        called the removed ``create_order_input_type`` helper directly.
+        """
+        OrderArgumentsFactory.input_object_types.pop(ChildOrderSet.type_name_for(), None)
+        OrderArgumentsFactory._type_orderset_registry.pop(ChildOrderSet.type_name_for(), None)
+
+        factory = OrderArgumentsFactory(ChildOrderSet)
+        factory.arguments  # triggers BFS build
+
+        input_type = OrderArgumentsFactory.input_object_types[ChildOrderSet.type_name_for()]
+        assert input_type.__name__ == "ChildOrderSetInputType"
+        assert "title" in input_type._meta.fields
+
+    def test_orderset_root_type_exposes_flat_and_related_fields(self):
+        """An OrderSet with flat fields and a RelatedOrder exposes both at the root.
+
+        Replaces the previous ``test_create_order_input_type_with_related``.  The
+        RelatedOrder field is emitted via a lambda ref to the target OrderSet's
+        root type (see ``docs/spec-base_type_naming.md``).
+        """
+        for cls in (ParentOrderSet, ChildOrderSet):
+            OrderArgumentsFactory.input_object_types.pop(cls.type_name_for(), None)
+            OrderArgumentsFactory._type_orderset_registry.pop(cls.type_name_for(), None)
+
+        factory = OrderArgumentsFactory(ParentOrderSet)
+        factory.arguments
+
+        parent_type = OrderArgumentsFactory.input_object_types[ParentOrderSet.type_name_for()]
+        fields = parent_type._meta.fields
         assert "name" in fields
         assert "description" in fields
         assert "related" in fields
+        # BFS also built the target OrderSet's root type.
+        assert ChildOrderSet.type_name_for() in OrderArgumentsFactory.input_object_types
 
-    def test_input_type_caching(self):
-        """Calling create_order_input_type twice should return the same type."""
-        factory = OrderArgumentsFactory(ChildOrderSet, "Cached")
-        type1 = factory.create_order_input_type()
-        type2 = factory.create_order_input_type()
-        assert type1 is type2
+    def test_root_type_is_reused_across_factory_instances(self):
+        """Two factories bound to the same OrderSet share the same cached root type.
 
-    def test_circular_related_order_does_not_recurse(self):
-        """Circular RelatedOrder references should produce an empty type, not stack overflow."""
+        Replaces the previous ``test_input_type_caching``.  This is the class-based
+        naming guarantee: the emitted GraphQL type for an OrderSet is stable across
+        every connection / factory invocation that reaches it.
+        """
+        OrderArgumentsFactory.input_object_types.pop(ChildOrderSet.type_name_for(), None)
+        OrderArgumentsFactory._type_orderset_registry.pop(ChildOrderSet.type_name_for(), None)
+
+        factory_a = OrderArgumentsFactory(ChildOrderSet)
+        factory_a.arguments
+        type_a = OrderArgumentsFactory.input_object_types[ChildOrderSet.type_name_for()]
+
+        factory_b = OrderArgumentsFactory(ChildOrderSet)
+        factory_b.arguments
+        type_b = OrderArgumentsFactory.input_object_types[ChildOrderSet.type_name_for()]
+
+        assert type_a is type_b
+
+    def test_circular_related_order_resolves_via_lambda(self):
+        """Circular RelatedOrder references resolve cleanly via BFS + lambda refs.
+
+        Under the old implementation, mutual ``A → B → A`` references relied on a
+        ``_building`` guard to break recursion and emitted an empty type for the
+        back-edge.  Under class-based naming (``docs/spec-base_type_naming.md``)
+        the lambda-ref pattern handles cycles naturally: BFS visits each class
+        once, and the back-edge lambda resolves at schema-finalize time.
+        """
 
         class CircularAOrder(AdvancedOrderSet):
             b = RelatedOrder("CircularBOrder", field_name="b_rel")
@@ -626,16 +678,24 @@ class TestOrderArgumentsFactory:
         # Resolve the lazy string reference
         CircularAOrder.related_orders["b"]._orderset = CircularBOrder
 
-        # Clear any cached types from prior tests
-        prefix = "CircularTest"
-        for key in list(OrderArgumentsFactory.input_object_types):
-            if key.startswith(prefix):
-                del OrderArgumentsFactory.input_object_types[key]
+        # Clear any cached types for these classes from prior test runs
+        for cls in (CircularAOrder, CircularBOrder):
+            OrderArgumentsFactory.input_object_types.pop(cls.type_name_for(), None)
+            OrderArgumentsFactory._type_orderset_registry.pop(cls.type_name_for(), None)
 
-        factory = OrderArgumentsFactory(CircularAOrder, prefix)
-        # Should not raise RecursionError
-        input_type = factory.create_order_input_type()
-        assert input_type is not None
+        factory = OrderArgumentsFactory(CircularAOrder)
+        # Must not raise RecursionError — BFS visits each class once.
+        factory.arguments
+
+        # Both root types materialise, and each exposes its own fields as well as
+        # the back-edge to the other OrderSet.
+        a_type = OrderArgumentsFactory.input_object_types[CircularAOrder.type_name_for()]
+        b_type = OrderArgumentsFactory.input_object_types[CircularBOrder.type_name_for()]
+        assert a_type is not None and b_type is not None
+        assert "name" in a_type._meta.fields
+        assert "b" in a_type._meta.fields
+        assert "title" in b_type._meta.fields
+        assert "a" in b_type._meta.fields
 
 
 # ---------------------------------------------------------------------------
@@ -739,15 +799,42 @@ class TestConnectionFieldOrdering:
         assert field.provided_orderset_class is ChildOrderSet
         assert "orderBy" in field.ordering_args
 
-    def test_custom_order_input_type_prefix(self):
-        field = AdvancedDjangoFilterConnectionField(
-            IntegrationNode,
-            order_input_type_prefix="Custom",
-        )
-        assert field.order_input_type_prefix == "Custom"
+    def test_order_input_type_prefix_kwarg_is_deprecated(self):
+        """Passing the legacy ``order_input_type_prefix`` kwarg emits DeprecationWarning.
 
-    def test_default_order_input_type_prefix(self):
+        Under class-based naming (``docs/spec-base_type_naming.md``) the kwarg is
+        ignored — the emitted GraphQL type name derives from
+        ``orderset_class.type_name_for()`` regardless of what the caller passes.
+        Replaces the previous ``test_custom_order_input_type_prefix`` which asserted
+        on the removed ``order_input_type_prefix`` property.
+        """
+        with pytest.warns(DeprecationWarning, match="order_input_type_prefix"):
+            field = AdvancedDjangoFilterConnectionField(
+                IntegrationNode,
+                order_input_type_prefix="Custom",
+            )
+        order_arg_type = field.ordering_args["orderBy"].type.of_type.of_type
+        # The generated type name comes from the OrderSet class, not the ignored kwarg.
+        assert order_arg_type.__name__ == ParentOrderSet.type_name_for()
+        assert "Custom" not in order_arg_type.__name__
+
+    def test_order_input_type_name_is_class_based(self):
+        """The order input type name derives from the OrderSet class, not the node.
+
+        Replaces the previous ``test_default_order_input_type_prefix`` which asserted
+        on the removed ``order_input_type_prefix`` property.  The spec mandates that
+        two connection fields reaching the same OrderSet share the same GraphQL type.
+        """
         field = AdvancedDjangoFilterConnectionField(IntegrationNode)
-        # IntegrationNode -> "IntegrationNode".replace("Type", "") -> "IntegrationNode"
-        # + ParentOrderSet.__name__ -> "IntegrationNodeParentOrderSet"
-        assert "ParentOrderSet" in field.order_input_type_prefix
+        order_arg_type = field.ordering_args["orderBy"].type.of_type.of_type
+        # Class-based naming: ``{ParentOrderSet.__name__}InputType`` — no node prefix.
+        assert order_arg_type.__name__ == ParentOrderSet.type_name_for()
+        assert "IntegrationNode" not in order_arg_type.__name__
+
+        # Reuse across fields: two connections bound to the same OrderSet share the
+        # same emitted GraphQL type object.
+        field_b = AdvancedDjangoFilterConnectionField(IntegrationNode)
+        assert (
+            field.ordering_args["orderBy"].type.of_type.of_type
+            is field_b.ordering_args["orderBy"].type.of_type.of_type
+        )

@@ -9,14 +9,46 @@ from .filterset import AdvancedFilterSet
 
 _RESERVED_FACTORY_KEYS = {"filterset_base_class"}
 
+# Memoizes dynamically-generated AdvancedFilterSet subclasses by (model, fields).
+# Under class-based naming, two connection fields on the same model (without an
+# explicit ``filterset_class``) would otherwise fabricate two distinct classes
+# sharing the same ``__name__`` and trip the collision check in
+# ``FilterArgumentsFactory``.  Caching here guarantees identical configs resolve
+# to the same class object.  See ``docs/spec-base_type_naming.md``.
+_dynamic_filterset_cache: dict[Any, type[AdvancedFilterSet]] = {}
 
-# TODO(spec-base_type_naming.md): memoize the dynamic branch below.
-# `custom_filterset_factory` fabricates a new AdvancedFilterSet subclass on
-# every call; two connection fields using the same model without an
-# explicit `filterset_class` would produce two distinct classes sharing the
-# same `__name__` and trip class-based naming's collision check. Cache by
-# `(model, frozenset(fields.items()))` so identical configs resolve to one
-# class object. See spec §"Implementation plan" step 7.
+# Memoizes ``setup_filterset`` wrappers keyed by the input user class.  Without
+# this, every connection field that references the same user FilterSet would
+# build its own ``Graphene{X}Filter`` wrapper class — distinct objects with the
+# same ``__name__`` — tripping class-based naming's collision check in
+# ``FilterArgumentsFactory``.
+_setup_filterset_cache: dict[type, type[AdvancedFilterSet]] = {}
+
+
+def _make_cache_key(safe_meta: dict[str, Any]) -> Any:
+    """Build a hashable cache key from the meta dict.
+
+    ``model`` is the primary discriminator.  ``fields`` may be ``"__all__"``,
+    a list of field names, or a dict mapping field -> list of lookups — all
+    serialised into a hashable form so identical declarations share a class.
+    Any extra meta keys are included verbatim (they are flags like
+    ``interfaces`` or ``exclude``).
+    """
+    model = safe_meta.get("model")
+    fields = safe_meta.get("fields")
+    if isinstance(fields, dict):
+        fields_key = (
+            "dict",
+            tuple(sorted((k, tuple(v) if isinstance(v, list) else v) for k, v in fields.items())),
+        )
+    elif isinstance(fields, (list, tuple)):
+        fields_key = ("seq", tuple(fields))
+    else:
+        fields_key = ("raw", fields)
+    extra = tuple(sorted((k, v) for k, v in safe_meta.items() if k not in {"model", "fields"}))
+    return (model, fields_key, extra)
+
+
 def get_filterset_class(
     filterset_class: type[AdvancedFilterSet] | None,
     **meta: Any,
@@ -39,18 +71,43 @@ def get_filterset_class(
     Returns:
         A FilterSet class based on the provided parameters.
     """
-    # If a base FilterSet class is provided, set it up for use with graphene
+    # If a base FilterSet class is provided, set it up for use with graphene.
+    # ``AdvancedFilterSet`` subclasses already inherit ``GrapheneFilterSetMixin``
+    # (for ``FILTER_DEFAULTS`` — the GlobalIDFilter overrides on FKs/PKs), so
+    # ``setup_filterset`` would only create a redundant ``Graphene{X}Filter``
+    # wrapper with a divergent ``__name__``.  Under class-based naming
+    # (see ``docs/spec-base_type_naming.md``) that divergence would produce
+    # two GraphQL input types for the same logical FilterSet — one at
+    # top-level (``Graphene{X}FilterInputType``) and one at nested
+    # ``RelatedFilter`` traversals (``{X}FilterInputType``).  We skip the
+    # wrap entirely for ``AdvancedFilterSet`` subclasses.  Non-Advanced
+    # filtersets (legacy path) still go through ``setup_filterset``, memoized
+    # so repeated calls reuse the same wrapper.
     if filterset_class:
-        graphene_filterset_class = setup_filterset(filterset_class)
+        if isinstance(filterset_class, type) and issubclass(filterset_class, AdvancedFilterSet):
+            graphene_filterset_class = filterset_class
+        else:
+            cached_wrapper = _setup_filterset_cache.get(filterset_class)
+            if cached_wrapper is not None:
+                graphene_filterset_class = cached_wrapper
+            else:
+                graphene_filterset_class = setup_filterset(filterset_class)
+                _setup_filterset_cache[filterset_class] = graphene_filterset_class
     # If no base class is provided, create a custom FilterSet class based on `AdvancedFilterSet`
     else:
         # Strip reserved keys to prevent keyword collisions with
         # custom_filterset_factory(model, filterset_base_class=..., **meta).
         safe_meta = {k: v for k, v in meta.items() if k not in _RESERVED_FACTORY_KEYS}
-        graphene_filterset_class = custom_filterset_factory(
-            filterset_base_class=AdvancedFilterSet,
-            **safe_meta,
-        )
+        cache_key = _make_cache_key(safe_meta)
+        cached = _dynamic_filterset_cache.get(cache_key)
+        if cached is not None:
+            graphene_filterset_class = cached
+        else:
+            graphene_filterset_class = custom_filterset_factory(
+                filterset_base_class=AdvancedFilterSet,
+                **safe_meta,
+            )
+            _dynamic_filterset_cache[cache_key] = graphene_filterset_class
 
     # Replace any comma-separated value (CSV) filters with a more flexible format
     replace_csv_filters(graphene_filterset_class)

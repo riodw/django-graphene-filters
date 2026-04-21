@@ -110,10 +110,24 @@ class UserRole(models.Model):
 class RoleFilter(AdvancedFilterSet):
     class Meta:
         model = Role
-        fields = {"name": ["exact", "icontains"]}
+        # ``name`` exposes ``in`` so tests can select multiple roles by name —
+        # see note below on why we filter by name rather than FK id/GlobalID.
+        fields = {"name": ["exact", "icontains", "in"]}
 
 
 class UserRoleFilter(AdvancedFilterSet):
+    # Filter by the related Role through its own FilterSet — nested traversal
+    # lets us query ``role: { name: { in: [...] } }``.
+    #
+    # We intentionally do NOT declare ``"role": ["in"]`` in ``Meta.fields``
+    # here.  Under class-based naming (``docs/spec-base_type_naming.md``)
+    # ``AdvancedFilterSet`` inherits ``GrapheneFilterSetMixin``, which maps
+    # ForeignKey filters to ``GlobalIDFilter``; graphene-django's
+    # ``GlobalIDFilter`` is a singular field class and does not cooperate
+    # with the ``in`` lookup (it would try to base64-decode the whole list as
+    # one Relay ID and raise ``argument should be a bytes-like object or
+    # ASCII string, not 'list'``).  Filtering via the nested ``RoleFilter``
+    # sidesteps that limitation entirely.
     role = RelatedFilter(RoleFilter, field_name="role")
 
     class Meta:
@@ -121,7 +135,6 @@ class UserRoleFilter(AdvancedFilterSet):
         fields = {
             "start_date": ["exact", "lte", "gte"],
             "end_date": ["exact", "lte", "gte", "isnull"],
-            "role": ["in"],
         }
 
 
@@ -332,14 +345,20 @@ class UserProfileRoleFilterTests(TransactionTestCase):
                 profile__roles__role__in=role_ids,
                 profile__roles__start_date__lte=end,
             ).distinct()
+
+        We take role PKs for backward compatibility with the test signatures
+        but issue the GraphQL query via the nested ``Role.name`` filter — see
+        the note on ``UserRoleFilter.role`` for why FK ``__in`` is avoided
+        under class-based naming.  Role PKs → Role names roundtrip here.
         """
-        ids_str = ", ".join(str(rid) for rid in role_ids)
+        role_names = list(Role.objects.filter(pk__in=role_ids).values_list("name", flat=True))
+        names_str = ", ".join(f'"{name}"' for name in role_names)
         query = f"""
             query {{
               allUsers(filter: {{
                 profile: {{
                   roles: {{
-                    role: {{ in: [{ids_str}] }}
+                    role: {{ name: {{ in: [{names_str}] }} }}
                     startDate: {{ lte: "{end}" }}
                   }}
                 }}

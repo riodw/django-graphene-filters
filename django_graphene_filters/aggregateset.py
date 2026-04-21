@@ -442,10 +442,6 @@ class AggregateSetMetaclass(type):
 # ---------------------------------------------------------------------------
 
 
-# TODO(spec-base_type_naming.md): add a `type_name_for(field_name=None)`
-# classmethod on `AdvancedAggregateSet`. Returns `f"{cls.__name__}Type"`
-# (root) or `f"{cls.__name__}{pascalcase(field_name)}Type"` (per-field).
-# `AggregateArgumentsFactory` calls this instead of stitching an input prefix.
 class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
     """Declarative aggregate statistics on a filtered queryset.
 
@@ -466,6 +462,23 @@ class AdvancedAggregateSet(metaclass=AggregateSetMetaclass):
         model = None
         fields: dict[str, list[str]] = {}
         custom_stats: dict = {}
+
+    @classmethod
+    def type_name_for(cls, field_name: str | None = None) -> str:
+        """Return the GraphQL output type name for this aggregateset or a per-field sub-type.
+
+        Class-based naming: every generated type name derives from
+        ``cls.__name__`` alone — no node-name prefix, no traversal-path
+        accumulation. See ``docs/spec-base_type_naming.md``.
+
+        * ``field_name=None`` → root output: ``f"{cls.__name__}Type"``.
+        * ``field_name="name"`` → per-field stat bag: ``f"{cls.__name__}NameType"``.
+        """
+        from stringcase import pascalcase
+
+        if field_name is None:
+            return f"{cls.__name__}Type"
+        return f"{cls.__name__}{pascalcase(field_name)}Type"
 
     def __init__(self, queryset: QuerySet, request: Any = None) -> None:
         self.queryset = queryset

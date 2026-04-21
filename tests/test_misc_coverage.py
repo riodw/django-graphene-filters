@@ -55,22 +55,36 @@ def test_annotated_filter_distinct():
     assert result is not None
 
 
-def test_connection_field_no_provided_filterset():
-    """Test that filter_input_type_prefix defaults correctly when no filterset is provided."""
+def test_connection_field_auto_filterset_uses_class_based_name():
+    """When no explicit filterset_class is given, the auto-generated FilterSet still
+    drives a class-based GraphQL type name.
+
+    Replaces the previous ``test_connection_field_no_provided_filterset`` which
+    asserted on the removed ``filter_input_type_prefix`` property.  Under the spec
+    (``docs/spec-base_type_naming.md``) the emitted input type name is derived from
+    the FilterSet class's own ``type_name_for()`` — no node-name prefix — and two
+    fields on the same model share the same auto-generated class / type name.
+    """
 
     class TestNode(DjangoObjectType):
         class Meta:
             model = ObjectType
             fields = "__all__"
             interfaces = (graphene.relay.Node,)
+            filter_fields = ["name"]
 
-    # Create connection field without filterset_class
     field = AdvancedDjangoFilterConnectionField(TestNode)
+    advanced_arg_type = field.filtering_args["filter"].type
+    # The root input type's name matches the auto-generated FilterSet class's own
+    # ``type_name_for()`` — i.e. ``{GeneratedClass.__name__}InputType``.
+    assert advanced_arg_type.__name__ == field.filterset_class.type_name_for()
+    # And there's no leaked node-name prefix in the type name.
+    assert "TestNode" not in advanced_arg_type.__name__
 
-    # Access filter_input_type_prefix when provided_filterset_class is None
-    prefix = field.filter_input_type_prefix
-    # Should return just the node type name
-    assert prefix == "TestNode"
+    # A second field on the same model/fields reuses the cached FilterSet class
+    # and therefore the same root input type — Apollo cache dedup target.
+    field_b = AdvancedDjangoFilterConnectionField(TestNode)
+    assert field.filtering_args["filter"].type is field_b.filtering_args["filter"].type
 
 
 def test_special_filter_input_type_factory():

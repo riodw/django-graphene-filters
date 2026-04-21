@@ -36,20 +36,26 @@ class FinalUniqueCoverageModel(models.Model):
 # ---------------------------------------------------------------------------
 
 
-def test_order_input_type_prefix_no_orderset_branch():
-    """Test connection_field.py line 97: branch where provided_orderset_class is falsy."""
+def test_no_ordering_args_when_orderset_absent():
+    """When a node type has no orderset, the connection field emits no ``orderBy`` arg.
+
+    Replaces the previous ``test_order_input_type_prefix_no_orderset_branch`` which
+    asserted on the removed ``order_input_type_prefix`` property.  Under class-based
+    naming (``docs/spec-base_type_naming.md``) there is no prefix surface at all —
+    the equivalent observable behaviour is simply whether ``orderBy`` shows up.
+    """
 
     class NodeNoOrder(DjangoObjectType):
         class Meta:
             model = FinalUniqueCoverageModel
             fields = "__all__"
             interfaces = (graphene.relay.Node,)
+            filter_fields = ["name"]
 
     field = AdvancedDjangoFilterConnectionField(NodeNoOrder)
-    # Patch to ensure provided_orderset_class returns None (though it should by default)
-    with patch.object(AdvancedDjangoFilterConnectionField, "provided_orderset_class", None):
-        prefix = field.order_input_type_prefix
-        assert prefix == "NodeNoOrder"
+    assert field.provided_orderset_class is None
+    assert field.ordering_args == {}
+    assert "orderBy" not in field.args
 
 
 def test_resolve_queryset_with_orderset_application():
@@ -136,7 +142,12 @@ def test_advanced_django_object_type_init_with_meta_branch():
 
 
 def test_order_arguments_factory_target_orderset_none_skip():
-    """Test order_arguments_factory.py line 57 skip: target_orderset is None."""
+    """A RelatedOrder whose target orderset is ``None`` is skipped from the root type.
+
+    Replaces the previous call to the removed ``create_order_input_type`` helper;
+    now asserts against the cached type in ``OrderArgumentsFactory.input_object_types``
+    keyed by ``OrderSet.type_name_for()``.  See ``docs/spec-base_type_naming.md``.
+    """
 
     class NoTargetOS(AdvancedOrderSet):
         rel = RelatedOrder(None, field_name="rel")
@@ -145,10 +156,18 @@ def test_order_arguments_factory_target_orderset_none_skip():
             model = FinalUniqueCoverageModel
             fields = ["name"]
 
-    factory = OrderArgumentsFactory(NoTargetOS, "NoTarget")
-    input_type = factory.create_order_input_type()
-    # 'rel' should be missing from fields because its orderset was None
+    # Clear any cached type from prior runs to keep this test hermetic.
+    OrderArgumentsFactory.input_object_types.pop(NoTargetOS.type_name_for(), None)
+    OrderArgumentsFactory._type_orderset_registry.pop(NoTargetOS.type_name_for(), None)
+
+    factory = OrderArgumentsFactory(NoTargetOS)
+    factory.arguments  # triggers BFS build
+
+    input_type = OrderArgumentsFactory.input_object_types[NoTargetOS.type_name_for()]
+    # 'rel' is missing because its target orderset is None — the flat 'name'
+    # field still materialises.
     assert "rel" not in input_type._meta.fields
+    assert "name" in input_type._meta.fields
 
 
 # ---------------------------------------------------------------------------

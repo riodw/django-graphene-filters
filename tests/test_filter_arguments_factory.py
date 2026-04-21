@@ -2,6 +2,7 @@ import warnings
 from unittest.mock import MagicMock, patch
 
 import graphene
+import pytest
 from django.db import models
 
 from django_graphene_filters.filter_arguments_factory import FilterArgumentsFactory
@@ -47,8 +48,18 @@ def test_create_input_object_type_cache():
     assert t1 is t2
 
 
-def test_collision_warning_fires_for_different_filterset_same_prefix():
-    """Warn when two filtersets share a type name — the second silently overwrites the first."""
+def test_class_name_collision_raises_type_error():
+    """Two distinct FilterSet classes with the same ``__name__`` must raise on registration.
+
+    Under class-based naming (``docs/spec-base_type_naming.md``) the caller can no
+    longer choose a prefix, so the old "same-prefix-different-class" warn scenario
+    disappears.  What remains — and must stay loud — is the case where two distinct
+    classes in different modules happen to share a Python ``__name__`` (e.g.
+    ``app_a.filters.BrandFilter`` vs ``app_b.filters.BrandFilter``).  The spec
+    mandates a strict ``TypeError`` on the second registration attempt: class-based
+    naming turns this from "user input issue" into "bug".  See spec
+    §"Class-name collision handling".
+    """
 
     class AltModel(models.Model):
         title = models.CharField(max_length=100)
@@ -56,52 +67,57 @@ def test_collision_warning_fires_for_different_filterset_same_prefix():
         class Meta:
             app_label = "recipes"
 
-    class AltFilterSet(AdvancedFilterSet):
-        class Meta:
-            model = AltModel
-            fields = ["title"]
+    # Build two DISTINCT classes that both report ``__name__ == "CollidingBrandFilter"``.
+    # ``type(...)`` lets us fabricate the collision that real users hit when two
+    # modules happen to declare FilterSets with the same short class name.
+    first = type(
+        "CollidingBrandFilter",
+        (AdvancedFilterSet,),
+        {"Meta": type("Meta", (), {"model": FactModel, "fields": ["name"]})},
+    )
+    second = type(
+        "CollidingBrandFilter",
+        (AdvancedFilterSet,),
+        {"Meta": type("Meta", (), {"model": AltModel, "fields": ["title"]})},
+    )
+    assert first.__name__ == second.__name__ == "CollidingBrandFilter"
+    assert first is not second
 
-    prefix = "CollisionTestPrefix"
-    type_name = f"{prefix}FilterInputType"
-
-    # Clear any prior state for this prefix
+    type_name = first.type_name_for()
     FilterArgumentsFactory.input_object_types.pop(type_name, None)
     FilterArgumentsFactory._type_filterset_registry.pop(type_name, None)
 
-    # First registration — no warning
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        FilterArgumentsFactory(FactFilterSet, prefix).arguments
-    assert not any("overwritten" in str(w.message) for w in caught)
+    try:
+        # First registration succeeds and populates the caches.
+        FilterArgumentsFactory(first).arguments
 
-    # Second registration with a *different* filterset — must warn
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        FilterArgumentsFactory(AltFilterSet, prefix).arguments
-    collision_warnings = [w for w in caught if "overwritten" in str(w.message)]
-    assert collision_warnings, "Expected a collision warning when two filtersets share a prefix"
-    assert "CollisionTestPrefix" in str(collision_warnings[0].message)
+        # Second registration with a *different* class claiming the same type name
+        # must raise — this is the spec-mandated strict behaviour.
+        with pytest.raises(TypeError, match="Class-based naming collision"):
+            FilterArgumentsFactory(second).arguments
+    finally:
+        # Keep the class-level registry clean for other tests.
+        FilterArgumentsFactory.input_object_types.pop(type_name, None)
+        FilterArgumentsFactory._type_filterset_registry.pop(type_name, None)
 
-    # Cleanup
+
+def test_same_class_registered_twice_is_idempotent():
+    """Registering the same FilterSet class twice is a no-op cache hit — no error, no warning.
+
+    Replaces the previous ``test_no_collision_warning_for_same_filterset_same_prefix``.
+    Validates the sibling branch of ``_check_collision``: same class, same type name,
+    second call short-circuits through the cache.
+    """
+    type_name = FactFilterSet.type_name_for()
     FilterArgumentsFactory.input_object_types.pop(type_name, None)
     FilterArgumentsFactory._type_filterset_registry.pop(type_name, None)
 
-
-def test_no_collision_warning_for_same_filterset_same_prefix():
-    """No warning when the same filterset is registered twice under the same prefix (cache hit path)."""
-    prefix = "NoDupWarnPrefix"
-    type_name = f"{prefix}FilterInputType"
-
-    FilterArgumentsFactory.input_object_types.pop(type_name, None)
-    FilterArgumentsFactory._type_filterset_registry.pop(type_name, None)
-
-    FilterArgumentsFactory(FactFilterSet, prefix).arguments  # prime the cache
+    FilterArgumentsFactory(FactFilterSet).arguments  # prime the cache
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        FilterArgumentsFactory(FactFilterSet, prefix).arguments  # same filterset, same prefix
-    collision_warnings = [w for w in caught if "overwritten" in str(w.message)]
-    assert not collision_warnings
+        FilterArgumentsFactory(FactFilterSet).arguments  # same class — idempotent
+    assert not any("collision" in str(w.message).lower() for w in caught)
 
     FilterArgumentsFactory.input_object_types.pop(type_name, None)
     FilterArgumentsFactory._type_filterset_registry.pop(type_name, None)

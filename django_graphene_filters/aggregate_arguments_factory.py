@@ -1,7 +1,18 @@
-"""Module for converting an AdvancedAggregateSet class to aggregate output types."""
+"""Module for converting an AdvancedAggregateSet class to aggregate output types.
+
+Class-based naming (see ``docs/spec-base_type_naming.md``): every
+``AdvancedAggregateSet`` maps to one stable GraphQL output type derived from
+the class name alone.  ``RelatedAggregate`` traversals emit a lambda
+reference to the target aggregateset's root type rather than an inline
+subtree — mirroring the ``FilterArgumentsFactory`` / ``OrderArgumentsFactory``
+pattern — so a given AggregateSet always resolves to the same root type
+regardless of which connection reached it.
+"""
+
+import warnings
+from typing import cast
 
 import graphene
-from stringcase import pascalcase
 
 from .aggregate_types import STAT_TYPES
 from .aggregateset import AdvancedAggregateSet
@@ -16,40 +27,43 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
     in the response, not passed as arguments.
     """
 
-    # Track which aggregate classes are currently being built to prevent infinite recursion
-    # from circular RelatedAggregate references (e.g. ObjectAggregate → ValueAggregate → ObjectAggregate)
-    _building: set[type] = set()
+    # Tracks which aggregateset class built each cached type name.  Under class-based
+    # naming a collision means two distinct classes share a ``__name__`` — always
+    # a bug (either two modules declared the same class or schema build ran twice
+    # with stale caches).  Strict raise, not warn.
+    _type_aggregate_registry: dict[str, type] = {}
 
-    # TODO(spec-base_type_naming.md): drop `input_type_prefix`. Derive
-    # type names from `aggregate_class.__name__`:
-    #   root:      f"{aggregate_class.__name__}Type"
-    #   per-field: f"{aggregate_class.__name__}{pascalcase(field_name)}Type"
-    # See spec §"Naming scheme — Aggregates".
     def __init__(
         self,
         aggregate_class: type[AdvancedAggregateSet],
-        input_type_prefix: str,
+        input_type_prefix: str | None = None,
     ) -> None:
         """Initialize the factory.
 
         Args:
-            aggregate_class: The AdvancedAggregateSet class to convert.
-            input_type_prefix: Prefix for generated GraphQL type names.
+            aggregate_class: The ``AdvancedAggregateSet`` class to convert.
+            input_type_prefix: **Deprecated.** Ignored under class-based
+                naming — the type name is derived from
+                ``aggregate_class.type_name_for()``.  Emits a
+                :class:`DeprecationWarning` if non-``None``. Removed in 1.1.
         """
+        if input_type_prefix is not None:
+            warnings.warn(
+                "AggregateArgumentsFactory `input_type_prefix` is ignored under class-based "
+                "naming and will be removed in 1.1. The generated type name is now derived "
+                "from `aggregate_class.type_name_for()`.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.aggregate_class = aggregate_class
-        self.input_type_prefix = input_type_prefix
+        self.aggregate_type_name = aggregate_class.type_name_for()
 
-    # TODO(spec-base_type_naming.md): rework for class-based naming.
-    # - `sub_type_name`: f"{self.aggregate_class.__name__}{pascalcase(field_name)}Type"
-    # - `root_type_name`: f"{self.aggregate_class.__name__}Type"
-    # - For `RelatedAggregate` children, construct the child factory without
-    #   a prefix (`AggregateArgumentsFactory(target_class)`) so it derives
-    #   its own name from `target_class.__name__`. Consider replacing the
-    #   inline `child_factory.build_aggregate_type()` call with a
-    #   `graphene.Field(lambda: self.object_types[target_name])` reference
-    #   to mirror filter/order lazy refs and simplify the `_building` guard.
     def build_aggregate_type(self) -> type[graphene.ObjectType]:
-        """Build the root aggregate ObjectType.
+        """Build and return the root aggregate ObjectType.
+
+        BFS-builds ``self.aggregate_class`` and every ``RelatedAggregate`` descendant
+        so that all lambda references resolve by schema-finalize time.  Idempotent:
+        subsequent calls for the same AggregateSet hit the cache.
 
         For an ObjectAggregate with fields = {
             "name": ["count", "min", "max", "mode", "uniques"],
@@ -60,25 +74,73 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
 
             class ObjectAggregateType(ObjectType):
                 count = Int()
-                name = Field(ObjectNameAggregateType)
-                created_date = Field(ObjectCreatedDateAggregateType)
+                name = Field(ObjectAggregateNameType)
+                created_date = Field(ObjectAggregateCreatedDateType)
 
-            class ObjectNameAggregateType(ObjectType):
+            class ObjectAggregateNameType(ObjectType):
                 count = Int()
                 min = String()
                 max = String()
                 mode = String()
                 uniques = List(UniqueValueType)
 
-            class ObjectCreatedDateAggregateType(ObjectType):
+            class ObjectAggregateCreatedDateType(ObjectType):
                 min = DateTime()
                 max = DateTime()
 
         Returns:
             The root aggregate ObjectType class.
         """
-        config = self.aggregate_class._aggregate_config
-        custom_stats = self.aggregate_class._custom_stats
+        self._ensure_built()
+        self._check_collision(self.aggregate_type_name, self.aggregate_class)
+        return self.object_types[self.aggregate_type_name]
+
+    def _ensure_built(self) -> None:
+        """BFS-build ``self.aggregate_class`` and all related-aggregate descendants.
+
+        Cycles (A → B → A) are handled naturally: an aggregateset already in
+        ``seen`` is skipped, and lambda refs resolve once the BFS finishes.
+        """
+        pending: list[type[AdvancedAggregateSet]] = [self.aggregate_class]
+        seen: set[type[AdvancedAggregateSet]] = set()
+        while pending:
+            ag_class = pending.pop()
+            if ag_class in seen:
+                continue
+            seen.add(ag_class)
+
+            target_name = ag_class.type_name_for()
+            if target_name not in self.object_types:
+                self._build_class_type(ag_class)
+            else:
+                self._check_collision(target_name, ag_class)
+
+            # Enqueue every RelatedAggregate target reachable from this aggregateset.
+            for rel_agg in getattr(ag_class, "related_aggregates", {}).values():
+                target = rel_agg.aggregate_class
+                if target is not None and target not in seen:
+                    pending.append(target)
+
+    def _check_collision(self, type_name: str, ag_class: type) -> None:
+        """Raise if ``type_name`` is already registered for a different class."""
+        prior = self._type_aggregate_registry.get(type_name)
+        if prior is not None and prior is not ag_class:
+            raise TypeError(
+                f"Class-based naming collision: GraphQL type '{type_name}' is already "
+                f"registered by '{prior.__module__}.{prior.__qualname__}' but now "
+                f"'{ag_class.__module__}.{ag_class.__qualname__}' is trying to claim "
+                "the same name. Rename one of the aggregateset classes."
+            )
+
+    def _build_class_type(self, ag_class: type[AdvancedAggregateSet]) -> None:
+        """Build the root ``ObjectType`` for ``ag_class`` and cache it.
+
+        Per-field stat bags use ``ag_class.type_name_for(field_name)``.
+        ``RelatedAggregate`` fields emit a lambda reference to the target
+        aggregateset's root type — parallel to the filter/order lazy refs.
+        """
+        config = ag_class._aggregate_config
+        custom_stats = ag_class._custom_stats
 
         # Root-level count is always present
         root_fields: dict[str, graphene.Field | graphene.Scalar] = {
@@ -91,7 +153,7 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
 
             # Build per-field sub-type
             sub_fields = self._build_stat_fields(category, stat_names, custom_stats)
-            sub_type_name = f"{self.input_type_prefix}{pascalcase(field_name)}AggregateType"
+            sub_type_name = ag_class.type_name_for(field_name)
             sub_type = self.create_object_type(sub_type_name, sub_fields)
 
             root_fields[field_name] = graphene.Field(
@@ -99,31 +161,29 @@ class AggregateArgumentsFactory(ObjectTypeFactoryMixin):
                 description=f"Aggregate statistics for `{field_name}`",
             )
 
-        # Build nested types for RelatedAggregates (with recursion protection).
-        # Circular references (A → B → A) are broken by omitting the back-edge
-        # field entirely — the schema simply won't include that relation.
-        # This is intentional: lazy/stub types would add complexity for a rare
-        # edge case.  Schema build is single-threaded in all Django deployments,
-        # so the process-global _building set is safe.
-        AggregateArgumentsFactory._building.add(self.aggregate_class)
-        try:
-            for rel_name, rel_agg in getattr(self.aggregate_class, "related_aggregates", {}).items():
-                target_class = rel_agg.aggregate_class
-                if target_class in AggregateArgumentsFactory._building:
-                    # Circular reference — skip to prevent infinite recursion
-                    continue
-                child_prefix = f"{self.input_type_prefix}{pascalcase(rel_name)}"
-                child_factory = AggregateArgumentsFactory(target_class, child_prefix)
-                child_type = child_factory.build_aggregate_type()
-                root_fields[rel_name] = graphene.Field(
-                    child_type,
-                    description=f"Aggregates across `{rel_name}` relationship",
-                )
-        finally:
-            AggregateArgumentsFactory._building.discard(self.aggregate_class)
+        # RelatedAggregate children → lambda ref to the target's root type.
+        # The BFS in ``_ensure_built`` guarantees the target type is in
+        # ``self.object_types`` by the time graphene resolves the lambda.
+        for rel_name, rel_agg in getattr(ag_class, "related_aggregates", {}).items():
+            target_class = rel_agg.aggregate_class
+            if target_class is None:
+                continue
+            target_name = target_class.type_name_for()
+            root_fields[rel_name] = graphene.Field(
+                lambda tn=target_name: self.object_types[tn],
+                description=f"Aggregates across `{rel_name}` relationship",
+            )
 
-        root_type_name = f"{self.input_type_prefix}AggregateType"
-        return self.create_object_type(root_type_name, root_fields)
+        root_type_name = ag_class.type_name_for()
+        self.object_types[root_type_name] = cast(
+            type[graphene.ObjectType],
+            type(
+                root_type_name,
+                (graphene.ObjectType,),
+                root_fields,
+            ),
+        )
+        self._type_aggregate_registry[root_type_name] = ag_class
 
     @staticmethod
     def _build_stat_fields(

@@ -1,4 +1,13 @@
-"""Module for converting a AdvancedFilterSet class to filter arguments."""
+"""Module for converting a AdvancedFilterSet class to filter arguments.
+
+Class-based naming (see ``docs/spec-base_type_naming.md``): every
+``AdvancedFilterSet`` maps to one stable GraphQL input type derived from the
+class name alone.  ``RelatedFilter`` traversals emit a lambda reference to
+the target filterset's root type rather than an inline subtree — so the same
+``BrandFilter`` always resolves to the same ``BrandFilterInputType``, whatever
+connection reached it.  Apollo and any name-keyed schema cache dedupe the
+shared types across pages.
+"""
 
 import warnings
 from collections.abc import Callable, Sequence
@@ -14,7 +23,7 @@ from graphene_django.forms.converter import convert_form_field
 from stringcase import pascalcase
 
 from .conf import settings
-from .filters import SearchQueryFilter, SearchRankFilter, TrigramFilter
+from .filters import BaseRelatedFilter, SearchQueryFilter, SearchRankFilter, TrigramFilter
 from .filterset import AdvancedFilterSet
 from .input_types import (
     SearchQueryFilterInputType,
@@ -43,59 +52,50 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
         ),
     }
 
-    # Cache for storing input object types
+    # Cache for storing input object types, keyed by class-derived name.
     input_object_types: dict[str, type[graphene.InputObjectType]] = {}
 
-    # Tracks which filterset class built each cached type name; used to detect collisions
+    # Tracks which filterset class built each cached type name.  Under class-based
+    # naming a collision means two distinct classes share a ``__name__`` — that's
+    # always a bug (either two modules declared the same class or schema build
+    # ran twice with stale caches).  Strict raise, not warn.
     _type_filterset_registry: dict[str, type] = {}
 
-    # TODO(spec-base_type_naming.md): drop `input_type_prefix` from the
-    # signature. Derive `filter_input_type_name` from `filterset_class.__name__`
-    # (e.g. `BrandFilter` -> `BrandFilterInputType`) so a given FilterSet
-    # always emits the same root type regardless of which connection field
-    # reached it. See spec §"Naming scheme" and §"Implementation plan" step 2.
     def __init__(
         self,
         filterset_class: type[AdvancedFilterSet],
-        input_type_prefix: str,
+        input_type_prefix: str | None = None,
     ) -> None:
-        """Initialize the factory with a filterset class and an input type prefix.
+        """Initialize the factory.
 
         Args:
-            filterset_class: The AdvancedFilterSet class to convert.
-            input_type_prefix: Prefix to use for GraphQL types.
+            filterset_class: The ``AdvancedFilterSet`` class to convert.
+            input_type_prefix: **Deprecated.** Ignored under class-based
+                naming — the type name is derived from
+                ``filterset_class.type_name_for()``.  Emits a
+                :class:`DeprecationWarning` if non-``None``. Removed in 1.1.
         """
+        if input_type_prefix is not None:
+            warnings.warn(
+                "FilterArgumentsFactory `input_type_prefix` is ignored under class-based "
+                "naming and will be removed in 1.1. The generated type name is now derived "
+                "from `filterset_class.type_name_for()`.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.filterset_class = filterset_class
-        self.input_type_prefix = input_type_prefix
-        self.filter_input_type_name = f"{self.input_type_prefix}FilterInputType"
+        self.filter_input_type_name = filterset_class.type_name_for()
 
     @property
     def arguments(self) -> dict[str, graphene.Argument]:
         """Create and return the GraphQL arguments for filtering.
 
-        Inspect a FilterSet and produce the arguments to pass to a Graphene Field.
-        These arguments will be available to filter against in the GraphQL.
-
-        Returns:
-            A dictionary mapping from argument names to graphene.Argument objects.
+        BFS-builds ``self.filterset_class`` and every ``RelatedFilter`` descendant
+        so that all lambda references resolve by schema-finalize time.  Idempotent:
+        subsequent calls for the same FilterSet hit the cache.
         """
-        if self.filter_input_type_name in self.input_object_types:
-            # Cache hit — check for collision (same type name, different filterset)
-            prior = self._type_filterset_registry.get(self.filter_input_type_name)
-            if prior is not None and prior is not self.filterset_class:
-                warnings.warn(
-                    f"InputObjectType '{self.filter_input_type_name}' was previously built for "
-                    f"'{prior.__name__}' but is now being overwritten for "
-                    f"'{self.filterset_class.__name__}'. "
-                    "Queries using the first field will silently use the wrong filter schema. "
-                    "Set unique `filter_input_type_prefix` values on each "
-                    "AdvancedDjangoFilterConnectionField to fix this.",
-                    stacklevel=2,
-                )
-        else:
-            self.create_filter_input_type(
-                self.filterset_to_trees(self.filterset_class),
-            )
+        self._ensure_built()
+        self._check_collision(self.filter_input_type_name, self.filterset_class)
         input_object_type = self.input_object_types[self.filter_input_type_name]
         return {
             settings.FILTER_KEY: graphene.Argument(
@@ -104,94 +104,163 @@ class FilterArgumentsFactory(InputObjectTypeFactoryMixin):
             ),
         }
 
-    def create_filter_input_type(self, roots: list[Node]) -> type[graphene.InputObjectType]:
-        """Generate a GraphQL filter InputObjectType for filtering based on the filter set trees.
+    def _ensure_built(self) -> None:
+        """BFS-build ``self.filterset_class`` and all related-filter descendants.
 
-        Args:
-            roots: List of root nodes for each filter tree.
-
-        Returns:
-            A graphene.InputObjectType for filtering.
+        Cycles (A → B → A) are handled naturally: a filterset already in
+        ``seen`` is skipped, and lambda refs resolve once the BFS finishes.
         """
-        # Create GraphQL input fields based on the filter tree
-        input_fields = {
-            root.name: self.create_filter_input_subfield(
-                root,
-                self.input_type_prefix,
-                f"`{pascalcase(root.name)}` field",
+        pending: list[type[AdvancedFilterSet]] = [self.filterset_class]
+        seen: set[type[AdvancedFilterSet]] = set()
+        while pending:
+            fs_class = pending.pop()
+            if fs_class in seen:
+                continue
+            seen.add(fs_class)
+
+            target_name = fs_class.type_name_for()
+            if target_name not in self.input_object_types:
+                # Build this filterset's root type.
+                self._build_class_type(fs_class)
+            else:
+                self._check_collision(target_name, fs_class)
+
+            # Enqueue every RelatedFilter target reachable from this filterset.
+            for rel_filter in getattr(fs_class, "related_filters", {}).values():
+                target = rel_filter.filterset
+                if target is not None and target not in seen:
+                    pending.append(target)
+
+    def _check_collision(self, type_name: str, fs_class: type[AdvancedFilterSet]) -> None:
+        """Raise if ``type_name`` is already registered for a different class."""
+        prior = self._type_filterset_registry.get(type_name)
+        if prior is not None and prior is not fs_class:
+            raise TypeError(
+                f"Class-based naming collision: GraphQL type '{type_name}' is already "
+                f"registered by '{prior.__module__}.{prior.__qualname__}' but now "
+                f"'{fs_class.__module__}.{fs_class.__qualname__}' is trying to claim "
+                "the same name. Rename one of the filterset classes."
             )
-            for root in roots
-        }
 
-        # Add special fields for AND, OR, and NOT fields for logical combination of filters
-        logic_fields = {
-            settings.AND_KEY: graphene.InputField(
-                graphene.List(lambda: self.input_object_types[self.filter_input_type_name]),
-                description="`And` field",
-            ),
-            settings.OR_KEY: graphene.InputField(
-                graphene.List(lambda: self.input_object_types[self.filter_input_type_name]),
-                description="`Or` field",
-            ),
-            settings.NOT_KEY: graphene.InputField(
-                lambda: self.input_object_types[self.filter_input_type_name],
-                description="`Not` field",
-            ),
-        }
+    def _build_class_type(self, fs_class: type[AdvancedFilterSet]) -> None:
+        """Build the root ``InputObjectType`` for ``fs_class`` and cache it."""
+        type_name = fs_class.type_name_for()
+        input_fields = self._build_input_fields(fs_class)
+        logic_fields = self._build_logic_fields(type_name)
 
-        # Combine all fields and create the InputObjectType
-        self.input_object_types[self.filter_input_type_name] = cast(
+        self.input_object_types[type_name] = cast(
             type[graphene.InputObjectType],
             type(
-                self.filter_input_type_name,
+                type_name,
                 (graphene.InputObjectType,),
                 {**input_fields, **logic_fields},
             ),
         )
-        self._type_filterset_registry[self.filter_input_type_name] = self.filterset_class
-        return self.input_object_types[self.filter_input_type_name]
+        self._type_filterset_registry[type_name] = fs_class
 
-    # TODO(spec-base_type_naming.md): rework for class-based naming.
-    # - Drop the `prefix` parameter; stop accumulating prefixes on recursion.
-    # - When `root.name` matches a key in `self.filterset_class.related_filters`,
-    #   emit `graphene.InputField(lambda: self.input_object_types[target_name])`
-    #   pointing at the target filterset's root type (same lambda pattern used
-    #   for And/Or/Not above). Do not build a new inline subtree.
-    # - Subtree type names become `f"{self.filterset_class.__name__}{pascalcase(root.name)}FilterInputType"`.
-    #   Detection of RelatedFilter boundaries: cross-check against
-    #   `self.filterset_class.related_filters` because `filterset_to_trees`
-    #   flattens expanded paths and doesn't tag them.
-    def create_filter_input_subfield(
+    def _build_logic_fields(self, type_name: str) -> dict[str, graphene.InputField]:
+        """``and`` / ``or`` / ``not`` logical combinators — all self-referential."""
+        return {
+            settings.AND_KEY: graphene.InputField(
+                graphene.List(lambda: self.input_object_types[type_name]),
+                description="`And` field",
+            ),
+            settings.OR_KEY: graphene.InputField(
+                graphene.List(lambda: self.input_object_types[type_name]),
+                description="`Or` field",
+            ),
+            settings.NOT_KEY: graphene.InputField(
+                lambda: self.input_object_types[type_name],
+                description="`Not` field",
+            ),
+        }
+
+    def _build_input_fields(
         self,
-        root: Node,
-        prefix: str,
-        description: str,
-    ) -> graphene.InputField:
-        """Create a filter input subfield from a filter set subtree."""
-        if root.name in self.SPECIAL_FILTER_INPUT_TYPES_FACTORIES:
-            return self.SPECIAL_FILTER_INPUT_TYPES_FACTORIES[root.name]()
+        fs_class: type[AdvancedFilterSet],
+    ) -> dict[str, graphene.InputField]:
+        """Build the top-level input fields for a filterset's root type.
 
+        Iterates the trees produced by :meth:`filterset_to_trees` and dispatches:
+
+        * **Full-text search postfix** (``full_text_search`` / ``search_query`` /
+          ``trigram``) → routed through ``SPECIAL_FILTER_INPUT_TYPES_FACTORIES``.
+        * **RelatedFilter boundary with no direct lookups** (name matches a key
+          in ``cls.related_filters`` and its subtree contains only nested chains)
+          → lambda reference to the target filterset's root type.  The subtree
+          under this root is intentionally *not* rendered — the target's own
+          schema owns those fields.
+        * **RelatedFilter boundary mixed with direct lookups** (e.g. ``role =
+          RelatedFilter(...)`` plus ``Meta.fields = {"role": ["in"]}``) → fall
+          back to an inline per-path subfield so the direct leaf lookups
+          (``role.in``) stay queryable.  The lambda-ref optimisation is
+          dropped in this case — preserves functionality at the cost of
+          Apollo cache dedup for that specific field.
+        * **Simple field** (everything else) → per-field operator bag type.
+        """
         fields: dict[str, graphene.InputField] = {}
+        related_filters = getattr(fs_class, "related_filters", {})
+        trees = self.filterset_to_trees(fs_class)
 
-        # get_filters() returns the class-level cached expansion — no repeated work.
-        all_filters = self.filterset_class.get_filters()
+        for root in trees:
+            if root.name in self.SPECIAL_FILTER_INPUT_TYPES_FACTORIES:
+                fields[root.name] = self.SPECIAL_FILTER_INPUT_TYPES_FACTORIES[root.name]()
+                continue
 
-        for child in root.children:
+            rel_filter = related_filters.get(root.name)
+            if rel_filter is not None and isinstance(rel_filter, BaseRelatedFilter):
+                target_fs = rel_filter.filterset
+                # Pure RelatedFilter traversal — no direct leaves at this level.
+                # Emit a lambda ref to the target filterset's root type so the
+                # same target resolves to the same GraphQL type across all
+                # connection fields that reach it (Apollo cache dedup).
+                has_direct_leaf = any(child.height == 0 for child in root.children)
+                if target_fs is not None and not has_direct_leaf:
+                    target_name = target_fs.type_name_for()
+                    fields[root.name] = graphene.InputField(
+                        lambda tn=target_name: self.input_object_types[tn],
+                        description=f"`{pascalcase(root.name)}` field",
+                    )
+                    continue
+                # Mixed case (RelatedFilter + direct lookups): fall through
+                # to the inline per-path subfield builder below.
+
+            fields[root.name] = self._build_path_subfield(fs_class, root, root.name)
+
+        return fields
+
+    def _build_path_subfield(
+        self,
+        fs_class: type[AdvancedFilterSet],
+        node: Node,
+        path: str,
+    ) -> graphene.InputField:
+        """Build the per-path operator-bag type (``{FilterSet}{Field}FilterInputType``).
+
+        Leaf children become lookup-expression input fields; non-leaf children
+        recurse into their own per-path sub-types (covers nested transforms like
+        ``created.date.year``).
+        """
+        fields: dict[str, graphene.InputField] = {}
+        all_filters = fs_class.get_filters()
+
+        for child in node.children:
+            if child.name in self.SPECIAL_FILTER_INPUT_TYPES_FACTORIES:
+                fields[child.name] = self.SPECIAL_FILTER_INPUT_TYPES_FACTORIES[child.name]()
+                continue
             if child.height == 0:
-                filter_name = f"{LOOKUP_SEP}".join(
-                    node.name for node in child.path if node.name != django_settings.DEFAULT_LOOKUP_EXPR
+                filter_name = LOOKUP_SEP.join(
+                    n.name for n in child.path if n.name != django_settings.DEFAULT_LOOKUP_EXPR
                 )
                 fields[child.name] = self.get_field(filter_name, all_filters[filter_name])
             else:
-                fields[child.name] = self.create_filter_input_subfield(
-                    child,
-                    prefix + pascalcase(root.name),
-                    f"`{pascalcase(child.name)}` subfield",
-                )
+                child_path = f"{path}{LOOKUP_SEP}{child.name}"
+                fields[child.name] = self._build_path_subfield(fs_class, child, child_path)
 
+        type_name = fs_class.type_name_for(path)
         return graphene.InputField(
-            self.create_input_object_type(f"{prefix}{pascalcase(root.name)}FilterInputType", fields),
-            description=description,
+            self.create_input_object_type(type_name, fields),
+            description=f"`{pascalcase(node.name)}` field",
         )
 
     def get_field(self, name: str, filter_obj: Filter) -> graphene.InputField:

@@ -1,7 +1,17 @@
-"""Module for converting an AdvancedOrderSet class to ordering arguments."""
+"""Module for converting an AdvancedOrderSet class to ordering arguments.
+
+Class-based naming (see ``docs/spec-base_type_naming.md``): every
+``AdvancedOrderSet`` maps to one stable GraphQL input type derived from the
+class name alone.  ``RelatedOrder`` traversals emit a lambda reference to
+the target orderset's root type rather than an inline subtree — the same
+pattern used by ``FilterArgumentsFactory`` — so a given OrderSet always
+resolves to the same root type regardless of which connection reached it.
+"""
+
+import warnings
+from typing import cast
 
 import graphene
-from stringcase import pascalcase
 
 from .mixins import InputObjectTypeFactoryMixin
 
@@ -25,28 +35,48 @@ class OrderDirection(graphene.Enum):
 class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
     """Factory for creating ordering arguments in GraphQL from an AdvancedOrderSet class."""
 
-    # Track which orderset classes are currently being built to prevent
-    # infinite recursion from circular RelatedOrder references.
-    _building: set[type] = set()
+    # Tracks which orderset class built each cached type name.  Under class-based
+    # naming a collision means two distinct classes share a ``__name__`` — always
+    # a bug (either two modules declared the same class or schema build ran twice
+    # with stale caches).  Strict raise, not warn.
+    _type_orderset_registry: dict[str, type] = {}
 
-    # TODO(spec-base_type_naming.md): drop `input_type_prefix`. Derive
-    # `order_input_type_name` from `orderset_class.__name__` so a given
-    # OrderSet always emits the same root type name across all nodes/pages
-    # that reach it. See spec §"Naming scheme".
     def __init__(
         self,
         orderset_class: type,
-        input_type_prefix: str,
+        input_type_prefix: str | None = None,
     ) -> None:
-        """Initialize the factory with an orderset class and an input type prefix."""
+        """Initialize the factory.
+
+        Args:
+            orderset_class: The ``AdvancedOrderSet`` class to convert.
+            input_type_prefix: **Deprecated.** Ignored under class-based
+                naming — the type name is derived from
+                ``orderset_class.type_name_for()``.  Emits a
+                :class:`DeprecationWarning` if non-``None``. Removed in 1.1.
+        """
+        if input_type_prefix is not None:
+            warnings.warn(
+                "OrderArgumentsFactory `input_type_prefix` is ignored under class-based "
+                "naming and will be removed in 1.1. The generated type name is now derived "
+                "from `orderset_class.type_name_for()`.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self.orderset_class = orderset_class
-        self.input_type_prefix = input_type_prefix
-        self.order_input_type_name = f"{self.input_type_prefix}OrderInputType"
+        self.order_input_type_name = orderset_class.type_name_for()
 
     @property
     def arguments(self) -> dict[str, graphene.Argument]:
-        """Create and return the GraphQL arguments for ordering."""
-        input_object_type = self.create_order_input_type()
+        """Create and return the GraphQL arguments for ordering.
+
+        BFS-builds ``self.orderset_class`` and every ``RelatedOrder`` descendant
+        so that all lambda references resolve by schema-finalize time.  Idempotent:
+        subsequent calls for the same OrderSet hit the cache.
+        """
+        self._ensure_built()
+        self._check_collision(self.order_input_type_name, self.orderset_class)
+        input_object_type = self.input_object_types[self.order_input_type_name]
         return {
             "orderBy": graphene.Argument(
                 graphene.List(graphene.NonNull(input_object_type)),
@@ -54,44 +84,71 @@ class OrderArgumentsFactory(InputObjectTypeFactoryMixin):
             ),
         }
 
-    # TODO(spec-base_type_naming.md): switch to class-based naming.
-    # - `type_name` becomes `f"{orderset_class.__name__}InputType"`.
-    # - Drop the `prefix` parameter and recursion prefix accumulation.
-    # - For `RelatedOrder` fields, emit `graphene.InputField(lambda: self.input_object_types[target_name])`
-    #   targeting the related orderset's root type (same pattern used for
-    #   cycle-safe self-reference today at the `_building` guard).
-    def create_order_input_type(
-        self, orderset_class: type | None = None, prefix: str | None = None
-    ) -> type[graphene.InputObjectType]:
-        """Dynamically build nested GraphQL InputObjectTypes based on relationships."""
-        orderset_class = orderset_class or self.orderset_class
-        prefix = prefix or self.input_type_prefix
-        type_name = f"{prefix}OrderInputType"
+    def _ensure_built(self) -> None:
+        """BFS-build ``self.orderset_class`` and all related-order descendants.
 
-        if type_name in type(self).input_object_types:
-            return type(self).input_object_types[type_name]
+        Cycles (A → B → A) are handled naturally: an orderset already in
+        ``seen`` is skipped, and lambda refs resolve once the BFS finishes.
+        """
+        pending: list[type] = [self.orderset_class]
+        seen: set[type] = set()
+        while pending:
+            os_class = pending.pop()
+            if os_class in seen:
+                continue
+            seen.add(os_class)
 
-        # Cycle guard: if this orderset is already being built (circular
-        # RelatedOrder), return an empty type to break the recursion.
-        if orderset_class in OrderArgumentsFactory._building:
-            return type(self).create_input_object_type(type_name, {})
+            target_name = os_class.type_name_for()
+            if target_name not in self.input_object_types:
+                self._build_class_type(os_class)
+            else:
+                self._check_collision(target_name, os_class)
 
-        OrderArgumentsFactory._building.add(orderset_class)
-        try:
-            fields = {}
-            # Fetch the available ordering fields from the Meta class and RelatedOrders
-            for field_name, related_order in orderset_class.get_fields().items():
-                if related_order:
-                    # Relationship traversal
-                    sub_prefix = f"{prefix}{pascalcase(field_name)}"
-                    target_orderset = related_order.orderset
-                    if target_orderset:
-                        sub_type = self.create_order_input_type(target_orderset, sub_prefix)
-                        fields[field_name] = graphene.InputField(sub_type)
-                else:
-                    # Flat field (no traversal, leaf node)
-                    fields[field_name] = graphene.InputField(OrderDirection)
+            # Enqueue every RelatedOrder target reachable from this orderset.
+            for rel_order in getattr(os_class, "related_orders", {}).values():
+                target = rel_order.orderset
+                if target is not None and target not in seen:
+                    pending.append(target)
 
-            return type(self).create_input_object_type(type_name, fields)
-        finally:
-            OrderArgumentsFactory._building.discard(orderset_class)
+    def _check_collision(self, type_name: str, os_class: type) -> None:
+        """Raise if ``type_name`` is already registered for a different class."""
+        prior = self._type_orderset_registry.get(type_name)
+        if prior is not None and prior is not os_class:
+            raise TypeError(
+                f"Class-based naming collision: GraphQL type '{type_name}' is already "
+                f"registered by '{prior.__module__}.{prior.__qualname__}' but now "
+                f"'{os_class.__module__}.{os_class.__qualname__}' is trying to claim "
+                "the same name. Rename one of the orderset classes."
+            )
+
+    def _build_class_type(self, os_class: type) -> None:
+        """Build the root ``InputObjectType`` for ``os_class`` and cache it.
+
+        Leaf fields get an ``OrderDirection`` input field; ``RelatedOrder`` fields
+        emit a lambda reference to the target orderset's root type (mirrors the
+        ``and`` / ``or`` / ``not`` self-ref pattern in ``FilterArgumentsFactory``).
+        """
+        type_name = os_class.type_name_for()
+        fields: dict[str, graphene.InputField] = {}
+
+        for field_name, related_order in os_class.get_fields().items():
+            if related_order is not None:
+                target_os = related_order.orderset
+                if target_os is not None:
+                    target_name = target_os.type_name_for()
+                    fields[field_name] = graphene.InputField(
+                        lambda tn=target_name: self.input_object_types[tn],
+                    )
+            else:
+                # Flat field (no traversal, leaf node)
+                fields[field_name] = graphene.InputField(OrderDirection)
+
+        self.input_object_types[type_name] = cast(
+            type[graphene.InputObjectType],
+            type(
+                type_name,
+                (graphene.InputObjectType,),
+                fields,
+            ),
+        )
+        self._type_orderset_registry[type_name] = os_class

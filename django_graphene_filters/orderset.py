@@ -46,9 +46,15 @@ class OrderSetMetaclass(type):
 class AdvancedOrderSet(metaclass=OrderSetMetaclass):
     """Base class for advanced relationship sorting with permission checks."""
 
-    # TODO(spec-base_type_naming.md): add a `type_name_for()` classmethod
-    # returning `f"{cls.__name__}InputType"`. `OrderArgumentsFactory` calls
-    # this instead of stitching `prefix + pascalcase(field_name)`.
+    @classmethod
+    def type_name_for(cls) -> str:
+        """Return the GraphQL input type name for this orderset.
+
+        Class-based naming: every orderset maps to one stable type name
+        derived from ``cls.__name__`` — no node prefix, no traversal-path
+        accumulation. See ``docs/spec-base_type_naming.md``.
+        """
+        return f"{cls.__name__}InputType"
 
     def __init__(
         self,

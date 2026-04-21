@@ -4,6 +4,7 @@ Use the `AdvancedDjangoFilterConnectionField` class from this
 module instead of the `DjangoFilterConnectionField` from graphene-django.
 """
 
+import warnings
 from collections import OrderedDict
 from collections.abc import Callable, Iterable
 from typing import Any
@@ -32,11 +33,6 @@ from .order_arguments_factory import OrderArgumentsFactory
 class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
     """Allow you to use advanced filters provided by this library."""
 
-    # TODO(spec-base_type_naming.md): deprecate `filter_input_type_prefix`
-    # and `order_input_type_prefix` kwargs. Emit DeprecationWarning when
-    # passed; ignore the value (class-based naming derives type names from
-    # the bound FilterSet/OrderSet class, so a caller-supplied prefix no
-    # longer has a meaning). Remove both params entirely in 1.1.
     def __init__(
         self,
         type: type[DjangoObjectType] | Callable[[], type[DjangoObjectType]] | str,
@@ -51,8 +47,29 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         *args: Any,
         **kwargs: Any,
     ) -> None:
+        # ``filter_input_type_prefix`` and ``order_input_type_prefix`` are vestigial
+        # under class-based naming (see ``docs/spec-base_type_naming.md``): type names
+        # now derive from the bound FilterSet/OrderSet class alone.  We keep the kwargs
+        # for one minor version so existing consumers don't break at import time, but
+        # emit a DeprecationWarning and ignore the value.  Both params are removed in 1.1.
+        if filter_input_type_prefix is not None:
+            warnings.warn(
+                "`filter_input_type_prefix` is ignored under class-based naming and will "
+                "be removed in 1.1. GraphQL type names are derived from the FilterSet "
+                "class name. See docs/spec-base_type_naming.md.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if order_input_type_prefix is not None:
+            warnings.warn(
+                "`order_input_type_prefix` is ignored under class-based naming and will "
+                "be removed in 1.1. GraphQL type names are derived from the OrderSet "
+                "class name. See docs/spec-base_type_naming.md.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         self._provided_orderset_class = orderset_class
-        self._order_input_type_prefix = order_input_type_prefix
         self._orderset_class = None
         self._ordering_args = None
         self._provided_aggregate_class = aggregate_class
@@ -70,8 +87,6 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
                 "Use the `AdvancedFilterSet` class with `AdvancedDjangoFilterConnectionField`. "
                 f"Got {self.provided_filterset_class.__name__!r} instead."
             )
-
-        self._filter_input_type_prefix = filter_input_type_prefix
 
     # -----------------------------------------------------------------
     # Aggregate support
@@ -91,19 +106,16 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
 
     @property
     def aggregate_type(self) -> type[graphene.ObjectType] | None:
-        """Build (and cache) the aggregate ObjectType for this field."""
+        """Build (and cache) the aggregate ObjectType for this field.
+
+        Under class-based naming the factory derives its root type name from
+        ``aggregate_class.__name__`` alone, so root-level and nested
+        connections using the same AggregateSet share the same cached type.
+        """
         if not self._aggregate_type and self.aggregate_class:
             from .aggregate_arguments_factory import AggregateArgumentsFactory
 
-            # TODO(spec-base_type_naming.md): drop the `node_type_name` +
-            # `aggregate_class.__name__` prefix construction. Under
-            # class-based naming the call becomes
-            # `AggregateArgumentsFactory(self.aggregate_class)` and the
-            # factory derives its root name from `aggregate_class.__name__`
-            # alone. Mirrors the change in `_inject_aggregates_on_connection`.
-            node_type_name = self.node_type.__name__.replace("Type", "")
-            prefix = f"{node_type_name}{self.aggregate_class.__name__}"
-            factory = AggregateArgumentsFactory(self.aggregate_class, prefix)
+            factory = AggregateArgumentsFactory(self.aggregate_class)
             self._aggregate_type = factory.build_aggregate_type()
         return self._aggregate_type
 
@@ -116,23 +128,6 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         """Return the provided AdvancedOrderSet class, if any."""
         return self._provided_orderset_class or getattr(self.node_type._meta, "orderset_class", None)
 
-    # TODO(spec-base_type_naming.md): remove this property. Under class-based
-    # naming `OrderArgumentsFactory` derives its type name from
-    # `orderset_class.__name__` alone — no node prefix, no caller override.
-    # The `ordering_args` property below will be updated to call the factory
-    # without a prefix once the factory signature changes.
-    @property
-    def order_input_type_prefix(self) -> str:
-        """Return a prefix for the order input type name."""
-        if self._order_input_type_prefix:
-            return self._order_input_type_prefix
-
-        node_type_name = self.node_type.__name__.replace("Type", "")
-
-        if self.provided_orderset_class:
-            return f"{node_type_name}{self.provided_orderset_class.__name__}"
-        return node_type_name
-
     @property
     def orderset_class(self) -> Any | None:
         """Return the AdvancedOrderSet class to use for ordering."""
@@ -143,12 +138,14 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
 
     @property
     def ordering_args(self) -> dict:
-        """Generate and return ordering arguments for GraphQL schema orderset."""
+        """Generate and return ordering arguments for GraphQL schema orderset.
+
+        Under class-based naming the factory derives its root type name from
+        ``orderset_class.__name__`` alone.  Any OrderSet reached from any
+        connection resolves to the same root type.
+        """
         if not self._ordering_args and self.orderset_class:
-            self._ordering_args = OrderArgumentsFactory(
-                self.orderset_class,
-                self.order_input_type_prefix,
-            ).arguments
+            self._ordering_args = OrderArgumentsFactory(self.orderset_class).arguments
         return self._ordering_args or {}
 
     @property
@@ -186,22 +183,6 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         """Return the provided AdvancedFilterSet class, if any."""
         return self._provided_filterset_class or self.node_type._meta.filterset_class
 
-    # TODO(spec-base_type_naming.md): remove this property. Under class-based
-    # naming `FilterArgumentsFactory` derives its type name from
-    # `filterset_class.__name__` alone. `filtering_args` below will construct
-    # the factory without a prefix once the factory signature changes.
-    @property
-    def filter_input_type_prefix(self) -> str:
-        """Return a prefix for the filter input type name."""
-        if self._filter_input_type_prefix:
-            return self._filter_input_type_prefix
-
-        node_type_name = self.node_type.__name__.replace("Type", "")
-
-        if self.provided_filterset_class:
-            return f"{node_type_name}{self.provided_filterset_class.__name__}"
-        return node_type_name
-
     @property
     def filterset_class(self) -> type[AdvancedFilterSet]:
         """Return the AdvancedFilterSet class to use for filtering."""
@@ -226,6 +207,9 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
         settings, the flat arguments are omitted from the schema.  They still
         work if passed directly (for backward compatibility), but they won't
         appear in GraphiQL autocomplete or schema introspection.
+
+        Under class-based naming the advanced factory derives the root type
+        name from ``filterset_class.__name__`` alone.
         """
         if not self._filtering_args:
             # 1. Get Standard Arguments (Flat style derived from filter_fields)
@@ -239,10 +223,7 @@ class AdvancedDjangoFilterConnectionField(DjangoFilterConnectionField):
 
             # 2. Get Advanced Arguments (The 'filter' tree input)
             # We use the FULL class here so the tree is built correctly
-            advanced_args = FilterArgumentsFactory(
-                self.filterset_class,
-                self.filter_input_type_prefix,
-            ).arguments
+            advanced_args = FilterArgumentsFactory(self.filterset_class).arguments
 
             # 3. Merge them (Advanced args take precedence if collision, though unlikely)
             self._filtering_args = {**standard_args, **advanced_args}
