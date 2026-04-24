@@ -11,11 +11,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Multi-DB / sharding compatibility** — library-originated ORM queries
+  now inherit the DB alias of the caller queryset (`queryset.db` /
+  `self.queryset.db`), so shard-aware projects stop tripping
+  cross-database subquery errors and stop silently probing the default
+  alias. Single-DB behaviour is unchanged (all aliases resolve to
+  `default`). Three fix sites:
+  - `apply_cascade_permissions` — target-node visibility subquery is
+    pinned to `queryset.db`.
+  - `AdvancedAggregateSet.get_child_queryset` — related-aggregate child
+    queryset is pinned to `self.queryset.db`.
+  - `AdvancedDjangoObjectType.get_node` — captures the alias from the
+    result of `cls.get_queryset(...)` and threads it into the hidden-row
+    existence probe and the `_make_sentinel` call.
+  See `docs/spec-db_sharding.md` for the alias-propagation rule,
+  verified-safe call sites, and the two follow-up non-goals
+  (`BaseRelatedFilter.get_queryset` form-validation path and
+  `conf.py` capability detection).
+- **`AdvancedDjangoObjectType._make_sentinel(*, using: str | None = None)`**
+  — new keyword-only parameter on the protected sentinel builder. When
+  provided, the FK-reload probe runs against
+  `_default_manager.using(using)` so sentinel FK IDs come from the same
+  shard the consumer's `get_queryset` selected.
+- **`examples/cookbook/cookbook/settings_sharded.py`** — new sharded
+  Django settings overlay that inherits from the default `settings.py`
+  and adds `shard_a` / `shard_b` SQLite aliases. The default `settings.py`
+  keeps `db.sqlite3` as the sole DB so day-to-day `uv run pytest` stays
+  single-DB and byte-identical to consumer reality; the multi-DB suite
+  is a second pass::
+
+      uv run pytest                                                          # single-DB
+      uv run pytest --ds=examples.cookbook.cookbook.settings_sharded         # sharded
+
+  `tests/test_db_sharding.py` has a module-level skip so it only runs
+  under the sharded overlay. Consumer projects do not need to mirror
+  this layout — the library honours whatever alias the caller queryset
+  carries via `queryset.db`.
+
 ### Changed
+
+- **`AdvancedDjangoObjectType.get_node`** now seeds
+  `cls.get_queryset(...)` with `cls._meta.model._default_manager.all()`
+  instead of `cls._meta.model.objects`. This matches the existing
+  `permissions.py` / `aggregateset.py` convention (supports models that
+  override the default manager name) and is a prerequisite for reliably
+  reading `queryset.db` on the result.
+- **`AdvancedDjangoObjectType._make_sentinel`** FK-reload probe now uses
+  `cls._meta.model._default_manager` instead of `.objects` for the same
+  consistency reasons.
 
 ### Fixed
 
-### Removed
+- **`ValueError: Subqueries aren’t allowed across different databases`**
+  when `apply_cascade_permissions` or `get_child_queryset` received a
+  queryset pinned to a non-default alias. The outer `__in` subquery now
+  stays on the caller's alias.
 
 ## [1.0.0] - 2026-04-21
 

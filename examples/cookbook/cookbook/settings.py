@@ -92,8 +92,13 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
-    }
+    },
 }
+
+# Multi-DB / sharding: see ``examples/cookbook/cookbook/settings_sharded.py``
+# for the extra-alias variant used by ``tests/test_db_sharding.py`` and by
+# consumers who want to exercise the alias-propagation paths documented in
+# ``docs/spec-db_sharding.md``.
 
 
 # ---------------------------------------------------------------------------

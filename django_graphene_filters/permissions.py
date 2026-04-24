@@ -48,6 +48,12 @@ def apply_cascade_permissions(
                 return queryset
             qs = queryset.filter(is_private=False)
             return apply_cascade_permissions(cls, qs, info, fields=["object_type"])
+
+    Note:
+        Multi-DB / sharding compatibility: the target-node visibility
+        subquery is pinned to the caller queryset's DB alias via
+        ``queryset.db`` so the outer ``__in`` stays on a single database.
+        See ``docs/spec-db_sharding.md``.
     """
     from graphene_django.registry import get_global_registry
 
@@ -82,10 +88,14 @@ def apply_cascade_permissions(
             if target_type is None or not hasattr(target_type, "get_queryset"):
                 continue
 
-            # Build subquery: visible PKs of the target model.
-            # Use _default_manager instead of .objects to support models
-            # that override the default manager name.
-            target_qs = target_type.get_queryset(field.related_model._default_manager.all(), info)
+            # Build subquery: visible PKs of the target model, pinned to the
+            # same alias as the caller queryset so the outer ``__in`` stays
+            # on one DB.  ``_default_manager`` (not ``.objects``) so models
+            # that override the default manager name keep working.
+            target_qs = target_type.get_queryset(
+                field.related_model._default_manager.using(queryset.db).all(),
+                info,
+            )
 
             # Constrain: only rows whose FK points to a visible target.
             # Nullable FK rows (NULL) are preserved — they don't reference

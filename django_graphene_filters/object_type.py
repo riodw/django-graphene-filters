@@ -197,7 +197,7 @@ class AdvancedDjangoObjectType(DjangoObjectType):
             )
 
     @classmethod
-    def _make_sentinel(cls, source_pk: Any = None) -> Any:
+    def _make_sentinel(cls, source_pk: Any = None, *, using: str | None = None) -> Any:
         """Create a redacted sentinel instance with ``pk=0``.
 
         If ``source_pk`` is provided, the sentinel copies the real FK IDs
@@ -208,6 +208,14 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         This preserves consistency: if a user can see an ObjectType at the
         root level, they also see the real ObjectType when it appears
         through a hidden intermediate (e.g. a private Attribute).
+
+        Args:
+            source_pk: PK of the hidden row to reload FK IDs from.
+            using: Optional DB alias.  When provided, the FK-reload probe
+                runs against ``_default_manager.using(using)`` so sentinel
+                FK IDs come from the same shard the consumer's
+                ``get_queryset`` selected.  ``get_node`` threads this
+                through.  See ``docs/spec-db_sharding.md``.
         """
         sentinel = cls._meta.model(pk=0)
         # Only single-column FK/O2O fields — exclude ManyToManyField which
@@ -220,8 +228,16 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         ]
         if source_pk is not None and fk_fields:
             # Copy real FK IDs so visible downstream targets resolve normally.
+            # ``_default_manager`` (not ``.objects``) is used for consistency
+            # with permissions.py / aggregateset.py — custom default manager
+            # names stay supported.  When ``using`` is set, the probe is
+            # pinned to that alias so sentinel FK IDs match the shard
+            # selected by ``get_queryset``.
             attnames = [f.attname for f in fk_fields]
-            real_values = cls._meta.model.objects.filter(pk=source_pk).values(*attnames).first()
+            manager = cls._meta.model._default_manager
+            if using is not None:
+                manager = manager.using(using)
+            real_values = manager.filter(pk=source_pk).values(*attnames).first()
             if real_values:
                 for attname in attnames:
                     setattr(sentinel, attname, real_values[attname])
@@ -251,6 +267,15 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         The Relay global ID encodes to ``<TypeName>:0`` (e.g.
         ``T2JqZWN0VHlwZU5vZGU6MA==``), signalling to clients that the
         relationship exists but the target is not accessible.
+
+        Note:
+            Multi-DB / sharding compatibility: the hidden-row existence
+            probe and the sentinel FK-reload inherit the DB alias of the
+            queryset returned by ``cls.get_queryset(...)`` via
+            ``queryset.db``.  Consumers that return a shard-pinned
+            queryset from ``get_queryset`` get consistent sentinel
+            resolution on the same shard.  See
+            ``docs/spec-db_sharding.md``.
         """
         if id is None:
             return None
@@ -261,11 +286,19 @@ class AdvancedDjangoObjectType(DjangoObjectType):
         if id == 0 or id == "0":
             return cls._make_sentinel()
 
-        queryset = cls.get_queryset(cls._meta.model.objects, info)
+        # Seed ``get_queryset`` with ``_default_manager.all()`` (consistent
+        # with permissions.py / aggregateset.py — supports custom default
+        # manager names).  ``queryset.db`` then reflects the alias the
+        # consumer chose (either implicitly via the router or explicitly
+        # via ``.using(...)``) and is threaded into the hidden-row probe
+        # + sentinel reload so every library-originated query on this path
+        # stays on one database.
+        queryset = cls.get_queryset(cls._meta.model._default_manager.all(), info)
+        alias = queryset.db
         try:
             return queryset.get(pk=id)
         except cls._meta.model.DoesNotExist:
-            if cls._meta.model.objects.filter(pk=id).exists():
+            if cls._meta.model._default_manager.using(alias).filter(pk=id).exists():
                 # The row exists but get_queryset hid it.  Return a
                 # redacted sentinel so non-nullable FK fields don't break.
                 logger.info(
@@ -277,7 +310,7 @@ class AdvancedDjangoObjectType(DjangoObjectType):
                     cls.__name__,
                     id,
                 )
-                return cls._make_sentinel(source_pk=id)
+                return cls._make_sentinel(source_pk=id, using=alias)
             return None
 
 

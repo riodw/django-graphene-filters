@@ -642,9 +642,18 @@ class AdvancedAggregateSet(ClassBasedTypeNameMixin, metaclass=AggregateSetMetacl
 
         Returns:
             A queryset of the target model scoped to the parent queryset.
+
+        Note:
+            Multi-DB / sharding compatibility: the returned queryset is
+            pinned to ``self.queryset.db`` so the ``__in`` subquery stays
+            on one database.  See ``docs/spec-db_sharding.md``.
         """
         target_model = rel_agg.aggregate_class.Meta.model
-        qs = target_model._default_manager.filter(**{f"{rel_agg.field_name}__in": self.queryset})
+        # Pin to the parent queryset's DB alias so the ``filter(__in=parent_qs)``
+        # subquery stays on one database under multi-DB / shard-aware setups.
+        qs = target_model._default_manager.using(self.queryset.db).filter(
+            **{f"{rel_agg.field_name}__in": self.queryset}
+        )
 
         # Always apply .distinct() — any relationship traversal via
         # filter(field__in=parent_qs) can produce duplicate rows:
