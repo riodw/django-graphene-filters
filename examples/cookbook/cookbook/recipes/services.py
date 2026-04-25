@@ -133,7 +133,7 @@ def _fake_value(fake: Faker, method_name: str) -> str:
     return str(result)
 
 
-def seed_data(count: int) -> dict[str, int]:
+def seed_data(count: int, db_alias: str = "default") -> dict[str, int]:
     """Seed the database with Faker-driven data for every discovered provider.
 
     Ensures at least ``count`` ``Object`` instances exist per provider.
@@ -150,7 +150,15 @@ def seed_data(count: int) -> dict[str, int]:
     that is deterministic across runs.  Objects and Values still use random
     assignment since their names vary per run.
 
-    Returns a summary dict with counts of newly created rows.
+    Args:
+        count: Desired number of ``Object`` instances per provider.
+        db_alias: DB alias to seed (default ``"default"``).  Pass
+            ``"shard_a"`` / ``"shard_b"`` under the sharded settings to
+            populate the shard DB files used for multi-DB local testing
+            (see ``seed_shards`` management command).
+
+    Returns:
+        A summary dict with counts of newly created rows.
     """
     fake = Faker()
     providers = discover_providers(fake)
@@ -162,7 +170,7 @@ def seed_data(count: int) -> dict[str, int]:
 
     for ot_index, (provider_name, method_names) in enumerate(sorted(providers.items())):
         # --- ObjectType (alternating: even=public, odd=private) ---
-        obj_type, created = ObjectType.objects.get_or_create(
+        obj_type, created = ObjectType.objects.using(db_alias).get_or_create(
             name=provider_name,
             defaults={
                 "description": f"Auto-generated from Faker's {provider_name} provider",
@@ -175,7 +183,7 @@ def seed_data(count: int) -> dict[str, int]:
         # --- Attributes (alternating within each provider) ---
         attrs: list[Attribute] = []
         for attr_index, method_name in enumerate(method_names):
-            attr, created = Attribute.objects.get_or_create(
+            attr, created = Attribute.objects.using(db_alias).get_or_create(
                 name=method_name,
                 object_type=obj_type,
                 defaults={
@@ -188,11 +196,11 @@ def seed_data(count: int) -> dict[str, int]:
                 total_attributes += 1
 
         # --- Objects + Values (random is_private — names vary per run) ---
-        existing_count = Object.objects.filter(object_type=obj_type).count()
+        existing_count = Object.objects.using(db_alias).filter(object_type=obj_type).count()
         needed = max(0, count - existing_count)
 
         for _ in range(needed):
-            obj = Object.objects.create(
+            obj = Object.objects.using(db_alias).create(
                 name=f"{provider_name}_{fake.uuid4()[:8]}",
                 description=f"Generated {provider_name} instance",
                 object_type=obj_type,
@@ -210,7 +218,7 @@ def seed_data(count: int) -> dict[str, int]:
                 )
                 for attr in attrs
             ]
-            Value.objects.bulk_create(values_to_create)
+            Value.objects.using(db_alias).bulk_create(values_to_create)
             total_values += len(values_to_create)
 
     return {
@@ -237,7 +245,7 @@ VIEW_PERMISSIONS = [
 TEST_USER_PASSWORD = "admin"
 
 
-def create_users(count: int = 1) -> dict[str, int]:
+def create_users(count: int = 1, db_alias: str = "default") -> dict[str, int]:
     """Create test users with individual model-view permissions.
 
     For each unit in ``count``, creates one user per view permission
@@ -253,12 +261,20 @@ def create_users(count: int = 1) -> dict[str, int]:
 
     The function is idempotent — existing usernames are skipped.
 
-    Returns a summary dict with the number of newly created users.
+    Args:
+        count: Number of user sets to create.
+        db_alias: DB alias to target (default ``"default"``).  Pass a
+            shard alias to populate that shard instead.
+
+    Returns:
+        A summary dict with the number of newly created users.
     """
     from django.contrib.auth import get_user_model
     from django.contrib.auth.models import Permission
 
     User = get_user_model()
+    user_manager = User.objects.db_manager(db_alias)
+    perm_manager = Permission.objects.db_manager(db_alias)
     created = 0
 
     fake = Faker()
@@ -268,8 +284,8 @@ def create_users(count: int = 1) -> dict[str, int]:
 
         # --- Staff user ---
         username = f"staff_{n}"
-        if not User.objects.filter(username=username).exists():
-            User.objects.create_user(
+        if not user_manager.filter(username=username).exists():
+            user_manager.create_user(
                 username=username,
                 password=TEST_USER_PASSWORD,
                 is_staff=True,
@@ -280,8 +296,8 @@ def create_users(count: int = 1) -> dict[str, int]:
 
         # --- Regular user (no permissions, not staff) ---
         username = f"regular_{n}"
-        if not User.objects.filter(username=username).exists():
-            User.objects.create_user(
+        if not user_manager.filter(username=username).exists():
+            user_manager.create_user(
                 username=username,
                 password=TEST_USER_PASSWORD,
                 is_staff=False,
@@ -293,17 +309,17 @@ def create_users(count: int = 1) -> dict[str, int]:
         # --- Per-permission users ---
         for perm_codename in VIEW_PERMISSIONS:
             username = f"{perm_codename}_{n}"
-            if not User.objects.filter(username=username).exists():
+            if not user_manager.filter(username=username).exists():
                 # e.g. "view_object" -> "View Object"
                 first_name = perm_codename.replace("_", " ").title()
-                user = User.objects.create_user(
+                user = user_manager.create_user(
                     username=username,
                     password=TEST_USER_PASSWORD,
                     is_staff=False,
                     first_name=first_name,
                     last_name=last_name,
                 )
-                perm = Permission.objects.get(
+                perm = perm_manager.get(
                     codename=perm_codename,
                     content_type__app_label="recipes",
                 )

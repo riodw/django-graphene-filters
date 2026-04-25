@@ -151,6 +151,13 @@ class BaseRelatedFilter(LazyRelatedClassMixin):
             # Auto-derive from the target filterset's model.
             # Use _default_manager instead of .objects to support models
             # that override the default manager name.
+            # TODO(db-sharding, non-goal-in-first-pass): this form-validation
+            # path has no caller queryset to inherit an alias from, so it
+            # unconditionally hits the default DB. Follow-up: add a
+            # shard-resolver hook (e.g. read ``request._db`` or a new
+            # ``DJANGO_GRAPHENE_FILTERS["SHARD_RESOLVER"]``) and call
+            # ``.using(...)`` accordingly. See
+            # ``docs/spec-db_sharding.md`` → "Explicit non-goals".
             target = self.filterset
             model = getattr(getattr(target, "_meta", None), "model", None)
             if model:

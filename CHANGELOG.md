@@ -33,20 +33,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provided, the FK-reload probe runs against
   `_default_manager.using(using)` so sentinel FK IDs come from the same
   shard the consumer's `get_queryset` selected.
-- **`examples/cookbook/cookbook/settings_sharded.py`** — new sharded
-  Django settings overlay that inherits from the default `settings.py`
-  and adds `shard_a` / `shard_b` SQLite aliases. The default `settings.py`
-  keeps `db.sqlite3` as the sole DB so day-to-day `uv run pytest` stays
-  single-DB and byte-identical to consumer reality; the multi-DB suite
-  is a second pass::
+- **`COOKBOOK_SHARDED=1` env-var toggle on `examples/cookbook/cookbook/settings.py`**
+  — single `settings.py`, two **mutually exclusive** modes. Unset, the
+  file declares `default` → `db.sqlite3` only (Django cannot see the
+  shard files). Set to `1`, it declares `default` → `db_shard_a.sqlite3`
+  and `shard_b` → `db_shard_b.sqlite3` only (Django cannot see
+  `db.sqlite3`). Django requires a `default` entry, so under sharded
+  mode `default` is the primary shard (shard A); `shard_b` is the
+  explicit secondary. Day-to-day `runserver` / `uv run pytest` stays
+  single-DB (byte-identical to consumer reality); the multi-DB suite is
+  a second pass::
 
       uv run pytest                                                          # single-DB
-      uv run pytest --ds=examples.cookbook.cookbook.settings_sharded         # sharded
+      COOKBOOK_SHARDED=1 uv run pytest                                       # sharded
 
   `tests/test_db_sharding.py` has a module-level skip so it only runs
-  under the sharded overlay. Consumer projects do not need to mirror
-  this layout — the library honours whatever alias the caller queryset
-  carries via `queryset.db`.
+  when the `shard_b` alias is declared. Consumer projects do not need
+  to mirror this layout — the library honours whatever alias the caller
+  queryset carries via `queryset.db`.
+- **`seed_shards` management command** — materializes
+  `examples/cookbook/db_shard_a.sqlite3` and
+  `examples/cookbook/db_shard_b.sqlite3` as committed, minimal-but-
+  realistic shard DBs. Under sharded mode Django cannot see the dev
+  `db.sqlite3`, so each shard is populated independently: (1) `migrate`,
+  (2) `create_users(count=1, db_alias=alias)`, (3)
+  `seed_data(count, db_alias=alias)` (default `count=1`). Re-run any
+  time (every step is idempotent by username / seed count); grow with
+  `--count` for local stress testing::
+
+      COOKBOOK_SHARDED=1 uv run python examples/cookbook/manage.py seed_shards
+
+- **`seed_data(count, db_alias="default")`** and
+  **`create_users(count, db_alias="default")`** gained an optional
+  `db_alias` parameter so the seeding service routes writes through
+  `Model.objects.using(db_alias)` / `User.objects.db_manager(db_alias)`
+  instead of always hitting `default`. Single-DB callers are unaffected.
 
 ### Changed
 

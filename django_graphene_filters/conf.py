@@ -108,6 +108,14 @@ def get_fixed_settings() -> dict[str, bool]:
     reachable (e.g. during ``collectstatic``), falls back to safe
     defaults — full-text search features will be disabled.
     """
+    # TODO(db-sharding, non-goal-in-first-pass): this probes the default
+    # ``django.db.connection`` only, so multi-DB deployments where shards
+    # run on different vendors (e.g. shard 0 on PostgreSQL, shard 1 on
+    # SQLite) get an incorrect single flag for all aliases. Follow-up:
+    # refactor to a per-alias capability map (e.g.
+    # ``{alias: {"IS_POSTGRESQL": ..., "HAS_TRIGRAM_EXTENSION": ...}}``)
+    # and make the filter/order code look up by the active queryset alias.
+    # See ``docs/spec-db_sharding.md`` → "Explicit non-goals".
     try:
         is_postgresql = connection.vendor == "postgresql"
         has_trigram_extension = check_pg_trigram_extension() if is_postgresql else False

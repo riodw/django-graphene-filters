@@ -292,15 +292,18 @@ branches and the unchanged single-DB path.
 - A regression test covering the default/single-DB path so behavior remains
   unchanged for non-sharded consumers.
 ### Test mechanics
-- **Two-settings matrix.** The default `examples/cookbook/cookbook/settings.py`
-  stays single-DB (`default` only, backed by `db.sqlite3`). A sibling
-  overlay `examples/cookbook/cookbook/settings_sharded.py` inherits
-  from it and adds `shard_a` / `shard_b` SQLite aliases. Day-to-day
-  `uv run pytest` uses the default settings; the multi-DB suite is a
-  second invocation::
+- **Env-var toggle with mutually-exclusive modes.** A single
+  `examples/cookbook/cookbook/settings.py` consults `COOKBOOK_SHARDED`
+  in the environment. Unset, `DATABASES = {"default": db.sqlite3}`
+  — Django cannot see the shard files. Set to `1`,
+  `DATABASES = {"default": db_shard_a.sqlite3, "shard_b": db_shard_b.sqlite3}`
+  — Django cannot see `db.sqlite3`. `default` is the primary shard
+  (shard A; Django requires a `default` entry); `shard_b` is the
+  secondary. Day-to-day `runserver` / `pytest` stays single-DB so it
+  matches consumer reality; the multi-DB suite is a second pass::
 
       uv run pytest                                                          # single-DB
-      uv run pytest --ds=examples.cookbook.cookbook.settings_sharded         # sharded
+      COOKBOOK_SHARDED=1 uv run pytest                                       # sharded
 
 - `tests/test_db_sharding.py` declares a module-level
   `pytestmark = pytest.mark.skipif(...)` that checks for the
